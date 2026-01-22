@@ -1,0 +1,11 @@
+# 运行环境与缓存
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# 敏感信息
+.env
+
+# 运行产物
+static_evidence/
