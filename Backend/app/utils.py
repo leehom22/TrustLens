@@ -4,7 +4,7 @@ from PIL import Image
 from dateutil import parser as date_parser
 
 def clean_and_repair_json(json_str: str) -> dict:
-    """鲁棒的 JSON 清洗"""
+    
     try:
         cleaned = re.sub(r"```json\s*", "", json_str, flags=re.IGNORECASE)
         cleaned = re.sub(r"```", "", cleaned)

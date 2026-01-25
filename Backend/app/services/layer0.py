@@ -25,7 +25,7 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
     
     # ================== Overall Evaluation ================
     weighted_score = 0.0
-    weight_sum = 0.0
+    total_weight = 0.0
     hard_fail_triggered = False
     hard_fail_reason = ""
 

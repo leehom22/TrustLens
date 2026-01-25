@@ -9,3 +9,5 @@ venv/
 
 # 运行产物
 static_evidence/
+test_doc/
+debug_testing/
