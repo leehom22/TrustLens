@@ -5,8 +5,12 @@ import json
 import shutil
 from datetime import datetime
 import google.generativeai as genai
+from dotenv import load_dotenv
 
 # =================== Basic Architecture Set-up =======================
+# load API Key from .env
+load_dotenv()
+
 # API Key Check
 if not os.environ.get("GOOGLE_API_KEY"):
     print("CRITICAL: GOOGLE_API_KEY environment variable not set.")

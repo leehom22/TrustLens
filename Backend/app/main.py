@@ -16,7 +16,7 @@ from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
 # ======================= Backend API set-up =====================================
-app = FastAPI(title="TrustLens Backend")
+app = FastAPI(title="TrustLens Backend Tool")
 
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
@@ -30,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Routing: An endpoint wait for response to POST request from frontend
+# API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model=FinalReport)
 async def analyze_document(request: Request, file: UploadFile = File(...)):
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
@@ -90,18 +90,26 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         # Pre-flag risks for L3 details
         l3_score = 0
         l3_status = LayerStatus.CLEAN
+        l3_risk_signals = []
         
         # Resume Specific Check: Hidden Text
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
-             l3_score = 100
-             l3_status = LayerStatus.HIGH_RISK
-             l3_data["risk_note"] = "Hidden text injection detected (ATS Cheating)."
+            l3_score = 100
+            l3_status = LayerStatus.HIGH_RISK
+            msg = "Hidden text injection detected (ATS Cheating)."
+            l3_data["risk_note"] = msg
+            l3_risk_signals.append(msg)
+
+        # Screenshot Check (Generic)
+        if l3_data.get("is_screenshot"):
+            l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
 
         evidence_chain.append(LayerResult(
-            layer_name="L3_Content", 
-            status=l3_status, 
-            score=l3_score, 
-            details=l3_data
+            layer_name = "L3_Content", 
+            status = l3_status, 
+            score = l3_score, 
+            risk_signals = l3_risk_signals,
+            details = l3_data
         ))
         
         # [Step 5] Layer 4: Logic Audit (The Brain)
@@ -114,26 +122,48 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 layer_name="L4_Logic", 
                 status=LayerStatus.SKIPPED, 
                 score=0, 
+                risk_signals = [],
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
             
             
-        # [Step 6] Layer 0: Final Judge / Orchestrator
-        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
+        # [Step 6] Layer 0: Final Technical Judge (Deterministic)
+        judge_res = run_layer_0_judge(detected_profile_key, evidence_chain, profile)
     
         
-        # Formatting response with schemas
+        # ================ Packing Analysis Report to AI Agent =====================
+        rule_metadata = {
+                "description": profile.get("description", ""),
+                "hard_fail_triggers": profile.get("hard_fail_checks", []),
+                "allow_screenshot": profile.get("allow_screenshot", True)
+            }
+
+        grounding_info = {}
+        if l3_data:
+            grounding_info = {
+                "vendor_name": l3_data.get("vendor_name"),
+                "vendor_address": l3_data.get("vendor_address"),
+                "total_amount": l3_data.get("total_amount"),
+                "currency": l3_data.get("currency"),
+                "date": l3_data.get("date")
+            }
+
         report = FinalReport(
             request_id = req_id,
             timestamp = datetime.now(),
             doc_type = detected_profile_key,
+
             overall_risk_score = judge_res.get("overall_risk_score", 0),
             risk_level = judge_res.get("risk_level", "Unknown"),
-            summary = judge_res.get("summary", "Complete."),
+            risk_signals = judge_res.get("risk_signals", []),
+            summary_code = judge_res.get("summary_code", "UNKNOWN"),
             evidence_chain = evidence_chain,
-            recommendation = judge_res.get("recommendation", "Review")
+
+            rule_metadata = rule_metadata,
+            grounding_info = grounding_info,
         )
         
+
         # Complete logger
         logger.info("Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
         return report   

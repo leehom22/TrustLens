@@ -27,9 +27,22 @@ def run_layer_4_logic(entities: Dict) -> LayerResult:
     else:
         details["math_check"] = "SKIPPED (Data missing)"
     
-    # 可以在这里增加简单的必填项检查
+    # LATER HAVE TO add on some other checking rules
     if not entities.get("invoice_number") and entities.get("doc_type") == "invoice":
         score += 10
         details["integrity_warning"] = "Missing Invoice Number"
 
-    return LayerResult(layer_name="L4_Logic", status=status, score=score, details=details)
+    l4_signals = []
+
+    if "math_mismatch" in details:
+        l4_signals.append(f"Math Logic Error: {details['math_mismatch']}")
+    if "integrity_warning" in details:
+        l4_signals.append(f"Integrity Warning: {details['integrity_warning']}")
+
+    return LayerResult(
+        layer_name="L4_Logic", 
+        status=status, 
+        score=score, 
+        risk_signals = l4_signals,
+        details=details
+    )

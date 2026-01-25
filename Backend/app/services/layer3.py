@@ -5,7 +5,7 @@ from ..config import logger
 from ..utils import clean_and_repair_json
 
 async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, Any]:
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     extraction_prompt = """
     Analyze the document image/PDF and extract structured data.

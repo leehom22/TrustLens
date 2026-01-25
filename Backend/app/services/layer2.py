@@ -93,12 +93,19 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         if worst["score"] > 80: status = LayerStatus.HIGH_RISK
         elif worst["score"] > 30: status = LayerStatus.SUSPICIOUS
 
+        l2_signals = []
+        if status == LayerStatus.HIGH_RISK:
+            l2_signals.append(f"High visual manipulation detected (ELA Score: {worst['score']})")
+        elif status == LayerStatus.SUSPICIOUS:
+            l2_signals.append(f"Suspicious editing traces found (ELA Score: {worst['score']})")
+
         return LayerResult(
-            layer_name="L2_Visual",
-            status=status,
-            score=worst["score"],
-            details={"analyzed_pages": len(images), "worst_page": worst},
-            visual_evidence_url=worst["url"]
+            layer_name = "L2_Visual",
+            status = status,
+            score = worst["score"],
+            risk_signals = l2_signals,
+            details = {"analyzed_pages": len(images), "worst_page": worst},
+            visual_evidence_url = worst["url"]
         )
 
     except Exception as e:
