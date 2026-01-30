@@ -11,3 +11,5 @@ venv/
 static_evidence/
 test_doc/
 debug_testing/
+
+serviceAccountKey.json

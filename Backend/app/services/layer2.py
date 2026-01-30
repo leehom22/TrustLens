@@ -2,9 +2,9 @@ import os
 import uuid
 import tempfile
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
-from ..config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
-from ..schemas import LayerResult, LayerStatus
-from ..utils import downsample_image
+from ..utils.config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
+from ..utils.schemas import LayerResult, LayerStatus
+from ..utils.utils import downsample_image
 
 # Poppler Check
 try:

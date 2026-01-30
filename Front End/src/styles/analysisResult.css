@@ -1,0 +1,19 @@
+@layer components {
+  .main-card-container {
+    @apply space-y-4 border p-7 rounded-lg bg-white border-gray-200 shadow-lg;
+    @apply dark:bg-slate-800/50 dark:border-slate-700;
+  }
+}
+
+@layer components {
+  .tab-trigger-custom {
+    @apply p-4 rounded-sm text-gray-500 transition-all;
+    @apply dark:text-slate-400;
+    
+    /* When the tab is active */
+    &[data-state="active"] {
+      @apply text-blue-600 font-semibold;
+      @apply dark:text-blue-400;
+    }
+  }
+}

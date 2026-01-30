@@ -5,13 +5,29 @@ import json
 import shutil
 from datetime import datetime
 import google.generativeai as genai
+from dotenv import load_dotenv
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent.parent  # Backend/app/core -> Backend/
+# print(f"BASE_DIR set to: {BASE_DIR}")
+load_dotenv(BASE_DIR / ".env")  # Make sure .env is loaded
+
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# print(f"Current Directory: {os.getcwd()}")
+# print(f"GEMINI_API_KEY exists in env: {GEMINI_API_KEY is not None} - {GEMINI_API_KEY}")
 # =================== Basic Architecture Set-up =======================
 # API Key Check
-if not os.environ.get("GOOGLE_API_KEY"):
-    print("CRITICAL: GOOGLE_API_KEY environment variable not set.")
-
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+class Config:
+    if not GEMINI_API_KEY:
+        print("CRITICAL: GOOGLE_API_KEY environment variable not set.")
+    
+    @staticmethod
+    def setup_ai():
+        if not GEMINI_API_KEY:
+            raise ValueError("No GEMINI_API_KEY found in environment variables")
+        genai.configure(api_key=GEMINI_API_KEY)
+        
 
 # Safety Limitation
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB

@@ -6,6 +6,7 @@ import { AuthGate } from "@/app/components/AuthGate";
 import { Toaster } from "@/app/components/ui/sonner";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { ToastContainer, toast } from 'react-toastify';
 
 type AppState = "upload" | "analysis";
 
@@ -59,6 +60,7 @@ export default function App() {
           )}
         </div>
         <Toaster />
+        <ToastContainer />
       </AuthGate>
     </ThemeProvider>
   );
