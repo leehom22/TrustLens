@@ -92,6 +92,10 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
         
+        # Helper: Get inference data safely
+        l3_inf = l3_data.get("risk_inference", {})
+        
+        # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
         # Resume Specific Check: Hidden Text
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
             l3_score = 100
@@ -100,9 +104,15 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             l3_data["risk_note"] = msg
             l3_risk_signals.append(msg)
 
-        # Screenshot Check (Generic)
+        # --- Check 2: Screenshot Check (Generic) ---
         if l3_data.get("is_screenshot"):
             l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
+
+        # --- Check 3: Urgency Language Check (Scam) ---
+        if l3_inf.get("urgency_language"):
+            if l3_score < 60: l3_score = 60
+            if l3_status == LayerStatus.CLEAN: l3_status = LayerStatus.SUSPICIOUS
+            l3_risk_signals.append("High-pressure urgency language detected (Potential Scam Pattern).")
 
         evidence_chain.append(LayerResult(
             layer_name = "L3_Content", 
@@ -140,12 +150,36 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
 
         grounding_info = {}
         if l3_data:
+            # Basic Info
+            # Helper to safely get nested dicts
+            vendor = l3_data.get("vendor_info", {})
+            fins = l3_data.get("financials", {})
+            dates = l3_data.get("dates", {})
+            payment = l3_data.get("payment_info", {})
+            contact = vendor.get("contact", {})
+
             grounding_info = {
-                "vendor_name": l3_data.get("vendor_name"),
-                "vendor_address": l3_data.get("vendor_address"),
-                "total_amount": l3_data.get("total_amount"),
-                "currency": l3_data.get("currency"),
-                "date": l3_data.get("date")
+                "vendor_name": vendor.get("name"),
+                "vendor_address": vendor.get("address"),
+                "total_amount": fins.get("total_amount"),
+                "currency": fins.get("currency"),
+                "invoice_date": dates.get("invoice_date")
+            }
+            
+            # Contact Method (Validate the contacts with vendors' official info)
+            contact = l3_data.get("vendor_info", {}).get("contact", {})
+            grounding_info["vendor_contact"] = {
+                "phone": contact.get("phone"),
+                "website": contact.get("website"),
+                "email": contact.get("email")
+            }
+
+            # Payment Info (Identify personal account as a common scamming mode)
+            payment = l3_data.get("payment_info", {})
+            grounding_info["payment_details"] = {
+                "bank_name": payment.get("bank_name"),
+                "account_no": payment.get("account_number"),
+                "holder_name": payment.get("account_holder_name")
             }
 
         report = FinalReport(
