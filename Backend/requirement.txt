@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-python-multipart
-google-generativeai
-pillow
-pypdf2
-pdf2image
-python-dateutil
