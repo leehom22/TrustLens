@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { FileText, Send, Loader2, Mic, MicOff, AlertTriangle, Mail, Download } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { AnalysisProcess } from "@/app/components/AnalysisProcess";
-import { AnalysisResults } from "@/app/components/AnalysisResults";
 import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
 import { generateAnalysisPDF, downloadPDF, type AnalysisData } from "@/lib/pdfGenerator";
+import { AnalysisProcess } from "./AnalysisProcess";
+import { AnalysisResults } from "./AnalysisResults";
 
 interface AnalysisInterfaceProps {
   fileName: string;
@@ -218,10 +218,10 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+  <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       {/* Warning Banner */}
       {stage === "analyzing" && !hasShownWarning && (
-        <div className="fixed top-16 left-0 right-0 z-40 bg-yellow-500 dark:bg-yellow-600 px-6 py-3">
+        <div className="fixed top-23 left-0 right-0 z-40 bg-yellow-500 dark:bg-yellow-600 px-6 py-3">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-white" />
@@ -240,7 +240,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
       )}
 
       {/* Header */}
-      <div className={`border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm fixed left-0 right-0 ${stage === "analyzing" && !hasShownWarning ? "top-14" : "top-16"} z-10`}>
+      <div className={` border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm fixed left-0 right-0 ${stage === "analyzing" && !hasShownWarning ? "top-3" : "top-3"} z-10`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
             <Button
