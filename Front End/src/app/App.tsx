@@ -13,6 +13,7 @@ import Dashboard from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
+import DocumentReview from "./pages/admin/documentReview";
 
 type AppState = "upload" | "analysis";
 
@@ -66,7 +67,7 @@ export default function App() {
     {/* Sidebar only appears if user is authenticated */}
     {user && <Sidebar user={user} />}
 
-    <main className={`flex-1 transition-all duration-300 ${user ? "pl-64" : "pl-0"}`}>
+    <main className={`flex-1 transition-all duration-300 `}>
       <div className={user ? "p-8 max-w-7xl mx-auto" : ""}>
         
         <Routes>
@@ -105,6 +106,9 @@ export default function App() {
           }
           {
             user && <Route path="/history" element={<HistoryPage/>}/>
+          }
+          {
+            user && <Route path="/review" element={<DocumentReview/>}/>
           }
 
           <Route path="*" element={<Navigate to="/" />} />
