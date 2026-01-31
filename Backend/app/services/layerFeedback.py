@@ -4,6 +4,8 @@ import json
 def analyze_feedback_content(text: str, analysis_type: str):
     model = genai.GenerativeModel('gemini-flash-latest')
     
+    # Insert analysis to the prompt, so that AI can analyze and summary user feedback by refering document analysis result
+    # Extract from database 
     prompt = f"""
     Analyze the following user feedback for a document {analysis_type} analysis.
     Feedback: "{text}"

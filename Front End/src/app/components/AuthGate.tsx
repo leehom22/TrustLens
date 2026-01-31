@@ -2,10 +2,10 @@ import { useState, useEffect, ReactNode } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, onAuthStateChanged, User } from "firebase/auth";
 import { Button } from "@/app/components/ui/button";
-import { Shield, LogOut } from "lucide-react";
+import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
-
+import logo from '../images/logo.jpg'
 interface AuthGateProps {
   children: ReactNode;
 }
@@ -31,7 +31,7 @@ export function AuthGate({ children }: AuthGateProps) {
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
-      
+
       // Handle specific Firebase errors
       if (error.code === "auth/unauthorized-domain") {
         setError("unauthorized-domain");
@@ -243,8 +243,8 @@ export function AuthGate({ children }: AuthGateProps) {
                   {error === "popup-closed"
                     ? "The sign-in popup was closed. Please try again."
                     : error === "popup-blocked"
-                    ? "Your browser blocked the sign-in popup. Please allow popups for this site and try again."
-                    : "An error occurred during sign-in. Please try again or check the console for details."}
+                      ? "Your browser blocked the sign-in popup. Please allow popups for this site and try again."
+                      : "An error occurred during sign-in. Please try again or check the console for details."}
                 </p>
               </div>
             )}
@@ -264,48 +264,86 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   return (
-    <div className="relative">
-      {/* User Info Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700 px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={user.photoURL || ""}
-              alt={user.displayName || "User"}
-              className="w-8 h-8 rounded-full"
-            />
-            <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                {user.displayName}
-              </p>
-              <p className="text-xs text-gray-600 dark:text-slate-400">
-                {user.email}
-              </p>
-            </div>
+    <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+      {/* Sidebar Navbar */}
+      <aside className="fixed inset-y-0 left-0 z-50 w-70 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex flex-col">
+        {/* User Info Section (Top of Sidebar) */}
+        <div className="flex p-6 border-b border-gray-100 dark:border-slate-800  gap-4 justify-start items-center">
+          <img src={logo} alt="TrustLens" className="w-13 rounded-md border-primary/10" />
+          <p className="text-2xl"><b>Trust</b>Lens</p>
+        </div>
+
+        {/* Navigation Links or Actions could go here */}
+        <nav className="flex-1 p-4 pt-10 space-y-10">
+          <div className="flex w-full gap-5 cursor-pointer transition-all duration-200 ease-in-out
+                 hover:bg-blue-50 dark:hover:bg-slate-800 
+                 text-gray-600 dark:text-slate-400 
+                 hover:text-blue-600 dark:hover:text-blue-400 p-4">
+            <LayoutDashboard />
+            <p className="text-xl">Dashboard</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full gap-5 cursor-pointer transition-all duration-200 ease-in-out
+                 hover:bg-blue-50 dark:hover:bg-slate-800 
+                 text-gray-600 dark:text-slate-400 
+                 hover:text-blue-600 dark:hover:text-blue-400 p-4">
+            <FileScan />
+            <p className="text-xl">Upload</p>
+          </div>
+          <div className="flex w-full gap-5 cursor-pointer transition-all duration-200 ease-in-out
+                 hover:bg-blue-50 dark:hover:bg-slate-800 
+                 text-gray-600 dark:text-slate-400 
+                 hover:text-blue-600 dark:hover:text-blue-400 p-4">
+            <FileClock />
+            <p className="text-xl">History</p>
+          </div>
+        </nav>
+
+        {/* Settings/Theme/Signout (Bottom of Sidebar) */}
+        <div className="p-4 mb-1 border-t border-gray-100 dark:border-slate-800 space-y-4">
+          <div className="flex items-center justify-between px-2 py-2">
+            <span className="text-lg font-medium text-gray-500">Theme</span>
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="rounded-full"
+              className="h-8 w-8 rounded-md"
             >
               <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="text-gray-700 dark:text-slate-300"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
           </div>
+          <div className="flex items-center text-center">
+            <img
+              src={user.photoURL || ""}
+              alt={user.displayName || "User"}
+              className="w-10  rounded-xl shadow-sm border-2 border-primary/10"
+            />
+            <div className="flex flex-col">
+              <p className="text-md font-semibold text-gray-900 dark:text-white leading-tight">
+                {user.displayName}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate w-48">
+                {user.email}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+            onClick={handleSignOut}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
-      </div>
-      <div className="pt-16">{children}</div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 pl-64">
+        <div className="p-8 max-w-7xl mx-auto">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

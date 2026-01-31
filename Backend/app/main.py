@@ -6,9 +6,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from .utils.config import Config
+from .core.config import Config
 # Import internal modules
-from .utils.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
+from .core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
 from .utils.schemas import FinalReport, LayerStatus, LayerResult
 from .services.layer1 import run_layer_1_metadata
 from .services.layer2 import run_layer_2_ela

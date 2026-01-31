@@ -44,3 +44,5 @@ class FeedbackModel:
     def get_all_feedback():
         docs = db.collection("feedback").stream()
         return [doc.to_dict() for doc in docs]
+    
+    
