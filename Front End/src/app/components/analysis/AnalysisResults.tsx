@@ -1,13 +1,13 @@
 import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2 } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import { HeatmapVisualization } from "@/app/components/HeatmapVisualization";
 import { motion } from "motion/react";
 import { useState } from "react";
-import { contentAnalysis, findings, metadata } from "../data/dummy";
+import { contentAnalysis, findings, metadata } from "../../data/dummy";
 import axios from 'axios'
 import { toast } from "react-toastify";
 import { getAuth} from 'firebase/auth'
+import { HeatmapVisualization } from "./HeatmapVisualization";
 
 export function AnalysisResults() {
   // Mock data for demonstration

@@ -6,6 +6,7 @@ import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock }
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import logo from '../images/logo.jpg'
+import { useNavigate } from "react-router-dom";
 interface AuthGateProps {
   children: ReactNode;
 }
@@ -15,6 +16,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -29,6 +31,7 @@ export function AuthGate({ children }: AuthGateProps) {
     try {
       setError(null);
       await signInWithPopup(auth, googleProvider);
+      
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
 
@@ -268,7 +271,7 @@ export function AuthGate({ children }: AuthGateProps) {
       {/* Sidebar Navbar */}
       <aside className="fixed inset-y-0 left-0 z-50 w-70 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex flex-col">
         {/* User Info Section (Top of Sidebar) */}
-        <div className="flex p-6 border-b border-gray-100 dark:border-slate-800  gap-4 justify-start items-center">
+        <div className="flex p-6 border-b border-gray-100 dark:border-slate-800  gap-4 justify-start items-center cursor-pointer">
           <img src={logo} alt="TrustLens" className="w-13 rounded-md border-primary/10" />
           <p className="text-2xl"><b>Trust</b>Lens</p>
         </div>
