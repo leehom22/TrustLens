@@ -2,7 +2,7 @@ import os
 import uuid
 import tempfile
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
-from ..utils.config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
+from ..core.config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
 from ..utils.schemas import LayerResult, LayerStatus
 from ..utils.utils import downsample_image
 
