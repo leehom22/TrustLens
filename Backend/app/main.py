@@ -17,6 +17,7 @@ from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
 from .routers.feedback import feedback_router
+from .routers.user import user_router
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -147,7 +148,11 @@ app.include_router(
     prefix="/feedback",
     tags=["Feedback"],
 )
-
+app.include_router(
+    user_router,
+    prefix='/user',
+    tags=['User']
+)
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
     import uvicorn

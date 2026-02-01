@@ -2,10 +2,11 @@ import { useState, useEffect, ReactNode } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, onAuthStateChanged, User } from "firebase/auth";
 import { Button } from "@/app/components/ui/button";
-import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock } from "lucide-react";
+import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock, BadgeAlert } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import logo from '../images/logo.jpg'
+import userLogo from '../images/user.png'
 import { NavLink, useNavigate } from "react-router-dom";
 
 interface SidebarProps {
@@ -38,6 +39,7 @@ const Sidebar = ( {user} : SidebarProps) => {
                 { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard /> },
                 { name: 'Upload', path: '/upload-document', icon: <FileScan /> },
                 { name: 'History', path: '/history', icon: <FileClock /> },
+                { name: 'Review', path: '/review', icon: <BadgeAlert /> },
             ].map((item) => (
                 <NavLink
                 key={item.name}
@@ -81,15 +83,15 @@ const Sidebar = ( {user} : SidebarProps) => {
           </div>
           <div className="flex items-center text-center">
             <img
-              src={user!.photoURL || ""}
-              alt={user!.displayName || "User"}
-              className="w-10  rounded-xl shadow-sm border-2 border-primary/10"
+              src={user!.photoURL || userLogo}
+              alt={user!.displayName || ""}
+              className="w-10  rounded-xl border-2 border-primary/10 dark:bg-white"
             />
             <div className="flex flex-col">
               <p className="text-md font-semibold text-gray-900 dark:text-white leading-tight">
                 {user!.displayName}
               </p>
-              <p className="text-xs text-gray-500 dark:text-slate-400 truncate w-48">
+              <p className="text-sm text-gray-500 dark:text-slate-400 truncate w-48">
                 {user!.email}
               </p>
             </div>
