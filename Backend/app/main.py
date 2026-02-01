@@ -6,18 +6,20 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+from .utils.config import Config
 # Import internal modules
-from .config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
-from .schemas import FinalReport, LayerStatus, LayerResult
+from .utils.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
+from .utils.schemas import FinalReport, LayerStatus, LayerResult
 from .services.layer1 import run_layer_1_metadata
 from .services.layer2 import run_layer_2_ela
 from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
+from .routers.feedback import feedback_router
 # ======================= Backend API set-up =====================================
-app = FastAPI(title="TrustLens Backend Tool")
-
+app = FastAPI(title="TrustLens Backend")
+Config.setup_ai()
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
 
@@ -32,6 +34,7 @@ app.add_middleware(
 
 # API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model=FinalReport)
+
 async def analyze_document(request: Request, file: UploadFile = File(...)):
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "filename": file.filename})   # initiate logger
@@ -203,6 +206,11 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         return report   
         #FastAPI auto-serialization Dict into JSON, no need json.dumps
 
+app.include_router(
+    feedback_router,
+    prefix="/feedback",
+    tags=["Feedback"],
+)
 
 # ====================== Local Testing ===========================
 if __name__ == "__main__":

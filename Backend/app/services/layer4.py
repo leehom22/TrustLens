@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List, Any
 from datetime import datetime
-from ..schemas import LayerResult, LayerStatus
+from ..utils.schemas import LayerResult, LayerStatus
 
 
 def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
@@ -21,7 +21,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     # Helpers
     def to_float(val):
         if not val: return 0.0
-        # DIRECT SUPPORT for L3 Nested Structure {value, raw_text}
+        # Support L3 Nested Structure {value, raw_text}
         if isinstance(val, dict): 
             val = val.get("value", 0)
         try: return float(re.sub(r"[^\d.]", "", str(val)))
@@ -37,7 +37,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         l4_signals.append("JSON_REPAIRED")
         details["meta_warning"] = "Structure repaired by heuristic. Audit confidence reduced."
 
-    # Unpack Data
+    # Unpack data from OCR result
     fin = data.get("financials", {})
     dates = data.get("dates", {})
     payment = data.get("payment_info", {})
@@ -53,7 +53,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     tax = to_float(fin.get("tax_amount"))
 
 
-    # ============== Rule 1: Visual Hard Fail (Screenshot Check) ==============
+    # ============== Rule 1: Visual Hard Fail (Screenshot Check) ... if later Layer 0 perform well can consider to be removed ==============
     # Layer 0 will use this signal to trigger Hard Fail if profile doesn't allow screenshots.
     # We double-flag it here for forensic completeness.
     is_screenshot = vis.get("has_status_bar") or vis.get("has_browser_chrome") or inf.get("is_screenshot")

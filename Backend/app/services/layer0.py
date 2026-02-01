@@ -1,9 +1,10 @@
 import asyncio
 import json
+import google.generativeai as genai
 from typing import List, Dict, Any
-from ..config import logger
-from ..schemas import LayerResult, LayerStatus
-from ..utils import clean_and_repair_json
+from ..utils.config import logger
+from ..utils.schemas import LayerResult, LayerStatus
+from ..utils.utils import clean_and_repair_json
 
 
 async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile: Dict) -> Dict[str, Any]:

@@ -3,8 +3,8 @@ from PyPDF2 import PdfReader
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-from ..schemas import LayerResult, LayerStatus
-from ..utils import parse_pdf_date
+from ..utils.schemas import LayerResult, LayerStatus
+from ..utils.utils import parse_pdf_date
 
 
 # Source (Editor tools / Online PDF tools)
