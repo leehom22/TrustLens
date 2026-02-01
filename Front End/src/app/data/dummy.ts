@@ -71,3 +71,5 @@ export const contentAnalysis = [
       details: "⚠️ Arbitration clause specifies jurisdiction in foreign country with unfavorable laws."
     }
   ];
+
+  
