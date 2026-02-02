@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from "@/app/components/ThemeProvider";
-import { AuthGate } from "@/app/components/AuthGate";
 import { Toaster } from "@/app/components/ui/sonner";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -13,7 +12,7 @@ import Dashboard from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
-import DocumentReview from "./pages/admin/documentReview";
+import DocumentReview from "./pages/expert/documentReview";
 
 type AppState = "upload" | "analysis";
 
@@ -23,34 +22,55 @@ export default function App() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState<number>(0);
   const [user, setUser] = useState<User | null>(null);
+  const [expert, setExpert] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
 
   // Reset to upload page when user logs in or changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      const newUserId = user?.uid || null;
-
-      if (newUserId !== currentUserId) {
-        // User changed (login, logout, or different user)
-        setCurrentUserId(newUserId);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // 1. Handle Logout
+      if (!currentUser) {
+        setUser(null);
+        setExpert(false);
+        setCurrentUserId(null);
         setAppState("upload");
         setUploadedFile(null);
-        setResetKey(prev => prev + 1); // Force complete remount
+        localStorage.removeItem('role');
+        setLoading(false);
+        return;
       }
-    });
 
-    return () => unsubscribe();
-  }, [currentUserId]);
+      // 2. Fetch User Claims (Role)
+      let isExpert = false;
+      try {
+        const idTokenResult = await currentUser.getIdTokenResult();
+        isExpert = !!idTokenResult.claims.expert;
+      } catch (error) {
+        console.error("Error fetching claims:", error);
+      }
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log("currentUser: ",currentUser)
+      // 3. Handle Login/User Change Logic
+      if (currentUser.uid !== currentUserId) {
+        // Only reset the app flow if they AREN'T an expert 
+        // Experts usually land on a different view (Review/Dashboard)
+        if (!isExpert) {
+          setAppState("upload");
+          setUploadedFile(null);
+          setResetKey(prev => prev + 1);
+        }
+
+        setCurrentUserId(currentUser.uid);
+      }
+
+      // 4. Update Final States
       setUser(currentUser);
+      setExpert(isExpert);
+      localStorage.setItem('role', isExpert ? 'expert' : 'user');
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUserId]);
 
   const handleFileUpload = (file: File) => {
     setUploadedFile(file);
@@ -63,64 +83,73 @@ export default function App() {
   };
 
   return (
-    <ThemeProvider> 
-  <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
-    {/* Sidebar only appears if user is authenticated */}
-    {user && <Sidebar user={user} />}
+    <ThemeProvider>
+      <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+        {/* Sidebar only appears if user is authenticated */}
+        {user && <Sidebar user={user} />}
 
-    <main className={`flex-1 transition-all duration-300 `}>
-      <div className={user ? "p-8 max-w-7xl mx-auto" : ""}>
-        
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          
-          {/* Conditional Home Logic */}
-          <Route 
-            path="/" 
-            element={!user ? <LandingPage /> : <Navigate to="/upload-document" />} 
-          />
+        <main className={`flex-1 transition-all duration-300 `}>
+          <div className={user ? "p-8 max-w-7xl mx-auto" : ""}>
 
-          {/* Protected Routes */}
-          {user && (
-            <Route
-              path="/upload-document"
-              element={
-                <div className="size-full">
-                  {appState === "upload" && (
-                    <DocumentUploader onFileUpload={handleFileUpload} />
-                  )}
-                  {appState === "analysis" && uploadedFile && (
-                    <AnalysisInterface
-                      fileName={uploadedFile.name}
-                      onBack={handleBack}
-                      userEmail={user.email || "user@example.com"}
-                    />
-                  )}
-                </div>
-              }
-            />
-            
-          )}
-          {
-            user && <Route path="/dashboard" element={<Dashboard/>}/>
-          }
-          {
-            user && <Route path="/history" element={<HistoryPage/>}/>
-          }
-          {
-            user && <Route path="/review" element={<DocumentReview/>}/>
-          }
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<LoginPage />} />
 
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+              {/* Conditional Home Logic */}
+              <Route
+                path="/"
+                element={!user ? <LandingPage /> : <Navigate to={expert ? "/review" : "/upload-document"} />}
+              />
 
-        <Toaster />
-        <ToastContainer />
+              {/* Protected Routes */}
+              {user && (
+                <>
+                  {/* uer & expert */}
+                  <Route path="/history" element={<HistoryPage />} />
+                  <Route
+                          path="/upload-document"
+                          element={
+                            <div className="size-full">
+                              {appState === "upload" && (
+                                <DocumentUploader onFileUpload={handleFileUpload} />
+                              )}
+                              {appState === "analysis" && uploadedFile && (
+                                <AnalysisInterface
+                                  fileName={uploadedFile.name}
+                                  onBack={handleBack}
+                                  userEmail={user.email || "user@example.com"}
+                                />
+                              )}
+                            </div>
+                          }
+                      />
+                  {
+                    expert ?
+                    <>
+                      {/* only expert */}
+                      <Route path="/review" element={<DocumentReview />} />
+                    </>
+                      
+                      : (
+                        <>
+                          {/* only user */}
+                          <Route path="/dashboard" element={<Dashboard />} />
+                        </>
+                      )
+                  }
+                </>
+
+              )}
+
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+
+            <Toaster />
+            <ToastContainer />
+          </div>
+        </main>
       </div>
-    </main>
-  </div>
-</ThemeProvider>
+    </ThemeProvider>
   );
 }
 // <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
