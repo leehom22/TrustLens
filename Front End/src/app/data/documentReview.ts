@@ -6,7 +6,7 @@ export const documents = [
       submissionDate: '2024-01-30 14:32',
       aiConfidence: 87,
       aiVerdict: 'Potential Forgery' as const,
-      riskLevel: 'high' as const,
+      riskLevel: 'High' as const,
       flaggedBy: 'AI System',
       aiAnalysis: {
         summary: 'Multiple inconsistencies detected in document structure and content',
@@ -24,7 +24,7 @@ export const documents = [
           pages: 1
         }
       },
-      status: 'pending' as const
+      status: 'Pending' as const
     },
     {
       id: 2,
@@ -33,7 +33,7 @@ export const documents = [
       submissionDate: '2024-01-30 11:15',
       aiConfidence: 45,
       aiVerdict: 'Suspicious' as const,
-      riskLevel: 'medium' as const,
+      riskLevel: 'Medium' as const,
       flaggedBy: 'User Report',
       aiAnalysis: {
         summary: 'Some unusual patterns detected but not conclusive',
@@ -49,7 +49,7 @@ export const documents = [
           pages: 3
         }
       },
-      status: 'pending' as const
+      status: 'Pending' as const
     },
     {
       id: 3,
@@ -58,7 +58,7 @@ export const documents = [
       submissionDate: '2024-01-29 16:20',
       aiConfidence: 92,
       aiVerdict: 'Potential Forgery' as const,
-      riskLevel: 'low' as const,
+      riskLevel: 'Low' as const,
       flaggedBy: 'Routine Check',
       aiAnalysis: {
         summary: 'Document appears authentic with normal characteristics',
@@ -74,6 +74,6 @@ export const documents = [
           pages: 1
         }
       },
-      status: 'reviewed' as const
+      status: 'Reviewed' as const
     }
   ];

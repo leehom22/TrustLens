@@ -2,7 +2,7 @@ import React from 'react'
 
 const HistoryPage = () => {
   return (
-    <div>HistoryPage</div>
+    <div className='w-385'>HistoryPage</div>
   )
 }
 

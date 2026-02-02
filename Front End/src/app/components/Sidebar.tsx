@@ -20,10 +20,11 @@ const Sidebar = ( {user} : SidebarProps) => {
     const role= localStorage.getItem('role')
 
     const navItems = [
-      { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard /> },
+      { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard />, requiredRole: 'user' },
+      { name: 'Dashboard', path: '/admin-dashboard', icon: <LayoutDashboard />, requiredRole: 'expert' },
       { name: 'Upload', path: '/upload-document', icon: <FileScan /> },
       { name: 'History', path: '/history', icon: <FileClock /> },
-      { name: 'Review', path: '/review', icon: <BadgeAlert />, requiredRole: 'expert' },
+      { name: 'Review', path: '/review-document', icon: <BadgeAlert />, requiredRole: 'expert' },
   ];
 
     const handleSignOut = async () => {

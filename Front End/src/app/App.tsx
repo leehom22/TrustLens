@@ -12,7 +12,8 @@ import Dashboard from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
-import DocumentReview from "./pages/expert/documentReview";
+import DocumentReview from "./pages/expert/DocumentReviewPage";
+import DocumentAnalysis from "./components/expert/documentAnalysis";
 
 type AppState = "upload" | "analysis";
 
@@ -89,7 +90,7 @@ export default function App() {
         {user && <Sidebar user={user} />}
 
         <main className={`flex-1 transition-all duration-300 `}>
-          <div className={user ? "p-8 max-w-7xl mx-auto" : ""}>
+          <div className={user ? "p-7 max-w-7xl mx-auto" : ""}>
 
             <Routes>
               {/* Public Routes */}
@@ -98,10 +99,10 @@ export default function App() {
               {/* Conditional Home Logic */}
               <Route
                 path="/"
-                element={!user ? <LandingPage /> : <Navigate to={expert ? "/review" : "/upload-document"} />}
+                element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
               />
 
-              {/* Protected Routes */}
+              {/* Protected R outes */}
               {user && (
                 <>
                   {/* uer & expert */}
@@ -109,7 +110,7 @@ export default function App() {
                   <Route
                           path="/upload-document"
                           element={
-                            <div className="size-full">
+                            <div className="size-full  ">
                               {appState === "upload" && (
                                 <DocumentUploader onFileUpload={handleFileUpload} />
                               )}
@@ -127,7 +128,8 @@ export default function App() {
                     expert ?
                     <>
                       {/* only expert */}
-                      <Route path="/review" element={<DocumentReview />} />
+                      <Route path="/expert-dashboard" element={<DocumentReview />} />
+                      <Route path="/review-document" element={<DocumentAnalysis/>}/>
                     </>
                       
                       : (
