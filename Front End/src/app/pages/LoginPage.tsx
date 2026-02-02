@@ -17,6 +17,7 @@ const LoginPage = () => {
     const { theme, setTheme } = useTheme();
     const [showPassword, setShowPassword] = useState(false)
     const [showRegister, setShowRegister] = useState(false)
+    const [registerExpert, setRegisterExpert] = useState(false)
     const navigate = useNavigate()
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -55,6 +56,7 @@ const LoginPage = () => {
             e.preventDefault()
             setRegisterLoading(true)
             const formData = new FormData(e.currentTarget)
+            const role = formData.get("role") as string
             const email = formData.get("email") as string
             const password = formData.get("password") as string
             const userName = formData.get("username") as string
@@ -62,7 +64,8 @@ const LoginPage = () => {
             const res = await axios.post(`${backendUrl}/user/register_user`, {
                 "email": email,
                 "password": password,
-                "display_name": userName
+                "display_name": userName,
+                "role": role
             })
 
             console.log("response registration: ", res)
@@ -172,17 +175,7 @@ const LoginPage = () => {
                 {
                     showRegister === false ?
                         <div className="space-y-4">
-                            {/* <div className="p-4 bg-blue-50 dark:bg-blue-600/10 rounded-lg border border-blue-200 dark:border-blue-600/30">
-                                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                                    Why Authentication?
-                                </h3>
-                                <ul className="text-xs text-gray-600 dark:text-slate-300 space-y-1">
-                                    <li>• Secure access to forensic analysis tools</li>
-                                    <li>• Email notifications when analysis completes</li>
-                                    <li>• Save and retrieve analysis history</li>
-                                    <li>• Protected data privacy</li>
-                                </ul>
-                            </div> */}
+
                             <form className="w-full max-w-lg p-6 rounded-xl bg-white space-y-4" onSubmit={(e) => handleManualSignIn(e)}>
 
                                 {/* Email */}
@@ -385,14 +378,6 @@ const LoginPage = () => {
                                     </p>
                                 </div>
                             )}
-
-                            {/* <div className="mt-8 p-4 bg-yellow-50 dark:bg-yellow-600/10 rounded-lg border border-yellow-200 dark:border-yellow-600/30">
-                                <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                                    <strong>Firebase Configuration Required:</strong> Replace the placeholder
-                                    values in <code className="text-xs bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded">/src/lib/firebase.ts</code> with
-                                    your actual Firebase project credentials.
-                                </p>
-                            </div> */}
                         </div> :
                         <div className='space-y-7'>
                             <form className="w-full max-w-lg p-6 rounded-xl bg-white space-y-4" onSubmit={(e) => handleUserRegister(e)}>
@@ -425,6 +410,17 @@ const LoginPage = () => {
                                         className="px-3 py-2 text-md border rounded-md outline-none
                                             border-gray-300 focus:border-blue-600"
                                     />
+                                </div>
+
+                                <div className="flex flex-col space-y-2">
+                                    <label className="text-md font-semibold text-gray-700">
+                                        I'm a 
+                                    </label>
+                                    <select name="role" id="role" className="px-3 py-2 text-md border rounded-md outline-none border-gray-300 focus:border-blue-600">
+                                       
+                                        <option value="user">User</option>
+                                        <option value="expert">Expert</option>
+                                    </select>
                                 </div>
 
                                 {/* Password */}
