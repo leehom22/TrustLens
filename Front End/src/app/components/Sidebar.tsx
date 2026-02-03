@@ -17,15 +17,6 @@ const Sidebar = ( {user} : SidebarProps) => {
     const { theme, setTheme } = useTheme();
     const [selectedTab, setSelectedTab] = useState("")
     const navigate = useNavigate()
-    const role= localStorage.getItem('role')
-
-    const navItems = [
-      { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard /> },
-      { name: 'Upload', path: '/upload-document', icon: <FileScan /> },
-      { name: 'History', path: '/history', icon: <FileClock /> },
-      { name: 'Review', path: '/review', icon: <BadgeAlert />, requiredRole: 'expert' },
-  ];
-
     const handleSignOut = async () => {
     try {
       await auth.signOut();
@@ -44,8 +35,13 @@ const Sidebar = ( {user} : SidebarProps) => {
 
         {/* Navigation Links or Actions could go here */}
         <nav className="flex-1 p-4 pt-10 space-y-7">
-            {navItems.filter(item=>!item.requiredRole || role === item.requiredRole).map((item) => (
-              <NavLink
+            {[
+                { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard /> },
+                { name: 'Upload', path: '/upload-document', icon: <FileScan /> },
+                { name: 'History', path: '/history', icon: <FileClock /> },
+                { name: 'Review', path: '/review', icon: <BadgeAlert /> },
+            ].map((item) => (
+                <NavLink
                 key={item.name}
                 to={item.path}
                 className={({ isActive }) => `

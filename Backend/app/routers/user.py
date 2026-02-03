@@ -25,12 +25,6 @@ def register_user(user_data: UserRegisterSchema):
             display_name=user_data.display_name
         )
         
-        # set user identity as a expert
-        if user_data.role == 'expert':
-            auth.set_custom_user_claims(user_record.uid,{ 'expert': True })
-        else: 
-            auth.set_custom_user_claims(user_record.uid,{ 'expert': False })
-            
         # 2. Save User Profile/Role in Firestore 'users' collection
         db.collection("users").document(user_record.uid).set({
             "email": user_data.email,
@@ -39,7 +33,7 @@ def register_user(user_data: UserRegisterSchema):
             "created_at": firestore.SERVER_TIMESTAMP,
             "is_immunized": False
         })
-            
+
         return {"message": "User registered and profile created", "uid": user_record.uid}
     except auth.EmailAlreadyExistsError:
         # Specific catch for existing emails

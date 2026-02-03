@@ -80,7 +80,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
       // Send email notification ONLY once when everything is done
       sendEmailNotification(userEmail);
       toast.success("Analysis complete! Notification email sent to " + userEmail);
-    }, 100); // 8 seconds for ALL analysis steps
+    }, 8000); // 8 seconds for ALL analysis steps
   };
 
   const sendEmailNotification = async (email: string) => {
