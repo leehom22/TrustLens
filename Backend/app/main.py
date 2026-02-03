@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from .routers.email import router as email_router
 
 from .core.config import Config
 # Import internal modules
@@ -152,6 +153,11 @@ app.include_router(
     user_router,
     prefix='/user',
     tags=['User']
+)
+app.include_router(
+    email_router,
+    prefix="/email",
+    tags=["Email"]
 )
 # ====================== Local Testing ===========================
 if __name__ == "__main__":

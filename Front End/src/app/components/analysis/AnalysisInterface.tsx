@@ -83,12 +83,67 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
     }, 100); // 8 seconds for ALL analysis steps
   };
 
-  const sendEmailNotification = (email: string) => {
-    // TODO: Implement actual email sending using Firebase Functions or Email API
-    // For now, this is a placeholder
-    console.log(`Email notification sent to: ${email}`);
-    console.log(`Subject: Document Analysis Complete - ${fileName}`);
-    console.log(`Body: Your forensic analysis for "${fileName}" has been completed. Please return to the application to view your results.`);
+  const sendEmailNotification = async (email: string) => {
+    // 1. Safety Check: If no email exists, stop.
+    if (!email) {
+      console.log("No email provided, skipping notification.");
+      return;
+    }
+
+    try {
+      // 2. Generate the PDF inside memory
+      // We re-use the same data you used for the download button
+      const analysisData: AnalysisData = {
+        fileName: fileName,
+        metadata: {
+          fileName: fileName,
+          fileSize: "2.4 MB",
+          createdDate: "December 15, 2025",
+          modifiedDate: "January 10, 2026",
+          author: "John Doe",
+          lastModifiedBy: "Unknown User",
+          totalEdits: 7,
+          ipAddress: "192.168.1.142",
+          location: "San Francisco, CA, USA",
+          editingSoftware: ["Adobe Photoshop CC 2024", "Microsoft Word 2021", "Canva Pro"],
+          suspiciousActivity: true
+        },
+        findings: [
+          {
+            type: "warning",
+            title: "Multiple Editing Software Detected",
+            description: "Document shows traces of editing from Adobe Photoshop, MS Word, and Canva.",
+            severity: "medium"
+          }
+        ],
+        contentAnalysis: [],
+        riskLevel: "medium"
+      };
+
+      const doc = generateAnalysisPDF(analysisData);
+      const pdfBlob = doc.output('blob');
+
+      // 3. Package the data for the Backend
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("file", pdfBlob, `${fileName}_Report.pdf`);
+
+      // 4. Send the Request
+      const response = await fetch("http://127.0.0.1:8000/email/send-report", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        toast.success(`Report emailed to ${email}`);
+        console.log(`✅ Email successfully sent to ${email}`);
+      } else {
+        console.error("Backend rejected the email request");
+      }
+
+    } catch (error) {
+      console.error('Email sending failed:', error);
+    }
   };
 
   const handleSendMessage = () => {
