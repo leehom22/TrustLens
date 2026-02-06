@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider } from "@/app/components/ThemeProvider";
-import { AuthGate } from "@/app/components/AuthGate";
-import { Toaster } from "@/app/components/ui/sonner";
-import { auth } from "@/lib/firebase";
+import { ThemeProvider } from "./components/ThemeProvider";
+import { AuthGate } from "./components/AuthGate";
+import { Toaster } from "./components/ui/sonner";
+import { auth } from "../lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { ToastContainer, toast } from 'react-toastify';
 import LandingPage from "./pages/LandingPage";
@@ -13,7 +13,7 @@ import Dashboard from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
-import DocumentReview from "./pages/admin/documentReview";
+import DocumentReview from "./pages/admin/DocumentReview";
 
 type AppState = "upload" | "analysis";
 
@@ -62,65 +62,57 @@ export default function App() {
     setUploadedFile(null);
   };
 
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <ThemeProvider> 
-  <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
-    {/* Sidebar only appears if user is authenticated */}
-    {user && <Sidebar user={user} />}
+      {user ? (
+        <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+          {/* Sidebar only appears if user is authenticated */}
+          <Sidebar user={user} />
 
-    <main className={`flex-1 transition-all duration-300 `}>
-      <div className={user ? "p-8 max-w-7xl mx-auto" : ""}>
-        
+          <main className={`flex-1 transition-all duration-300 `}>
+            <div className="p-8 max-w-7xl mx-auto">
+              <Routes>
+                <Route
+                  path="/upload-document"
+                  element={
+                    <div className="size-full">
+                      {appState === "upload" && (
+                        <DocumentUploader onFileUpload={handleFileUpload} />
+                      )}
+                      {appState === "analysis" && uploadedFile && (
+                        <AnalysisInterface
+                          fileName={uploadedFile.name}
+                          onBack={handleBack}
+                          userEmail={user.email || "user@example.com"}
+                        />
+                      )}
+                    </div>
+                  }
+                />
+                <Route path="/dashboard" element={<Dashboard/>}/>
+                <Route path="/history" element={<HistoryPage/>}/>
+                <Route path="/review" element={<DocumentReview/>}/>
+                <Route path="/" element={<Navigate to="/upload-document" />} />
+                <Route path="*" element={<Navigate to="/upload-document" />} />
+              </Routes>
+
+              <Toaster />
+              <ToastContainer />
+            </div>
+          </main>
+        </div>
+      ) : (
         <Routes>
-          {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
-          
-          {/* Conditional Home Logic */}
-          <Route 
-            path="/" 
-            element={!user ? <LandingPage /> : <Navigate to="/upload-document" />} 
-          />
-
-          {/* Protected Routes */}
-          {user && (
-            <Route
-              path="/upload-document"
-              element={
-                <div className="size-full">
-                  {appState === "upload" && (
-                    <DocumentUploader onFileUpload={handleFileUpload} />
-                  )}
-                  {appState === "analysis" && uploadedFile && (
-                    <AnalysisInterface
-                      fileName={uploadedFile.name}
-                      onBack={handleBack}
-                      userEmail={user.email || "user@example.com"}
-                    />
-                  )}
-                </div>
-              }
-            />
-            
-          )}
-          {
-            user && <Route path="/dashboard" element={<Dashboard/>}/>
-          }
-          {
-            user && <Route path="/history" element={<HistoryPage/>}/>
-          }
-          {
-            user && <Route path="/review" element={<DocumentReview/>}/>
-          }
-
+          <Route path="/" element={<LandingPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
-
-        <Toaster />
-        <ToastContainer />
-      </div>
-    </main>
-  </div>
-</ThemeProvider>
+      )}
+    </ThemeProvider>
   );
 }
 // <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">

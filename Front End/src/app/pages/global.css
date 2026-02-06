@@ -1,0 +1,199 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --color-background: #23272A;
+  --color-foreground: #FFFFFF;
+
+  --color-card: #23272A;
+  --color-card-foreground: #FFFFFF;
+
+  --color-popover: #23272A;
+  --color-popover-foreground: #FFFFFF;
+
+  --color-primary: #FFFFFF;
+  --color-primary-foreground: #23272A;
+
+  --color-secondary: #5865F2;
+  --color-secondary-foreground: #FFFFFF;
+
+  --color-muted: #2F3136;
+  --color-muted-foreground: #DBDEE1;
+
+  --color-accent: #404EED;
+  --color-accent-foreground: #FFFFFF;
+
+  --color-destructive: #ED4245;
+  --color-destructive-foreground: #FFFFFF;
+
+  --color-border: #3F4147;
+  --color-input: #1E1F22;
+  --color-ring: #5865F2;
+
+  --color-brand: #404EED;
+  --color-brand-dark: #23272A;
+  --color-brand-pink: #EB459E;
+  --color-brand-green: #23A559;
+  --color-brand-purple: #8080FF;
+
+  --font-display: "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  --radius-lg: 40px;
+  --radius-md: 28px;
+  --radius-sm: 12px;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: #3F4147;
+  }
+
+  :root {
+    --background: #23272A;
+    --foreground: #FFFFFF;
+    --card: #23272A;
+    --card-foreground: #FFFFFF;
+    --popover: #23272A;
+    --popover-foreground: #FFFFFF;
+    --primary: #FFFFFF;
+    --primary-foreground: #23272A;
+    --secondary: #5865F2;
+    --secondary-foreground: #FFFFFF;
+    --muted: #2F3136;
+    --muted-foreground: #DBDEE1;
+    --accent: #404EED;
+    --accent-foreground: #FFFFFF;
+    --destructive: #ED4245;
+    --destructive-foreground: #FFFFFF;
+    --border: #3F4147;
+    --input: #1E1F22;
+    --ring: #5865F2;
+    --radius: 40px;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    text-transform: uppercase;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    font-size: clamp(40px, 8vw, 80px);
+  }
+
+  h2 {
+    font-size: clamp(32px, 5vw, 48px);
+  }
+
+  p {
+    line-height: 1.6;
+    color: var(--muted-foreground);
+  }
+
+  .container {
+    width: 100%;
+    max-width: 1180px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+}
+
+@layer utilities {
+  .backdrop-blur-discord {
+    backdrop-filter: blur(8px);
+    background-color: rgba(35, 39, 42, 0.8);
+  }
+
+  .bento-card {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px;
+  }
+
+  .text-massive {
+    font-size: clamp(120px, 20vw, 240px);
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.1;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .ticker-wrap {
+    background-color: #23272A;
+    padding: 24px 0;
+    overflow: hidden;
+    white-space: nowrap;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .ticker-content {
+    display: inline-block;
+    animation: ticker 20s linear infinite;
+    font-size: 40px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border, #e5e7eb);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
