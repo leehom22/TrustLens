@@ -13,7 +13,9 @@ import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
 import DocumentReview from "./pages/expert/DocumentReviewPage";
-import DocumentAnalysis from "./components/expert/documentAnalysis";
+import DocumentAnalysis from "./pages/expert/DocumentAnalysis";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { storage } from "../lib/firebase";
 
 type AppState = "upload" | "analysis";
 
@@ -25,6 +27,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [expert, setExpert] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
+  const [url, setUrl] = useState<String>("")
 
   // Reset to upload page when user logs in or changes
   useEffect(() => {
@@ -73,9 +76,25 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUserId]);
 
-  const handleFileUpload = (file: File) => {
-    setUploadedFile(file);
-    setAppState("analysis");
+  const handleFileUpload = async (file: File) => {
+    if (!file) return
+    const storageRef = ref(storage, `documents/${file.name}`)
+
+    try {
+      // 2. Upload the file
+      const snapshot = await uploadBytes(storageRef, file);
+
+      // 3. Get the public download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      setUrl(downloadURL);
+      console.log(`=======Upload successful! - ${downloadURL}=======`);
+      if (downloadURL) {
+        setUploadedFile(file);
+        setAppState("analysis");
+      }
+    } catch (error) {
+      console.error("Upload failed", error);
+    }
   };
 
   const handleBack = () => {
@@ -108,30 +127,30 @@ export default function App() {
                   {/* uer & expert */}
                   <Route path="/history" element={<HistoryPage />} />
                   <Route
-                          path="/upload-document"
-                          element={
-                            <div className="size-full  ">
-                              {appState === "upload" && (
-                                <DocumentUploader onFileUpload={handleFileUpload} />
-                              )}
-                              {appState === "analysis" && uploadedFile && (
-                                <AnalysisInterface
-                                  fileName={uploadedFile.name}
-                                  onBack={handleBack}
-                                  userEmail={user.email || "user@example.com"}
-                                />
-                              )}
-                            </div>
-                          }
-                      />
+                    path="/upload-document"
+                    element={
+                      <div className="size-full  ">
+                        {appState === "upload" && (
+                          <DocumentUploader onFileUpload={handleFileUpload} />
+                        )}
+                        {appState === "analysis" && uploadedFile && (
+                          <AnalysisInterface
+                            fileName={uploadedFile.name}
+                            onBack={handleBack}
+                            userEmail={user.email || "user@example.com"}
+                          />
+                        )}
+                      </div>
+                    }
+                  />
                   {
                     expert ?
-                    <>
-                      {/* only expert */}
-                      <Route path="/expert-dashboard" element={<DocumentReview />} />
-                      <Route path="/review-document" element={<DocumentAnalysis/>}/>
-                    </>
-                      
+                      <>
+                        {/* only expert */}
+                        <Route path="/expert-dashboard" element={<DocumentReview />} />
+                        <Route path="/review-document" element={<DocumentAnalysis />} />
+                      </>
+
                       : (
                         <>
                           {/* only user */}

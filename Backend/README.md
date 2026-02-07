@@ -16,5 +16,5 @@ python -m app.main
 
 # put 'serviceAccountKey.json' under /app (to connect with firestore db)
 
-# testing endpoint 
+# testing endpoint (eg: Postman)
 http://127.0.0.1:8000/
