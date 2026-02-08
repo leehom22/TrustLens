@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider } from "@/app/components/ThemeProvider";
-import { Toaster } from "@/app/components/ui/sonner";
-import { auth } from "@/lib/firebase";
+import { ThemeProvider } from "./components/ThemeProvider";
+import { AuthGate } from "./components/AuthGate";
+import { Toaster } from "./components/ui/sonner";
+import { auth } from "../lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { ToastContainer, toast } from 'react-toastify';
 import LandingPage from "./pages/LandingPage";
@@ -12,10 +13,10 @@ import Dashboard from "./pages/DashboardPage";
 import HistoryPage from "./pages/HistoryPage";
 import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
-import DocumentReview from "./pages/expert/DocumentReviewPage";
-import DocumentAnalysis from "./pages/expert/DocumentAnalysis";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../lib/firebase";
+import DocumentReview from "./pages/admin/DocumentReview";
+import DocumentAnalysis from "./pages/admin/DocumentAnalysis";
 
 type AppState = "upload" | "analysis";
 
@@ -173,36 +174,3 @@ export default function App() {
     </ThemeProvider>
   );
 }
-// <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
-//   <Sidebar user={user}/>
-//   <ThemeProvider>
-//     <Routes>
-//       <Route path="login" element={<LoginPage/>}/>
-//       {
-//         !user &&  <Route path="/" element={<LandingPage/>}/>
-//       }
-//       {
-//         user && (
-//           <Route path="/"/>
-//         )
-//       }
-//     </Routes>
-//     {/* <AuthGate key={resetKey}>
-//       <div className="size-full">
-//         {appState === "upload" && (
-//           <DocumentUploader onFileUpload={handleFileUpload} />
-//         )}
-//         {appState === "analysis" && uploadedFile && (
-//           <AnalysisInterface
-//             key={uploadedFile.name + Date.now()}
-//             fileName={uploadedFile.name}
-//             onBack={handleBack}
-//             userEmail={auth.currentUser?.email || "user@example.com"}
-//           />
-//         )}
-//       </div>
-//     </AuthGate> */}
-//     <Toaster />
-//     <ToastContainer />
-//   </ThemeProvider>
-// </div>

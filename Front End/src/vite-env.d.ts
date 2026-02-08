@@ -1,5 +1,3 @@
-declare module '*.css';
-
 declare module '*.jpg' {
   const content: string;
   export default content;
@@ -28,12 +26,4 @@ declare module '*.svg' {
 declare module '*.webp' {
   const content: string;
   export default content;
-}
-
-export {};
-
-declare global {
-  interface Window {
-    AdobeDC: any;
-  }
 }
