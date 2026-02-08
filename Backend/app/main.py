@@ -19,6 +19,7 @@ else:
 from .routers.email import router as email_router
 from .routers.feedback import feedback_router
 from .routers.user import user_router
+from .routers.files import files_router
 # This is the critical line that was missing or broken before:
 from .routers.speech import router as speech_router 
 
@@ -154,6 +155,11 @@ app.include_router(
     email_router,
     prefix="/email",
     tags=["Email"]
+)
+app.include_router(
+    files_router,
+    prefix="/files",
+    tags=["Files"]   
 )
 
 # --- Register the Deepgram/Speech Router ---

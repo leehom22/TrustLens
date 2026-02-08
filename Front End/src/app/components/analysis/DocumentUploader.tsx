@@ -42,7 +42,6 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
     }
 
     // File is valid
-    toast.success(`File "${file.name}" uploaded successfully!`);
     onFileUpload(file);
   };
 

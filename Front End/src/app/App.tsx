@@ -15,8 +15,9 @@ import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../lib/firebase";
-import DocumentReview from "./pages/admin/DocumentReview";
-import DocumentAnalysis from "./pages/admin/DocumentAnalysis";
+import DocumentReview from "./pages/expert/DocumentReviewPage";
+import DocumentAnalysis from "./pages/expert/DocumentAnalysis";
+import axios from 'axios'
 
 type AppState = "upload" | "analysis";
 
@@ -30,6 +31,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState<String>("")
 
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
   // Reset to upload page when user logs in or changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -90,8 +92,22 @@ export default function App() {
       setUrl(downloadURL);
       console.log(`=======Upload successful! - ${downloadURL}=======`);
       if (downloadURL) {
-        setUploadedFile(file);
-        setAppState("analysis");
+        const res = await axios.post(`${backendUrl}/files/upload_files`,{
+          "user_id":currentUserId,
+          "fileName":file.name,
+          "fileUrl":downloadURL,
+          'fileSize':file.size,
+          'mimeType':file.type
+        })
+
+        if(res.status === 201){
+          setUploadedFile(file);
+          setAppState("analysis");
+          toast.success("File successfully uploaded")
+        } else {
+          toast.error("Error uploading file")
+          return
+        };
       }
     } catch (error) {
       console.error("Upload failed", error);
