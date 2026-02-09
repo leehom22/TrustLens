@@ -25,13 +25,14 @@ interface Note {
   firestoreId?: string  // Firestore document ID
 }
 
-export default function DocumentVercel(props: { userId : string }) {
+export default function DocumentVercel(props: { userId : string, documentUrl: string, documentId : string }) {
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const noteIdRef = useRef(0);
   const noteEles = useRef<Map<number, HTMLElement>>(new Map());
-  const [documentId] = useState("Sample Doc") // testing document //firestore
+  const documentId = props.documentId // testing document //firestore
   const userId = props.userId // firestore 
+  const documentURL = props.documentUrl
   const db_collection = 'pdf_highlights'
   // --------------------------
   // Sidebar content
@@ -247,7 +248,6 @@ export default function DocumentVercel(props: { userId : string }) {
         top: `${props.selectionRegion.top}%`,
         transform: "translate(0, calc(-100% - 8px))",
       };
-
     return (
       <div
         style={{
@@ -317,7 +317,7 @@ export default function DocumentVercel(props: { userId : string }) {
     <div style={{ height: "100vh" }} className="z-1">
       <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
         <Viewer
-          fileUrl="https://r115epa2sy.ufs.sh/f/rkOi1LfXPqQ2EfR7w9jUiBzWnpQeNAsJ7jbPd3x8qt5hT0Hm"
+          fileUrl={documentURL}
           plugins={[defaultLayoutPluginInstance, highlightPluginInstance]}
         />
       </Worker>

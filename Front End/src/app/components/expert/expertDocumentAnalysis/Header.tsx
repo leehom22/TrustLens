@@ -87,7 +87,7 @@ const Header = ({ selectedDocument }: { selectedDocument: FileHeader | null }) =
                         <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">User ID</p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">User name</p>
                         <p className="text-sm font-mono font-medium text-gray-900 dark:text-slate-100 truncate max-w-[200px]">
                             {selectedDocument.user.username}
                         </p>

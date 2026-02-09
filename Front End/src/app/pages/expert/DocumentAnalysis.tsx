@@ -58,7 +58,8 @@ const DocumentAnalysis = (props: { userId : string }) => {
                 selectedDocument ? (
                     <div className='grid grid-cols-2'>
                         {/* Document Preview */}
-                        <DocumentVercel userId={props.userId}/>
+                        {/* Onl */}
+                        <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id}/>
                         {/* <DocumentPreview/> */}
                         <div className="p-6 max-w-5xl mx-auto ">
 
