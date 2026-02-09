@@ -42,9 +42,10 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
 
         # Hard Fail Check (all details in layer)
         for check in hard_fail_list:
-            if check in e.details:
+            val = e.details.get(check)
+            if val: 
                 hard_fail_triggered = True
-                aggregated_risk_signals.append(f"Hard Fail Triggered: {check} in {e.layer_name}")
+                aggregated_risk_signals.append(f"Hard Fail Triggered: {check} ({val}) in {e.layer_name}")
                 break
         
         # Weighted Calculation
@@ -71,10 +72,12 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
 
     # =============== Final Calculation ===============
     summary_code = "CALCULATED"
+    risk_level = "SAFE"
 
     if hard_fail_triggered:
         final_score = 95
         summary_code = "HARD_FAIL"
+        risk_level = "CRITICAL"
     else:
         final_score = int(weighted_score / total_weight) if total_weight > 0 else 0
         

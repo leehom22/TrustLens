@@ -218,7 +218,8 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "advanced_analysis": {
                      "fused_check": "Triggered" if max_visual_score > 0 else "Pass"
                 },
-                "forensic_note": "Fused Analysis: ELA + Texture (for Photos) + Intensity (for Screenshots)."
+                "forensic_note": "Fused Analysis: ELA + Texture (for Photos) + Intensity (for Screenshots).",
+                "visual_tampering": (final_score > 60 and worst["confidence"] == "HIGH")
             },
             visual_evidence_url = worst["url"]
         )

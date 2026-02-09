@@ -15,6 +15,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     CRITICAL INSTRUCTION:
     1. Distinguish between OBSERVATION (what is printed) and INFERENCE.
     2. For "line_total", extract the visual text AND the numeric value separately.
+    3. Treat text lines that share a single amount as a SINGLE transaction. Do not split multi-line descriptions (e.g., "British Gas / MASTERCARD") into two separate line items. Look at the amount column to determine row boundaries.
     
     Return VALID JSON ONLY with this schema:
     {
@@ -23,12 +24,14 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
         "vendor_info": { "name": "string", "address": "string", "contact": { "email": "string", "phone": "string", "website": "string" } },
         "payment_info": { "bank_name": "string", "account_number": "string", "account_holder_name": "string", "sort_code_or_swift": "string" },
         "invoice_number": "string" or null,
+        "reference_number": "string (Extract Transaction ID, Receipt No, or Reference No)",
         "dates": { "invoice_date": "string (YYYY-MM-DD)", "due_date": "string (YYYY-MM-DD)" },
-        "financials": { "currency": "string", "subtotal_amount": number, "tax_amount": number, "total_amount": number },
+        "financials": { "opening_balance": number, "closing_balance": number, "currency": "string", "subtotal_amount": number, "tax_amount": number, "total_amount": number },
 
         "line_items": [
             {
-                "desc": "string",
+                "date": "string (YYYY-MM-DD)",
+                "desc": "string (Combine multi-line descriptions into one string)",
                 "qty": number, 
                 "unit_price": number,
                 "line_total": { "value": number, "raw_text": "string" }
@@ -49,6 +52,12 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             "hidden_text_found": boolean  // True if white-on-white text or tiny keywords found (Resume ATS hacking)
         }
     }
+
+        "COLUMN_MAPPING_RULES": [
+            "IF the numeric value appears in a column labeled 'Paid out', 'Debit', or 'Withdrawals' -> You MUST output a NEGATIVE number (e.g., -60.00).",
+            "IF the numeric value appears in a column labeled 'Paid in', 'Credit', or 'Deposit' -> Output a POSITIVE number.",
+            "Visual Layout Priority: The extracted 'value' MUST reflect the column position."
+        ]
     """
     
     for attempt in range(2): 
@@ -56,7 +65,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             sample_file = genai.upload_file(file_path, mime_type=mime_type)
             res = await asyncio.wait_for(
                 model.generate_content_async([sample_file, extraction_prompt]), 
-                timeout=15.0
+                timeout = 60.0
             )
 
             raw_text = res.text

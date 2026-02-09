@@ -1,6 +1,8 @@
 import os
 import uuid
 import tempfile
+import asyncio
+import mimetypes
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -16,14 +18,14 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
-from .routers.feedback import feedback_router
+# from .routers.feedback import feedback_router
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
 
-# Allow all(*) terminals / frontend terminal can access data in this terminal
+# Allow all(*) terminals / front-end terminal can access data in this terminal
 # In deploy environment have to alter * into frontend HTTP address
 app.add_middleware(
     CORSMiddleware,
@@ -37,11 +39,20 @@ app.add_middleware(
 
 async def analyze_document(request: Request, file: UploadFile = File(...)):
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
-    logger.info(f"Start Analysis", extra={"request_id": req_id, "filename": file.filename})   # initiate logger
+    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
+
+    verified_content_type = file.content_type 
+    # If the guess type different with the file type sent from the user terminal, follow guess type
+    guessed_type, _ = mimetypes.guess_type(file.filename)
+    if guessed_type and guessed_type != verified_content_type:
+        logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
+                    extra={"request_id": req_id})
+        verified_content_type = guessed_type
 
     # Security check for invalid or unsafe file source
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {ALLOWED_MIME_TYPES}")
+    if verified_content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
+    
 
     with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -62,13 +73,25 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 buffer.write(chunk)
         
 
-        # ====================== Pipeline Execution =======================
+        # ====================== Pipeline Execution (Parallelized) =======================
+        # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
+        loop = asyncio.get_running_loop()
+        logger.info("Dispatching parallel tasks for L1, L2, L3...", extra={"request_id": req_id})
+
+        # 1. Schedule CPU-bound tasks (L1 & L2) in default executor (ThreadPool)
+        # This prevents the main event loop from blocking during image processing
+        t1 = loop.run_in_executor(None, run_layer_1_metadata, temp_path, verified_content_type)
+        t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
+        
+        # 2. Schedule IO-bound task (L3) directly
+        t3 = run_layer_3_extraction(temp_path, verified_content_type)
+
+        # 3. Wait for all layers to complete
+        l1_res, l2_res, l3_data = await asyncio.gather(t1, t2, t3)
+
         evidence_chain = []
         
-        # [Step 1] Layer 3: Extraction & Classification
-        logger.info("Running Layer 3 (Extraction) first for Classification...")
-        l3_data = await run_layer_3_extraction(temp_path, file.content_type)
-        
+        # [Step 1: Process L3 Data & Profile Selection]
         # Determine Doc Type and Load Risk Profile
         doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
         
@@ -83,11 +106,10 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
 
         
         # [Step 2] Layer 1: Metadata
-        l1_res = run_layer_1_metadata(temp_path, file.content_type)
         evidence_chain.append(l1_res)
         
         # [Step 3] Layer 2: Visual ELA
-        evidence_chain.append(run_layer_2_ela(temp_path, file.content_type))
+        evidence_chain.append(l2_res)
             
         # [Step 4] Layer 3: Content
         # Pre-flag risks for L3 details
@@ -125,7 +147,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             details = l3_data
         ))
         
-        # [Step 5] Layer 4: Logic Audit (The Brain)
+        # [Step 5] Layer 4: Logic Audit
         logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "freelance_contract"]
         
         if detected_profile_key in logic_required_types:
@@ -141,7 +163,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             
             
         # [Step 6] Layer 0: Final Technical Judge (Deterministic)
-        judge_res = run_layer_0_judge(detected_profile_key, evidence_chain, profile)
+        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
     
         
         # ================ Packing Analysis Report to AI Agent =====================
@@ -206,11 +228,13 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         return report   
         #FastAPI auto-serialization Dict into JSON, no need json.dumps
 
+"""
 app.include_router(
-    feedback_router,
+     feedback_router,
     prefix="/feedback",
     tags=["Feedback"],
 )
+"""
 
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
