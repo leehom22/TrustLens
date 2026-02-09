@@ -100,7 +100,7 @@ const DocumentAnalysis = (props: { userId : string }) => {
                             </Tabs>
 
                             {/* Expert Review Section */}
-                            {selectedDocument.status === 'Pending' && (
+                            {ai_analysis_format[0].status === 'Pending' && (
                                 <ExpertReview />
                             )}
 
