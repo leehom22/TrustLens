@@ -7,7 +7,8 @@ import { contentAnalysis, findings, metadata } from "../../data/dummy";
 import axios from 'axios'
 import { toast } from "react-toastify";
 import { getAuth} from 'firebase/auth'
-import { HeatmapVisualization } from "./HeatmapVisualization";
+import { VisualManipulation } from "./HeatmapVisualization";
+import { ai_analysis_format } from "@/app/data/db-ai-analysis";
 
 export function AnalysisResults() {
   // Mock data for demonstration
@@ -260,7 +261,7 @@ export function AnalysisResults() {
 
         {/* Heatmap Tab */}
         <TabsContent value="heatmap">
-          <HeatmapVisualization />
+          <VisualManipulation layer={ai_analysis_format[0].layer_results[1]} />
           {
             !openFeedback.heatmap &&
             <div className="flex justify-end mt-4">

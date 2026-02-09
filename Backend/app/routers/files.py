@@ -27,3 +27,36 @@ def upload_files(file_data: FilesSchema):
             status_code=500,
             detail="Failed to store information in database"
         )
+
+# get all user uploaded files
+@files_router.get("/get_uploaded_files/{user_id}")
+def get_files(user_id:str):
+    try:
+        print(f"the user id is {user_id}")
+        res = FilesSchema.get_files(user_id=user_id)
+        return {
+            "success":True,
+            "data":res
+        }
+    except Exception as e:
+        print(f"Error fetching uploaded_file: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch data from database"
+        )
+        
+# get selected file (specific)
+@files_router.get("/get_selected_files/{doc_id}")
+def get_selected_files(doc_id:str):
+    try:
+        res = FilesSchema.get_selected_file(doc_id = doc_id)
+        return {
+            "success":True,
+            "data":res
+        }
+    except Exception as e:
+        print(f"Error fetch selected_file: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch selected data from database"
+        )

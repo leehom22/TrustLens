@@ -1,256 +1,180 @@
-import { AlertTriangle, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayerResult } from "@/app/types/db-ai-analysis-type";
+import { FileImage, Shield, ZoomIn } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/app/components/ui/button";
 
-export function HeatmapVisualization() {
-  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+export function VisualManipulation({ layer }: { layer: LayerResult }) {
+  const [imageLoaded, setImageLoaded] = useState<Record<string, boolean>>({});
+  const [isZoomed, setIsZoomed] = useState<Record<string, boolean>>({});
 
-  // Simulated multi-page document data
-  const pages = [
-    {
-      pageNumber: 1,
-      regions: [
-        { id: "header", label: "Header Section", risk: "low", x: 10, y: 5, width: 80, height: 8 },
-        { id: "section1", label: "Section 1: Introduction", risk: "safe", x: 10, y: 15, width: 80, height: 12 },
-        { id: "section2", label: "Section 2: Payment Terms", risk: "safe", x: 10, y: 29, width: 80, height: 12 },
-        { id: "section3", label: "Section 3: Delivery Schedule", risk: "medium", x: 10, y: 43, width: 80, height: 10 },
-        { id: "section4", label: "Section 4.2 - Liability Clause", risk: "high", x: 10, y: 55, width: 80, height: 15 },
-        { id: "signature", label: "Signature Area", risk: "medium", x: 10, y: 72, width: 35, height: 8 },
-        { id: "footer", label: "Footer", risk: "safe", x: 10, y: 82, width: 80, height: 8 },
-      ],
-      findings: "Page 1 contains the contract introduction and critical liability clause with significant alterations detected in Section 4.2."
-    },
-    {
-      pageNumber: 2,
-      regions: [
-        { id: "section5", label: "Section 5: Termination Terms", risk: "medium", x: 10, y: 5, width: 80, height: 15 },
-        { id: "section6", label: "Section 6: Dispute Resolution", risk: "high", x: 10, y: 22, width: 80, height: 18 },
-        { id: "section7", label: "Section 7: Confidentiality", risk: "safe", x: 10, y: 42, width: 80, height: 12 },
-        { id: "section8", label: "Section 8: Warranties", risk: "low", x: 10, y: 56, width: 80, height: 10 },
-        { id: "terms", label: "Terms & Conditions", risk: "high", x: 10, y: 68, width: 80, height: 18 },
-        { id: "page2-footer", label: "Footer", risk: "safe", x: 10, y: 88, width: 80, height: 6 },
-      ],
-      findings: "Page 2 shows suspicious dispute resolution terms and heavily edited Terms & Conditions section with foreign jurisdiction clauses."
-    },
-    {
-      pageNumber: 3,
-      regions: [
-        { id: "appendix", label: "Appendix A: Specifications", risk: "safe", x: 10, y: 5, width: 80, height: 20 },
-        { id: "schedule", label: "Schedule of Payments", risk: "medium", x: 10, y: 27, width: 80, height: 15 },
-        { id: "addendum", label: "Addendum: Special Provisions", risk: "low", x: 10, y: 44, width: 80, height: 12 },
-        { id: "signatures", label: "Signature Block", risk: "safe", x: 10, y: 58, width: 80, height: 15 },
-        { id: "witnesses", label: "Witness Section", risk: "safe", x: 10, y: 75, width: 80, height: 10 },
-        { id: "page3-footer", label: "Document Footer", risk: "safe", x: 10, y: 87, width: 80, height: 6 },
-      ],
-      findings: "Page 3 contains appendices and signature blocks with minor modifications detected in the payment schedule section."
-    }
-  ];
-
-  const totalPages = pages.length;
-  const currentPageData = pages[currentPage - 1];
-  const regions = currentPageData.regions;
-
-  const getColorByRisk = (risk: string) => {
-    switch (risk) {
-      case "high": return "rgba(239, 68, 68, 0.6)";
-      case "medium": return "rgba(251, 191, 36, 0.5)";
-      case "low": return "rgba(96, 165, 250, 0.3)";
-      default: return "rgba(34, 197, 94, 0.2)";
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "FAIL":
+      case "CRITICAL":
+        return {
+          bg: "bg-red-50 dark:bg-red-950/30",
+          border: "border-red-300 dark:border-red-800",
+          text: "text-red-700 dark:text-red-400",
+          badge: "bg-red-600",
+          icon: "text-red-600 dark:text-red-400"
+        };
+      case "WARNING":
+        return {
+          bg: "bg-yellow-50 dark:bg-yellow-950/30",
+          border: "border-yellow-300 dark:border-yellow-800",
+          text: "text-yellow-700 dark:text-yellow-400",
+          badge: "bg-yellow-600",
+          icon: "text-yellow-600 dark:text-yellow-400"
+        };
+      default:
+        return {
+          bg: "bg-green-50 dark:bg-green-950/30",
+          border: "border-green-300 dark:border-green-800",
+          text: "text-green-700 dark:text-green-400",
+          badge: "bg-green-600",
+          icon: "text-green-600 dark:text-green-400"
+        };
     }
   };
 
+  const toggleZoom = (layerId: string) => {
+    setIsZoomed(prev => ({ ...prev, [layerId]: !prev[layerId] }));
+  };
+
+  const handleImageLoad = (layerId: string) => {
+    setImageLoaded(prev => ({ ...prev, [layerId]: true }));
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              Document Heatmap Analysis
-              <ZoomIn className="w-4 h-4 text-gray-500 dark:text-slate-400" />
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-slate-400">Visual representation of altered and suspicious regions</p>
-          </div>
-          <div className="flex gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-100 dark:bg-green-500/20 border border-green-500 rounded"></div>
-              <span className="text-gray-700 dark:text-slate-300">Safe</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-yellow-200 dark:bg-yellow-500/50 border border-yellow-500 rounded"></div>
-              <span className="text-gray-700 dark:text-slate-300">Modified</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-red-200 dark:bg-red-500/60 border border-red-500 rounded"></div>
-              <span className="text-gray-700 dark:text-slate-300">High Risk</span>
-            </div>
-          </div>
-        </div>
+    <div className='space-y-4'>
 
-        {/* Heatmap Visualization */}
-        <div className="relative bg-white rounded-lg p-8 min-h-[600px] border-2 border-gray-300 dark:border-slate-600">
-          <svg width="100%" height="600" viewBox="0 0 100 100" className="border border-gray-300 dark:border-slate-300">
-            {/* Background */}
-            <rect x="0" y="0" width="100" height="100" fill="#f8fafc" />
-            
-            {/* Document representation with text lines */}
-            <g opacity="0.3">
-              {Array.from({ length: 40 }).map((_, i) => (
-                <line
-                  key={i}
-                  x1="12"
-                  y1={5 + i * 2.3}
-                  x2="88"
-                  y2={5 + i * 2.3}
-                  stroke="#94a3b8"
-                  strokeWidth="0.3"
-                />
-              ))}
-            </g>
-
-            {/* Heatmap regions */}
-            {regions.map((region) => (
-              <g key={region.id}>
-                <rect
-                  x={region.x}
-                  y={region.y}
-                  width={region.width}
-                  height={region.height}
-                  fill={getColorByRisk(region.risk)}
-                  stroke={hoveredRegion === region.id ? "#1e40af" : "transparent"}
-                  strokeWidth="0.5"
-                  className="cursor-pointer transition-all"
-                  onMouseEnter={() => setHoveredRegion(region.id)}
-                  onMouseLeave={() => setHoveredRegion(null)}
-                  rx="1"
-                />
-                {region.risk === "high" && (
-                  <g>
-                    <circle cx={region.x + region.width - 3} cy={region.y + 3} r="2" fill="#ef4444" />
-                    <text
-                      x={region.x + region.width - 3}
-                      y={region.y + 3.5}
-                      fontSize="2"
-                      fill="white"
-                      textAnchor="middle"
-                      fontWeight="bold"
-                    >
-                      !
-                    </text>
-                  </g>
-                )}
-              </g>
-            ))}
-
-            {/* Labels for critical areas */}
-            <text x="50" y="62" fontSize="2.5" fill="#ef4444" textAnchor="middle" fontWeight="bold">
-              ⚠️ ALTERED SECTION DETECTED
-            </text>
-            <text x="50" y="88" fontSize="2.5" fill="#ef4444" textAnchor="middle" fontWeight="bold">
-              ⚠️ SUSPICIOUS TERMS
-            </text>
-          </svg>
-
-          {/* Hover tooltip */}
-          {hoveredRegion && (
-            <div className="absolute top-4 right-4 bg-gray-900 dark:bg-slate-900 text-white p-3 rounded-lg shadow-xl border border-gray-700 dark:border-slate-700 max-w-xs">
-              <p className="font-semibold mb-1">
-                {regions.find(r => r.id === hoveredRegion)?.label}
-              </p>
-              <p className="text-xs text-gray-300 dark:text-slate-300">
-                Risk Level: {regions.find(r => r.id === hoveredRegion)?.risk.toUpperCase()}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-600/10 border border-yellow-400 dark:border-yellow-600/50 rounded-lg">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Page {currentPage} Analysis Findings</h4>
-              <p className="text-sm text-gray-700 dark:text-slate-300">
-                {currentPageData.findings}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Detection Details</h3>
-        <div className="space-y-3">
-          {regions
-            .filter(r => r.risk === "high" || r.risk === "medium")
-            .map((region) => (
-              <div
-                key={region.id}
-                className={`p-3 rounded-lg border shadow-sm ${
-                  region.risk === "high"
-                    ? "bg-red-50 dark:bg-red-600/10 border-red-300 dark:border-red-600/50"
-                    : "bg-yellow-50 dark:bg-yellow-600/10 border-yellow-300 dark:border-yellow-600/50"
+          <div 
+            key={layer.layer_id}
+            className="bg-white dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 p-6"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-start gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <FileImage className={`w-5 h-5 ${getStatusColor(layer.status)}`} />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {layer.layer_title}
+                </h3>
+              </div>
+              
+              {/* Status Badge */}
+              <span 
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                  layer.status === 'CRITICAL' || layer.status === 'FAIL'
+                    ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                    : layer.status === 'WARNING'
+                    ? 'bg-yellow-100 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800'
+                    : 'bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-gray-900 dark:text-white">{region.label}</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    region.risk === "high" 
-                      ? "bg-red-600 text-white" 
-                      : "bg-yellow-600 text-white"
-                  }`}>
-                    {region.risk === "high" ? "High Risk" : "Modified"}
+                {layer.status} - Score: {layer.score}
+              </span>
+            </div>
+
+            {/* Visual Evidence Image */}
+            {layer.has_visual_evidence && layer.evidence_image_url && (
+              <div className={`relative bg-gray-100 dark:bg-slate-900 rounded-lg overflow-hidden mb-4 border-2 ${getStatusColor(layer.status).border}`}>
+                {/* Overlay badges */}
+                <div className="absolute top-3 left-3 z-10 flex gap-2">
+                  <span className="px-3 py-1 bg-black/70 text-white text-xs font-semibold rounded-full backdrop-blur-sm">
+                    FORENSIC EVIDENCE
+                  </span>
+                  <span className={`px-3 py-1 ${getStatusColor(layer.status).badge} text-white text-xs font-semibold rounded-full`}>
+                    {layer.status}
                   </span>
                 </div>
-                <p className="text-sm text-gray-700 dark:text-slate-300 mt-1">
-                  {region.risk === "high" 
-                    ? "Evidence of significant pixel manipulation and content replacement detected"
-                    : "Minor edits detected, likely formatting or text changes"}
-                </p>
-              </div>
-            ))}
-        </div>
-      </div>
 
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-4">
-        <Button
-          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          variant="outline"
-          className="flex items-center gap-2 disabled:opacity-50"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Previous
-        </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-            Page {currentPage} of {totalPages}
-          </span>
-          <div className="flex gap-1">
-            {Array.from({ length: totalPages }).map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`w-2 h-2 rounded-full transition-all ${
-                  currentPage === idx + 1
-                    ? "bg-blue-600 dark:bg-blue-400 w-6"
-                    : "bg-gray-300 dark:bg-slate-600"
-                }`}
-                aria-label={`Go to page ${idx + 1}`}
-              />
-            ))}
+                {/* Zoom button */}
+                <button
+                  onClick={() => toggleZoom(layer.layer_id)}
+                  className="absolute top-3 right-3 z-10 p-2 bg-black/70 text-white rounded-lg hover:bg-black/80 transition-colors backdrop-blur-sm"
+                  aria-label={isZoomed[layer.layer_id] ? "Reset zoom" : "Zoom in"}
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                
+                <div className={`relative transition-all duration-300 ${isZoomed[layer.layer_id] ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}>
+                  <img
+                    src={layer.evidence_image_url}
+                    alt={`Visual evidence for ${layer.layer_title}`}
+                    className={`w-full transition-all duration-300 ${
+                      isZoomed[layer.layer_id] ? 'scale-150' : 'scale-100'
+                    } ${!imageLoaded[layer.layer_id] ? 'opacity-0' : 'opacity-100'}`}
+                    onLoad={() => handleImageLoad(layer.layer_id)}
+                    onClick={() => toggleZoom(layer.layer_id)}
+                  />
+                  {!imageLoaded[layer.layer_id] && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Image overlay annotation */}
+                <div className="absolute bottom-3 right-3 px-3 py-1 bg-black/70 text-white text-xs rounded-full backdrop-blur-sm">
+                  Error Level Analysis
+                </div>
+
+                {/* Visual Legend */}
+                <div className="absolute bottom-3 left-3 flex items-center gap-3 text-xs">
+                  <div className="px-2 py-1 bg-black/70 text-white rounded backdrop-blur-sm flex items-center gap-1">
+                    <div className="w-2 h-2 bg-red-500 rounded"></div>
+                    <span>High</span>
+                  </div>
+                  <div className="px-2 py-1 bg-black/70 text-white rounded backdrop-blur-sm flex items-center gap-1">
+                    <div className="w-2 h-2 bg-yellow-500 rounded"></div>
+                    <span>Medium</span>
+                  </div>
+                  <div className="px-2 py-1 bg-black/70 text-white rounded backdrop-blur-sm flex items-center gap-1">
+                    <div className="w-2 h-2 bg-gray-300 rounded"></div>
+                    <span>Original</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Analysis */}
+            <div className={`mb-4 p-4 ${getStatusColor(layer.status).bg} rounded-lg border ${getStatusColor(layer.status).border}`}>
+              <div className="flex items-start gap-2">
+                <Shield className={`w-4 h-4 ${getStatusColor(layer.status).icon} mt-0.5 flex-shrink-0`} />
+                <div>
+                  <p className={`text-xs font-semibold ${getStatusColor(layer.status).text} uppercase tracking-wider mb-1`}>
+                    AI Analysis
+                  </p>
+                  <p className="text-sm text-gray-800 dark:text-slate-200 leading-relaxed">
+                    {layer.ai_analysis}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Proofs */}
+            {layer.technical_proofs && layer.technical_proofs.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Technical Evidence
+                </p>
+                <div className="space-y-2">
+                  {layer.technical_proofs.map((proof, idx) => (
+                    <div 
+                      key={idx} 
+                      className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600"
+                    >
+                      <div className={`w-6 h-6 rounded-full ${getStatusColor(layer.status).badge} flex items-center justify-center flex-shrink-0`}>
+                        <span className="text-white text-xs font-bold">{idx + 1}</span>
+                      </div>
+                      <span className="text-gray-900 dark:text-white font-mono text-sm">
+                        {proof}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-        <Button
-          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          variant="outline"
-          className="flex items-center gap-2 disabled:opacity-50"
-        >
-          Next
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
     </div>
   );
 }

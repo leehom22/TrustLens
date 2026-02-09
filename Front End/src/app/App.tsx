@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from "./components/ThemeProvider";
-import { AuthGate } from "./components/AuthGate";
 import { Toaster } from "./components/ui/sonner";
 import { auth } from "../lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -142,7 +141,7 @@ export default function App() {
               {user && (
                 <>
                   {/* uer & expert */}
-                  <Route path="/history" element={<HistoryPage />} />
+                  <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
                   <Route
                     path="/upload-document"
                     element={
@@ -165,7 +164,7 @@ export default function App() {
                       <>
                         {/* only expert */}
                         <Route path="/expert-dashboard" element={<DocumentReview />} />
-                        <Route path="/review-document" element={<DocumentAnalysis />} />
+                        <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
                       </>
 
                       : (
