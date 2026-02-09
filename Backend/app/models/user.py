@@ -7,6 +7,7 @@ class UserCreate(BaseModel):
 class UserRegisterSchema(BaseModel):
     email: EmailStr
     password: str
+    role: str
     display_name: str | None = None
 
 # Schema for incoming Login requests

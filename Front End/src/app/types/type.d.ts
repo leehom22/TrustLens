@@ -1,11 +1,12 @@
 // 1. Specific types for string literals to ensure type safety
-export type RiskLevel = 'low' | 'medium' | 'high';
+export type RiskLevel = 'Low' | 'Medium' | 'High';
+export type Severity = 'low' | 'medium' | 'high;'
 export type Verdict = 'Authentic' | 'Suspicious' | 'Potential Forgery' | 'Confirmed Fraud';
-export type SubmissionStatus = 'pending' | 'reviewed' | 'resolved';
+export type SubmissionStatus = 'Pending' | 'Reviewed' | 'Resolved';
 
 export interface AIFinding {
   type: string;
-  severity: RiskLevel;
+  severity: Severity;
   detail: string;
 }
 
@@ -35,4 +36,31 @@ export interface DocumentAnalysisResult {
   flaggedBy: string;
   aiAnalysis: AIAnalysis;
   status: SubmissionStatus;
+}
+
+export interface DocumentMetadata {
+  fileName: string;
+  fileSize: string;
+  createdDate: string; // Or Date if you plan to parse it
+  modifiedDate: string;
+  author: string;
+  lastModifiedBy: string;
+  totalEdits: number;
+  ipAddress: string;
+  location: string;
+  editingSoftware: string[];
+  suspiciousActivity: boolean;
+}
+
+export interface DocumentContentAnalysis {
+  section: string;
+  status: string;
+  details: string;
+}
+
+export interface DocumentKeyFindings {
+  type: string,
+  title: string,
+  description: string,
+  severity: string
 }

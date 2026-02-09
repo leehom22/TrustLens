@@ -7,7 +7,23 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# --- Load Env Vars ---
+# This block ensures we find the .env file whether running from root or /app
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+else:
+    load_dotenv()
+
+# --- Import Routers ---
 from .routers.email import router as email_router
+from .routers.feedback import feedback_router
+from .routers.user import user_router
+from .routers.files import files_router
+# This is the critical line that was missing or broken before:
+from .routers.speech import router as speech_router 
 
 from .core.config import Config
 # Import internal modules
@@ -19,17 +35,25 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
+<<<<<<< HEAD
 from .routers.feedback import feedback_router
 from .routers.user import user_router
 
+=======
+>>>>>>> lh+jian-hui
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
+
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
 
+<<<<<<< HEAD
 # Allow all(*) terminals / front-end terminal can access data in this terminal
 # In deploy environment have to alter * into frontend HTTP address
+=======
+# Allow all(*) terminals / frontend terminal can access data in this terminal
+>>>>>>> lh+jian-hui
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -39,8 +63,8 @@ app.add_middleware(
 
 # API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model=FinalReport)
-
 async def analyze_document(request: Request, file: UploadFile = File(...)):
+<<<<<<< HEAD
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
 
@@ -56,17 +80,18 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
     if verified_content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
     
+=======
+    req_id = str(uuid.uuid4())    
+    logger.info(f"Start Analysis", extra={"request_id": req_id, "filename": file.filename})   
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {ALLOWED_MIME_TYPES}")
+>>>>>>> lh+jian-hui
 
     with tempfile.TemporaryDirectory() as temp_dir:
-
-        # Spilt the original filename and .filetype, to insert req_id in between, 
-        # for generating a new unique temporary path for every files
         ext = os.path.splitext(file.filename)[1]
         temp_path = os.path.join(temp_dir, f"{req_id}{ext}")
         
-        # Stream save: Read and save the file in binary 1MB(1024*1024) by 1MB (chunk) through RAM into Hard Disk(buffer)
-        # - prevent RAM Out Of Memory
-        # - allow multiple 1MB datas handling by different user at the same time 
         size = 0
         with open(temp_path, "wb") as buffer:
             while chunk := await file.read(1024 * 1024):
@@ -75,6 +100,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                     raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
                 buffer.write(chunk)
         
+<<<<<<< HEAD
 
         # ====================== Pipeline Execution (Parallelized) =======================
         # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
@@ -96,9 +122,17 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         
         # [Step 1: Process L3 Data & Profile Selection]
         # Determine Doc Type and Load Risk Profile
+=======
+        # ====================== Pipeline Execution =======================
+        evidence_chain = []
+        
+        # [Step 1] Layer 3: Extraction & Classification
+        logger.info("Running Layer 3 (Extraction) first for Classification...")
+        l3_data = await run_layer_3_extraction(temp_path, file.content_type)
+        
+>>>>>>> lh+jian-hui
         doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
         
-        # Find the correct profile key from config
         detected_profile_key = "unknown"
         for key in DOC_RISK_PROFILES:
             if key in doc_type_raw:
@@ -106,7 +140,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 break
         profile = DOC_RISK_PROFILES[detected_profile_key]
         logger.info(f"Document Classified as: {detected_profile_key.upper()}", extra={"request_id": req_id})
-
         
         # [Step 2] Layer 1: Metadata
         evidence_chain.append(l1_res)
@@ -115,16 +148,18 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         evidence_chain.append(l2_res)
             
         # [Step 4] Layer 3: Content
-        # Pre-flag risks for L3 details
         l3_score = 0
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
         
+<<<<<<< HEAD
         # Helper: Get inference data safely
         l3_inf = l3_data.get("risk_inference", {})
         
         # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
         # Resume Specific Check: Hidden Text
+=======
+>>>>>>> lh+jian-hui
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
             l3_score = 100
             l3_status = LayerStatus.HIGH_RISK
@@ -164,6 +199,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
             
+<<<<<<< HEAD
             
         # [Step 6] Layer 0: Final Technical Judge (Deterministic)
         judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
@@ -210,6 +246,11 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 "holder_name": payment.get("account_holder_name")
             }
 
+=======
+        # [Step 6] Layer 0: Final Judge
+        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
+    
+>>>>>>> lh+jian-hui
         report = FinalReport(
             request_id = req_id,
             timestamp = datetime.now(),
@@ -225,10 +266,10 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             grounding_info = grounding_info,
         )
         
-        # Complete logger
         logger.info("Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
         return report   
-        #FastAPI auto-serialization Dict into JSON, no need json.dumps
+
+# ====================== Register Routers =======================
 
 app.include_router(
      feedback_router,
@@ -245,8 +286,26 @@ app.include_router(
     prefix="/email",
     tags=["Email"]
 )
+<<<<<<< HEAD
+=======
+app.include_router(
+    files_router,
+    prefix="/files",
+    tags=["Files"]   
+)
+
+# --- Register the Deepgram/Speech Router ---
+# This creates the endpoint http://localhost:8000/api/deepgram
+app.include_router(
+    speech_router,
+    prefix="/api",  
+    tags=["Speech"]
+)
+>>>>>>> lh+jian-hui
 
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
     import uvicorn
+    # IMPORTANT: Ensure "app.main:app" matches your actual folder structure.
+    # If your folder is named "Backend" and inside is "app", run this from "Backend" folder.
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
