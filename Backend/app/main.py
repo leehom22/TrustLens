@@ -35,12 +35,9 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
-<<<<<<< HEAD
 from .routers.feedback import feedback_router
 from .routers.user import user_router
 
-=======
->>>>>>> lh+jian-hui
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -48,12 +45,7 @@ Config.setup_ai()
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
 
-<<<<<<< HEAD
-# Allow all(*) terminals / front-end terminal can access data in this terminal
-# In deploy environment have to alter * into frontend HTTP address
-=======
 # Allow all(*) terminals / frontend terminal can access data in this terminal
->>>>>>> lh+jian-hui
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -64,7 +56,6 @@ app.add_middleware(
 # API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model=FinalReport)
 async def analyze_document(request: Request, file: UploadFile = File(...)):
-<<<<<<< HEAD
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
 
@@ -80,13 +71,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
     if verified_content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
     
-=======
-    req_id = str(uuid.uuid4())    
-    logger.info(f"Start Analysis", extra={"request_id": req_id, "filename": file.filename})   
-
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {ALLOWED_MIME_TYPES}")
->>>>>>> lh+jian-hui
 
     with tempfile.TemporaryDirectory() as temp_dir:
         ext = os.path.splitext(file.filename)[1]
@@ -100,7 +84,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                     raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
                 buffer.write(chunk)
         
-<<<<<<< HEAD
 
         # ====================== Pipeline Execution (Parallelized) =======================
         # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
@@ -122,15 +105,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         
         # [Step 1: Process L3 Data & Profile Selection]
         # Determine Doc Type and Load Risk Profile
-=======
-        # ====================== Pipeline Execution =======================
-        evidence_chain = []
-        
-        # [Step 1] Layer 3: Extraction & Classification
-        logger.info("Running Layer 3 (Extraction) first for Classification...")
-        l3_data = await run_layer_3_extraction(temp_path, file.content_type)
-        
->>>>>>> lh+jian-hui
         doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
         
         detected_profile_key = "unknown"
@@ -152,14 +126,11 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
         
-<<<<<<< HEAD
         # Helper: Get inference data safely
         l3_inf = l3_data.get("risk_inference", {})
         
         # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
         # Resume Specific Check: Hidden Text
-=======
->>>>>>> lh+jian-hui
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
             l3_score = 100
             l3_status = LayerStatus.HIGH_RISK
@@ -199,7 +170,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
             
-<<<<<<< HEAD
             
         # [Step 6] Layer 0: Final Technical Judge (Deterministic)
         judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
@@ -246,11 +216,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
                 "holder_name": payment.get("account_holder_name")
             }
 
-=======
-        # [Step 6] Layer 0: Final Judge
-        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
-    
->>>>>>> lh+jian-hui
         report = FinalReport(
             request_id = req_id,
             timestamp = datetime.now(),
@@ -286,8 +251,6 @@ app.include_router(
     prefix="/email",
     tags=["Email"]
 )
-<<<<<<< HEAD
-=======
 app.include_router(
     files_router,
     prefix="/files",
@@ -301,7 +264,6 @@ app.include_router(
     prefix="/api",  
     tags=["Speech"]
 )
->>>>>>> lh+jian-hui
 
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
