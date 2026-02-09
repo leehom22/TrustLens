@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from .routers.email import router as email_router
 
 from .core.config import Config
 # Import internal modules
@@ -18,7 +19,12 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
+<<<<<<< HEAD
 # from .routers.feedback import feedback_router
+=======
+from .routers.feedback import feedback_router
+from .routers.user import user_router
+>>>>>>> origin/main
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -234,8 +240,21 @@ app.include_router(
     prefix="/feedback",
     tags=["Feedback"],
 )
+<<<<<<< HEAD
 """
 
+=======
+app.include_router(
+    user_router,
+    prefix='/user',
+    tags=['User']
+)
+app.include_router(
+    email_router,
+    prefix="/email",
+    tags=["Email"]
+)
+>>>>>>> origin/main
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
     import uvicorn
