@@ -19,12 +19,9 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
-<<<<<<< HEAD
-# from .routers.feedback import feedback_router
-=======
 from .routers.feedback import feedback_router
 from .routers.user import user_router
->>>>>>> origin/main
+
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -228,22 +225,16 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             grounding_info = grounding_info,
         )
         
-
         # Complete logger
         logger.info("Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
         return report   
         #FastAPI auto-serialization Dict into JSON, no need json.dumps
 
-"""
 app.include_router(
      feedback_router,
     prefix="/feedback",
     tags=["Feedback"],
 )
-<<<<<<< HEAD
-"""
-
-=======
 app.include_router(
     user_router,
     prefix='/user',
@@ -254,7 +245,7 @@ app.include_router(
     prefix="/email",
     tags=["Email"]
 )
->>>>>>> origin/main
+
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
     import uvicorn
