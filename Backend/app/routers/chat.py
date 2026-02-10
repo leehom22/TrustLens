@@ -187,13 +187,7 @@ async def chat_with_document(request: ChatRequest):
         system_instruction = PROMPT_GENERAL
         tools = []
 
-        google_search_tool = content_types.Tool(
-            google_search_retrieval=content_types.GoogleSearchRetrieval(
-                dynamic_threshold_config=content_types.DynamicThresholdConfig(
-                    mode=content_types.DynamicThresholdConfig.Mode.AUTO
-                )
-            )
-        )
+        google_search_tool = [{"google_search_retrieval": {}}]
 
         # Specilizing mode
         if tool_mode == "CONTRACT_GUARDIAN":
@@ -202,14 +196,14 @@ async def chat_with_document(request: ChatRequest):
                 l2_score=prompt_data["l2_score"],
                 raw_text=prompt_data["raw_text"]
             )
-            tools = [google_search_tool]   # Grounding search for market price
+            tools = google_search_tool   # Grounding search for market price
             
         elif tool_mode == "POLICY_ADVISOR":
             system_instruction = PROMPT_POLICY.format(
                 doc_type=prompt_data["doc_type"],
                 raw_text=prompt_data["raw_text"]
             )
-            tools = [google_search_tool]    # Grounding search for policies
+            tools = google_search_tool    # Grounding search for policies
             
         elif tool_mode == "LETTER_GENERATOR":
             system_instruction = PROMPT_LETTER.format(
@@ -225,7 +219,7 @@ async def chat_with_document(request: ChatRequest):
 
         # Execution of Gemini
         model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash',
+            model_name='gemini-2.0-flash',
             tools=tools,
             system_instruction=system_instruction
         )

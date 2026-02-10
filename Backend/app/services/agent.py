@@ -5,21 +5,12 @@ from typing import Dict, Any
 from ..core.config import GEMINI_API_KEY, logger
 from ..utils.schemas import FinalReport
 from ..utils.utils import clean_and_repair_json
-from google.generativeai.types import content_types
 
 
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Google Search Grounding
-tools = [
-    content_types.Tool(
-        google_search_retrieval=content_types.GoogleSearchRetrieval(
-            dynamic_threshold_config=content_types.DynamicThresholdConfig(
-                mode=content_types.DynamicThresholdConfig.Mode.AUTO
-            )
-        )
-    )
-]
+tools = [{"google_search_retrieval": {}}]
 
 # =============== SYSTEM PROMPT =================
 AGENT_SYSTEM_INSTRUCTION = """
@@ -92,7 +83,7 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
 
     # 2. Execution
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash', 
+        model_name='gemini-2.0-flash', 
         tools=tools,
         system_instruction=AGENT_SYSTEM_INSTRUCTION
     )
