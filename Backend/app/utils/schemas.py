@@ -32,11 +32,19 @@ class FinalReport(BaseModel):
     evidence_chain: List[LayerResult]
     rule_metadata: Dict[str, Any]   # For AI Agent to understand the rules set in config.py
     grounding_info: Dict[str, Any]   # Compile all grounding search info
+    raw_document_content: Optional[str] = Field(default="", description="Full raw text content for semantic analysis")   # Only for legal doc or contract
 
 class AnalysisRecord(FinalReport):
-    # Inherit from FinalReport, add on with AI Agent Response
+    # Inherit data from FinalReport (L1-L4 Technical Data)
     
-    # agent_verdict: str = Field(..., description="Agent ACCEPT | REJECT | REVIEW")
-    summary: str   # = Field(..., description="Agent Summary")
-    grounding_result: Optional[Dict[str, Any]]    # = Field(None, description="Google Search Result")
-    recommendation: Optional[str] = None
+    # 1. AI Explanation Summary (Context)
+    agent_summary: str = Field(..., description="AI generated executive summary combining forensics and grounding")
+    final_recommendation: str = Field(..., description="ACCEPT | REVIEW | REJECT")
+
+    # 2. Grounding Search result
+    verification_status: str = Field(..., description="VERIFIED | UNVERIFIED | SUSPICIOUS")
+    grounding_score: int = Field(..., description="Risk score (0-100) based on Google Search")
+    grounding_result: Dict[str, Any] = Field(default_factory=dict, description="Search sources and verification details")
+
+    # 3. Layer Summary (Frontend Display)
+    layer_summaries: Dict[str, str] = Field(default_factory=dict, description="Plain English explanation for each layer")
