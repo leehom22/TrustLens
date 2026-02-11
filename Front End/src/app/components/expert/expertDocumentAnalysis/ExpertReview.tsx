@@ -1,19 +1,50 @@
-import { AlertCircle, CheckCircle, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
+import axios from 'axios';
+import { AlertCircle, CheckCircle, Loader2, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
 import React, { useState } from 'react'
+import { toast } from 'react-toastify';
 
-const ExpertReview = () => {
+const ExpertReview = (props: {userId: string, documentId: string}) => {
     const [reviewDecision, setReviewDecision] = useState<String | null>(null);
     const [reviewNotes, setReviewNotes] = useState('');
+    const [agreeAnalysis, setAgreeAnalysis] = useState(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const backendUrl = import.meta.env.VITE_BACKEND_URL
 
-    const handleReviewSubmit = () => {
-        if (!reviewDecision) {
-            alert('Please select a decision before submitting');
+    const handleReviewSubmit = async () => {
+        if (!reviewDecision || agreeAnalysis === null || !reviewNotes) {
+            toast.warning("Review Decision or review notes or review acknowledgement is missing")
             return;
         }
-        // In real app, submit review to backend
-        alert(`Review submitted: ${reviewDecision}\nNotes: ${reviewNotes}`);
-        setReviewDecision(null);
-        setReviewNotes('');
+        try {
+            // alert(`Review submitted: ${reviewDecision}\nNotes: ${reviewNotes} \nAgree analysis : ${agreeAnalysis}`);
+            // const document_review = {
+            //     document_id: props.documentId,
+            //     user_id: props.userId, 
+            //     review_decision: reviewDecision,
+            //     review_notes: reviewNotes,
+            //     review_agrees: agreeAnalysis
+            // }
+            setIsLoading(true)
+            const res = await axios.post(`${backendUrl}/feedback/submit_document_review`,  {
+                document_id: props.documentId,
+                user_id: props.userId, 
+                review_decision: reviewDecision,
+                review_notes: reviewNotes,
+                review_agrees: agreeAnalysis
+            })
+            const result = res.data
+            if(result.success){
+                toast.success("Review submitted")
+                setReviewDecision(null);
+                setReviewNotes('');
+                setAgreeAnalysis(null)
+            } 
+        } catch (error) {
+            console.log(`Error occur while submiting review: ${error}`)
+            toast.error("Error occur while submmiting review. Please try again")
+        } finally {
+            setIsLoading(false)
+        }
     };
 
     return (
@@ -78,20 +109,43 @@ const ExpertReview = () => {
             {/* Actions Footer */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
-                        <ThumbsUp className="w-4 h-4" />
+                    {/* AGREE BUTTON */}
+                    <button
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-lg
+                             ${agreeAnalysis === true
+                                ? 'bg-blue-600 text-white shadow-md' // Active State
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700' // Inactive State
+                            }`}
+                        onClick={() => setAgreeAnalysis(true)}
+                    >
+                        <ThumbsUp className={`w-4 h-4 ${agreeAnalysis === true ? 'fill-current' : ''}`} />
                         Agree
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
-                        <ThumbsDown className="w-4 h-4" />
+
+                    {/* DISAGREE BUTTON */}
+                    <button
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-lg
+                            ${agreeAnalysis === false
+                                ? 'bg-red-600 text-white shadow-md' // Active State
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700' // Inactive State
+                            }`}
+                        onClick={() => setAgreeAnalysis(false)}
+                    >
+                        <ThumbsDown className={`w-4 h-4 ${agreeAnalysis === false ? 'fill-current' : ''}`} />
                         Disagree
                     </button>
                 </div>
                 <button
                     onClick={handleReviewSubmit}
-                    className="px-6 py-2 bg-blue-600 dark:bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20"
+                    className={`px-6 py-2  font-medium rounded-lg  shadow-lg shadow-blue-500/20 flex gap-3 justify-center items-center ${isLoading === true ? 'bg-gray-400 dark:bg-gray-500 text-white' : 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors'}`}
+                    disabled={isLoading}
                 >
-                    Submit Review
+                        <p>Submit Review </p>
+                        <div>        
+                            {
+                                isLoading && <Loader2 className='animate-spin mx-auto'/>
+                            }
+                        </div>                    
                 </button>
             </div>
         </div>
