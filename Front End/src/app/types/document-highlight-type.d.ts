@@ -32,6 +32,7 @@ export interface ImageViewerProps {
     userId: string;
     documentUrl: string;
     documentId: string;
+    documentName: string
 }
 
 interface Note {

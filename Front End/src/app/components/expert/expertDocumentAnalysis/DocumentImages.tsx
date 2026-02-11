@@ -3,12 +3,12 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Stage, Layer, Rect } from 'react-konva';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ZoomIn, ZoomOut, RotateCcw, Square, Trash2, GripVertical } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Square, Trash2, GripVertical, Download } from 'lucide-react';
 import Konva from 'konva';
 import { Annotation, ImageViewerProps } from '@/app/types/document-highlight-type';
-import { deleteAnnotationFromFirestore, loadAnnotationsFromFirestore, saveAnnotationToFirestore } from '@/api/documentImages';
+import { deleteAnnotationFromFirestore, downloadAnnotatedImage, loadAnnotationsFromFirestore, saveAnnotationToFirestore } from '@/api/documentImages';
 
-export default function ImageViewer({ userId, documentUrl, documentId }: ImageViewerProps) {
+export default function ImageViewer({ userId, documentUrl, documentId, documentName }: ImageViewerProps) {
     const [annotations, setAnnotations] = useState<Annotation[]>([]);
     const [isDrawing, setIsDrawing] = useState(false);
     const [drawingMode, setDrawingMode] = useState(false); // New state for drawing mode toggle
@@ -26,8 +26,6 @@ export default function ImageViewer({ userId, documentUrl, documentId }: ImageVi
     const stageRef = useRef<Konva.Stage>(null);
     const transformRef = useRef<any>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const db_collection = 'image_annotations';
-
     const handleSidebarMouseDown = (e: React.MouseEvent) => {
         setIsResizing(true);
         e.preventDefault();
@@ -304,7 +302,16 @@ export default function ImageViewer({ userId, documentUrl, documentId }: ImageVi
                         </button>
                         
                         <div className="w-px bg-gray-300 dark:bg-slate-600 mx-1"></div>
-                        
+
+                        {/* Download Button */}
+                        <button
+                            className="flex items-center gap-2 px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                            onClick={() => downloadAnnotatedImage(stageRef,imageSize,documentUrl,annotations,documentName)}
+                        >
+                            <Download className="w-4 h-4" />
+                            Download
+                        </button>
+                                        
                         <button
                             className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-white rounded hover:bg-gray-300 dark:hover:bg-slate-600"
                             onClick={() => transformRef.current?.zoomIn()}

@@ -13,21 +13,23 @@ interface AnalysisInterfaceProps {
   fileName: string;
   onBack: () => void;
   userEmail: string;
+  documentUrl: string
+  fileType : string
 }
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
-export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInterfaceProps) {
+export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType }: AnalysisInterfaceProps) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [message, setMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [allAnalysisComplete, setAllAnalysisComplete] = useState(false);
-
+  console.log("The document URL is: ",documentUrl)
   // --- REFS ---
   const liveConnectionRef = useRef<LiveClient | null>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for auto-scroll
-
+  const backendUrl = import.meta.env.VITE_BACKEND_URL
   // Auto-start analysis
   useEffect(() => {
     const timer = setTimeout(() => startAnalysis(), 500);
@@ -70,7 +72,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
       const formData = new FormData();
       formData.append("email", email);
       formData.append("file", new Blob([""], { type: 'application/pdf' }), `${fileName}_Report.pdf`);
-      await fetch("http://127.0.0.1:8000/email/send-report", { method: "POST", body: formData });
+      await fetch(`${backendUrl}/email/send-report`, { method: "POST", body: formData });
     } catch (error) { console.error('Email failed:', error); }
   };
 
@@ -145,7 +147,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
             </TabsList>
 
             <TabsContent value="document">
-              <DocumentViewer fileType="image" fileUrl="https://firebasestorage.googleapis.com/v0/b/trustlens-632fa.firebasestorage.app/o/documents%2Fgoogle%20(2).png?alt=media&token=dc5a9691-9aeb-42dd-bdc1-b6ee34184337" />
+              <DocumentViewer fileType={fileType} fileUrl={documentUrl} />
             </TabsContent>
             <TabsContent value="ai-assistant" >
               <AiAssistant messages={chatMessages} stage={stage}/>

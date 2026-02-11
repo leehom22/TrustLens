@@ -13,9 +13,9 @@ import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import "@react-pdf-viewer/highlight/lib/styles/index.css";
 import { Note } from "@/app/types/document-highlight-type";
-import { deleteNoteFromFirestore, loadNotesFromFirestore, saveNotesToFirestore } from "@/api/documentPdf";
+import { deleteNoteFromFirestore, downloadAnnotatedPDF, loadNotesFromFirestore, saveNotesToFirestore } from "@/api/documentPdf";
 
-export default function DocumentVercel(props: { userId : string, documentUrl: string, documentId : string }) {
+export default function DocumentVercel(props: { userId: string, documentUrl: string, documentId: string, documentName: string  }) {
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const noteIdRef = useRef(0);
@@ -23,9 +23,16 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   const documentId = props.documentId // testing document //firestore
   const userId = props.userId // firestore 
   const documentURL = props.documentUrl
+  const documentName = props.documentName
 
-    const renderSidebarNotes = () => (
+  const renderSidebarNotes = () => (
     <div style={{ padding: 8 }}>
+      <Button
+        onClick={() => downloadAnnotatedPDF(documentURL, documentName, notes)}
+        style={{ marginBottom: 16, width: '100%' }}
+      >
+        Download Annotated PDF
+      </Button>
       {notes.length === 0 && <div>No notes yet</div>}
       {notes.map((note) => (
         <div
@@ -42,7 +49,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
               Comment: {note.content}
             </div>
           </div>
-          <Button 
+          <Button
             onClick={() => handleDeleteNote(note)}
             style={{ marginTop: 4, fontSize: '12px', }}
           >
@@ -128,7 +135,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   };
 
   const renderHighlightContent = (props: RenderHighlightContentProps) => {
-    const addNote = async() => {
+    const addNote = async () => {
       if (!message.trim()) return;
 
       const newNote: Note = {
@@ -140,9 +147,9 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
 
       // Save to Firestore
       try {
-        const firestoreId = await saveNotesToFirestore(newNote,documentId,userId);
+        const firestoreId = await saveNotesToFirestore(newNote, documentId, userId);
         newNote.firestoreId = firestoreId;
-        
+
         setNotes((prev) => [...prev, newNote]);
         props.cancel();
         setMessage("");
@@ -189,7 +196,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
           autoFocus
           className="p-3 text-black"
         />
-        <div style={{ display: "flex", marginTop: 8, gap:10}}>
+        <div style={{ display: "flex", marginTop: 8, gap: 10 }}>
           <PrimaryButton onClick={addNote} style={{ marginRight: 8 }}>
             Add
           </PrimaryButton>
@@ -225,7 +232,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   );
 
   useEffect(() => {
-    loadNotesFromFirestore(documentId,userId,setNotes,noteIdRef);
+    loadNotesFromFirestore(documentId, userId, setNotes, noteIdRef);
   }, []);
 
   const highlightPluginInstance = highlightPlugin({ renderHighlightTarget, renderHighlightContent, renderHighlights });

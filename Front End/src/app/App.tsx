@@ -28,7 +28,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [expert, setExpert] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
-  const [url, setUrl] = useState<String>("")
+  const [url, setUrl] = useState<string>("")
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   // Reset to upload page when user logs in or changes
@@ -158,6 +158,8 @@ export default function App() {
                             fileName={uploadedFile.name}
                             onBack={handleBack}
                             userEmail={user.email || "user@example.com"}
+                            documentUrl={url}
+                            fileType={uploadedFile.type}
                           />
                         )}
                       </div>

@@ -10,7 +10,7 @@ import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 interface DocumentViewerProps {
   fileUrl: string;
-  fileType: 'application/pdf' | 'image';
+  fileType: string;
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) => {
