@@ -3,17 +3,12 @@ import { FileText, Clock, RotateCcw, Search, X } from 'lucide-react';
 import { documents } from '../../data/documentReview';
 import { DocumentAnalysisResult } from '../../types/type';
 import DocumentAnalysis from '../../components/expert/documentAnalysis';
-// Admin Dashboard
+
+//* Admin Dashboard
 const DocumentReviewPage = () => {
-    const [selectedDocument, setSelectedDocument] = useState<DocumentAnalysisResult | null>(null);
     const [activeTab, setActiveTab] = useState('pending');
-    const [filter, setFilter] = useState<string | null>(null);
     const [sortConfig, setSortConfig] = useState({ key: 'submissionDate', direction: 'desc' });
     const [searchTerm, setSearchTerm] = useState("");
-
-    const filteredDocuments = documents.filter(doc =>
-        activeTab === 'all' ? true : doc.status === activeTab
-    );
 
     const processedDocs = useMemo(() => {
         // First, filter by search term

@@ -10,7 +10,14 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     extraction_prompt = """
     You are a Forensic Document Analyst. Analyze the document image/PDF and extract structured data with forensic precision.
     
-    Goal: Identify Document Type and Extract Key Information.
+    Goal 1: Identify Document Type and Extract Key Information into structured data (JSON) as per schema.
+    GOAL 2: Extract the **FULL RAW TEXT** content for later legal analysis.
+
+    CRITICAL INSTRUCTION FOR 'RAW TEXT':
+    - **IF** the document is a Contract, Agreement, Terms of Service, or Official Letter:
+      -> Extract the **FULL RAW TEXT** into 'raw_document_content'. Include all clauses, fine print.
+    - **IF** the document is an Invoice, Receipt, Bank Statement, or Payslip:
+      -> Leave 'raw_document_content' **EMPTY** (null or ""). Focus on 'line_items'.
 
     CRITICAL INSTRUCTION:
     1. Distinguish between OBSERVATION (what is printed) and INFERENCE.
@@ -20,6 +27,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     Return VALID JSON ONLY with this schema:
     {
         "doc_type": "invoice" | "receipt" | "payment_receipt" | "bank_statement" | "payslip" | "resume" | "certificate" | "contract" | "freelance_contract" | "unknown",
+        "raw_document_content": "string",
         "recipient": { "name": "string", "address": "string" },
         "vendor_info": { "name": "string", "address": "string", "contact": { "email": "string", "phone": "string", "website": "string" } },
         "payment_info": { "bank_name": "string", "account_number": "string", "account_holder_name": "string", "sort_code_or_swift": "string" },

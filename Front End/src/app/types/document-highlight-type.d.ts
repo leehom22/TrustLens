@@ -32,4 +32,13 @@ export interface ImageViewerProps {
     userId: string;
     documentUrl: string;
     documentId: string;
+    documentName: string
+}
+
+interface Note {
+  id: number;
+  content: string;
+  highlightAreas: HighlightArea[];
+  quote: string;
+  firestoreId?: string  // Firestore document ID
 }

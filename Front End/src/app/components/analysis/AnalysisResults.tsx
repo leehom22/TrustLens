@@ -142,9 +142,9 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("metadata", e)}
+                onSubmit={(e) => submitFeedback("metadata & source", e)}
               >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Metadata</b> analysis?</p>
+                <p className="text-gray-900 dark:text-white">What do you think about the <b>Metadata & Source</b> analysis?</p>
 
                 <textarea
                   name="feedback"
@@ -195,9 +195,9 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("heatmap", e)}
+                onSubmit={(e) => submitFeedback("visual manipulation", e)}
               >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Heatmap</b> analysis?</p>
+                <p className="text-gray-900 dark:text-white">What do you think about the <b>Visual Manipulation</b> analysis?</p>
 
                 <textarea
                   name="feedback"
@@ -248,9 +248,9 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("contentAnalysis", e)}
+                onSubmit={(e) => submitFeedback("content semantics", e)}
               >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Content Analysis</b> analysis?</p>
+                <p className="text-gray-900 dark:text-white">What do you think about the <b>Content Semantics</b> analysis?</p>
 
                 <textarea
                   name="feedback"
@@ -301,9 +301,9 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("findings", e)}
+                onSubmit={(e) => submitFeedback("logical consistency", e)}
               >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Key Findings</b> analysis?</p>
+                <p className="text-gray-900 dark:text-white">What do you think about the <b>Logical Consistency</b> analysis?</p>
 
                 <textarea
                   name="feedback"

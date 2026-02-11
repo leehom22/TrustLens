@@ -7,7 +7,6 @@ import NoSelected from '../../components/expert/expertDocumentAnalysis/NoSelecte
 import Metadata from '../../components/expert/expertDocumentAnalysis/analysisTab/Metadata';
 import ContentAnalysis from '../../components/expert/expertDocumentAnalysis/analysisTab/ContentAnalysis';
 import ExpertReview from '../../components/expert/expertDocumentAnalysis/ExpertReview';
-import { documents } from '../../data/documentReview';
 import DocumentVercel from '../../components/expert/expertDocumentAnalysis/DocumentVercel';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -18,6 +17,7 @@ import LogicalConsistency from '../../components/expert/expertDocumentAnalysis/a
 import { FileHeader } from '@/app/types/db-ai-analysis-type';
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
+import UserFeedback from '@/app/components/expert/expertDocumentAnalysis/analysisTab/UserFeedback';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -79,12 +79,12 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                 {
                                     // PDF
                                     selectedDocument.mimeType === 'application/pdf' &&
-                                    <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} />
+                                    <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName}/>
                                 }
                                 {
                                     // IMAGES
                                     selectedDocument.mimeType.startsWith('image/') &&
-                                    <DocumentImages userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} />
+                                    <DocumentImages userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName}/>
                                 }
                             </TabsContent>
                             <TabsContent value='ai-assistant'>
@@ -102,7 +102,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
 
                             {/* Findings */}
                             <Tabs defaultValue="metadata" className="space-y-4">
-                                <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3">
+                                <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3 ">
                                     <TabsTrigger value="metadata" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Metadata & Source</TabsTrigger>
                                     <TabsTrigger value="heatmap" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Visual Manipulation</TabsTrigger>
                                     <TabsTrigger value="content" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Content Semantics</TabsTrigger>
@@ -130,6 +130,8 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                     <LogicalConsistency layer={ai_analysis_format[0].layer_results[3]} />
                                 </TabsContent>
                             </Tabs>
+
+                            <UserFeedback/>
 
                             {/* Expert Review Section */}
                             {ai_analysis_format[0].status === 'Pending' && (

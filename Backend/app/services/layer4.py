@@ -87,7 +87,16 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
     # Format date
     invoice_date = parse_dt(dates.get("invoice_date"))
-    due_date = parse_dt(dates.get("due_date")) # [Restored]
+    due_date = parse_dt(dates.get("due_date"))
+
+    # Collect all dates from line items in sequence
+    line_item_dates = []
+    for item in items:
+        d = parse_dt(item.get("date"))
+        if not d:
+            d = extract_first_date(item.get("desc", ""))
+        if d:
+            line_item_dates.append(d)
 
     # Format the values to float
     def to_float(val):
@@ -314,7 +323,6 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         # Delta < 0: From future -> High Risk
         # Delta > 0: Delay -> Depends on synchronous and asynchronous document types
         delta = (invoice_date - hidden_date).days
-        
         raw_text_dump = str(data).upper()
 
         # --- ( Synchronous & Asynchronous Document Classification ) ---
@@ -386,38 +394,56 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
 
     # 4C: Chronology Audit (New Feature for Bank Statements)
-    if doc_type in ["bank_statement", "payslip"] and items:
-        last_valid_date = None
-        time_travel_count = 0
+    if doc_type in ["bank_statement", "payslip"] and len(line_item_dates) > 1:
         
-        for idx, item in enumerate(items):
-            row_date = parse_dt(item.get("date")) 
-            if not row_date:
-                row_date = extract_first_date(item.get("desc", ""))
-            
-            if row_date:
-                # Check Future
-                if invoice_date and row_date > invoice_date:
-                    l4_signals.append("DATE_FROM_FUTURE")
-                    score = max(score, 85)
-                    audit_trails.append(create_audit_record(
-                        f"Row {idx+1} Timeline", "FAIL", "RowDate <= DocDate",
-                        f"{row_date.date()} > {invoice_date.date()}", "Future transaction"
-                    ))
-
-                # Check Chronology
-                if last_valid_date and (last_valid_date - row_date).days > 1:
-                    time_travel_count += 1
-                    if time_travel_count <= 2:
-                        audit_trails.append(create_audit_record(
-                            "Chronology Logic", "FAIL", "Date(N) >= Date(N-1)",
-                            f"{last_valid_date.date()} -> {row_date.date()}", "Backwards Jump"
-                        ))
-                last_valid_date = row_date
-
-        if time_travel_count > 0 or "DATE_FROM_FUTURE" in l4_signals:
-            l4_signals.append("CHRONOLOGY_INCONSISTENCY")
+        # --- Real World Sanity Date Check ---
+        real_now = datetime.now()
+        future_violation = next((d for d in line_item_dates if d > real_now), None)
+        
+        if future_violation:
+            l4_signals.append("DATE_FROM_FUTURE")
+            score = max(score, 95)
             status = LayerStatus.HIGH_RISK
+            audit_trails.append(create_audit_record(
+                "Real-World Sanity", "FAIL", "Date <= Now", 
+                f"Found: {future_violation.date()}", "Transaction is in the future relative to analysis time."
+            ))
+
+        # --- Chronology Consistency ---
+        # Indicate the line items date follow ascending or descending orders
+        is_descending = line_item_dates[0] > line_item_dates[-1] 
+        chronology_errors = []
+
+        for i in range(len(line_item_dates) - 1):
+            curr = line_item_dates[i]
+            next_d = line_item_dates[i+1]
+            
+            # Same day is okay
+            if curr.date() == next_d.date():
+                continue
+            if is_descending:
+                if next_d > curr:
+                    chronology_errors.append(f"Row {i+1}->{i+2}: {curr.date()} -> {next_d.date()} (Time Jump)")
+            else:
+                if next_d < curr:
+                    chronology_errors.append(f"Row {i+1}->{i+2}: {curr.date()} -> {next_d.date()} (Backwards Jump)")
+
+        if chronology_errors:
+            l4_signals.append("CHRONOLOGY_INCONSISTENCY")
+            score = max(score, 85)
+            if status != LayerStatus.HIGH_RISK: status = LayerStatus.SUSPICIOUS
+            
+            # Record the first two mistakes
+            for err in chronology_errors[:2]:
+                audit_trails.append(create_audit_record(
+                    "Timeline Logic", "FAIL", "Sequential Order", err, "Inconsistent timeline detected"
+                ))
+                
+        elif not future_violation:
+             audit_trails.append(create_audit_record(
+                "Timeline Audit", "PASS", "Chronology Check", 
+                f"Verified {len(line_item_dates)} dates", "Timeline is consistent"
+            ))
 
 
     # ================= Rule 5: Balance Reconciliation =================

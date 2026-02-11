@@ -18,3 +18,9 @@ python -m app.main
 
 # testing endpoint (eg: Postman)
 http://127.0.0.1:8000/
+
+# Backend Testing
+# - Set-up Test (Terminal)
+python Backend/run.py
+# - Endpoint Test
+http://127.0.0.1:8000/docs

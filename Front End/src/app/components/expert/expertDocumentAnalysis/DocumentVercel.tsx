@@ -3,7 +3,6 @@ import { PrimaryButton, Viewer, Worker } from "@react-pdf-viewer/core";
 import { defaultLayoutPlugin, SidebarTab } from "@react-pdf-viewer/default-layout";
 import {
   highlightPlugin,
-  HighlightArea,
   RenderHighlightTargetProps,
   RenderHighlightContentProps,
   RenderHighlightsProps,
@@ -13,19 +12,10 @@ import { Button, Position, Tooltip } from '@react-pdf-viewer/core';
 import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import "@react-pdf-viewer/highlight/lib/styles/index.css";
-import { addDoc, collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { toast } from "sonner";
+import { Note } from "@/app/types/document-highlight-type";
+import { deleteNoteFromFirestore, downloadAnnotatedPDF, loadNotesFromFirestore, saveNotesToFirestore } from "@/api/documentPdf";
 
-interface Note {
-  id: number;
-  content: string;
-  highlightAreas: HighlightArea[];
-  quote: string;
-  firestoreId?: string  // Firestore document ID
-}
-
-export default function DocumentVercel(props: { userId : string, documentUrl: string, documentId : string }) {
+export default function DocumentVercel(props: { userId: string, documentUrl: string, documentId: string, documentName: string  }) {
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const noteIdRef = useRef(0);
@@ -33,12 +23,16 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   const documentId = props.documentId // testing document //firestore
   const userId = props.userId // firestore 
   const documentURL = props.documentUrl
-  const db_collection = 'pdf_highlights'
-  // --------------------------
-  // Sidebar content
-  // --------------------------
-    const renderSidebarNotes = () => (
+  const documentName = props.documentName
+
+  const renderSidebarNotes = () => (
     <div style={{ padding: 8 }}>
+      <Button
+        onClick={() => downloadAnnotatedPDF(documentURL, documentName, notes)}
+        style={{ marginBottom: 16, width: '100%' }}
+      >
+        Download Annotated PDF
+      </Button>
       {notes.length === 0 && <div>No notes yet</div>}
       {notes.map((note) => (
         <div
@@ -55,7 +49,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
               Comment: {note.content}
             </div>
           </div>
-          <Button 
+          <Button
             onClick={() => handleDeleteNote(note)}
             style={{ marginTop: 4, fontSize: '12px', }}
           >
@@ -65,71 +59,6 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
       ))}
     </div>
   );
-
-  const loadNotesFromFirestore = async () => {
-    try {
-      const notesRef = collection(db, db_collection)
-      const q = query(
-        notesRef,
-        where('documentId', '==', documentId),
-        where('userId', '==', userId)
-      )
-
-      const querySnapshot = await getDocs(q)
-      const loadNotes: Note[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        loadNotes.push({
-          id:data.id,
-          content: data.content,
-          highlightAreas: data.highlightAreas,
-          quote: data.quote,
-          firestoreId: doc.id
-        })
-
-        setNotes(loadNotes)
-
-        if(loadNotes.length > 0) {
-          const maxId = Math.max(...loadNotes.map(n => n.id))
-          noteIdRef.current = maxId + 1
-        }
-      })
-    } catch (error) {
-      console.error("Error loading notes: ",error)
-      toast.error("Error loading notes")
-    }
-  }
-
-  const saveNotesToFirestore = async (note: Note) => {
-    try {
-      console.log("Note value to save in db: ",note)
-      console.log("Note value to save in db: ",documentId, userId)
-      const docRef = await addDoc(collection(db, db_collection), {
-        id: note.id,
-        content: note.content,
-        highlightAreas: note.highlightAreas,
-        quote: note.quote,
-        documentId: documentId,
-        userId: userId,
-        createdAt: new Date().toISOString()
-      })
-
-      return docRef.id
-    } catch (error) {
-      console.error("Error saving note: ",error)
-      throw error
-    }
-  }
-
-  const deleteNoteFromFirestore = async (firestoreId: string) => {
-    try {
-      await deleteDoc(doc(db, 'pdf_highlights', firestoreId));
-    } catch (error) {
-      console.error("Error deleting note:", error);
-      throw error;
-    }
-  };
 
   const handleDeleteNote = async (note: Note) => {
     if (note.firestoreId) {
@@ -151,9 +80,6 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
 
   const { activateTab } = defaultLayoutPluginInstance;
 
-  // --------------------------
-  // Jump to a note
-  // --------------------------
   const jumpToNote = (note: Note) => {
     if (note.highlightAreas.length > 0 && noteEles.current.has(note.id)) {
       activateTab(3); // Notes tab index
@@ -209,7 +135,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   };
 
   const renderHighlightContent = (props: RenderHighlightContentProps) => {
-    const addNote = async() => {
+    const addNote = async () => {
       if (!message.trim()) return;
 
       const newNote: Note = {
@@ -221,9 +147,9 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
 
       // Save to Firestore
       try {
-        const firestoreId = await saveNotesToFirestore(newNote);
+        const firestoreId = await saveNotesToFirestore(newNote, documentId, userId);
         newNote.firestoreId = firestoreId;
-        
+
         setNotes((prev) => [...prev, newNote]);
         props.cancel();
         setMessage("");
@@ -270,7 +196,7 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
           autoFocus
           className="p-3 text-black"
         />
-        <div style={{ display: "flex", marginTop: 8, gap:10}}>
+        <div style={{ display: "flex", marginTop: 8, gap: 10 }}>
           <PrimaryButton onClick={addNote} style={{ marginRight: 8 }}>
             Add
           </PrimaryButton>
@@ -306,13 +232,11 @@ export default function DocumentVercel(props: { userId : string, documentUrl: st
   );
 
   useEffect(() => {
-    loadNotesFromFirestore();
+    loadNotesFromFirestore(documentId, userId, setNotes, noteIdRef);
   }, []);
 
   const highlightPluginInstance = highlightPlugin({ renderHighlightTarget, renderHighlightContent, renderHighlights });
-  // --------------------------
-  // Render viewer
-  // --------------------------
+
   return (
     <div style={{ height: "100vh" }} className="z-1">
       <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">

@@ -98,7 +98,7 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
             id="file-upload"
             className="hidden"
             onChange={handleFileChange}
-            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            accept=".pdf,.png,.jpg,.jpeg"
           />
           <label htmlFor="file-upload" className="block cursor-pointer">
             <div className={`border-2 border-dashed rounded-2xl p-12 md:p-16 text-center transition-all duration-300 ${
@@ -126,7 +126,7 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
               </div>
               <div className="mt-6 space-y-2">
                 <p className="text-xs md:text-sm text-gray-500 dark:text-slate-500">
-                  Supported formats: PDF, DOC, DOCX, PNG, JPG
+                  Supported formats: PDF, PNG, JPG
                 </p>
                 <div className="flex items-center justify-center gap-2 text-xs md:text-sm font-semibold">
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
