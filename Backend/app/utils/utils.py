@@ -1,6 +1,7 @@
 import json
 import re
 from PIL import Image
+from datetime import datetime
 from dateutil import parser as date_parser
 
 def clean_and_repair_json(json_str: str) -> dict:
@@ -23,7 +24,14 @@ def clean_and_repair_json(json_str: str) -> dict:
 def parse_pdf_date(date_str: str):
     if not date_str: return None
     try:
-        clean = date_str.replace("D:", "").replace("'", "").replace("Z", "")
+        # Remove prefix D
+        clean = date_str.replace("D:", "")
+
+        # Crop standard PDF YYYYMMDDHHMMSS format part (first 14 digits)
+        if len(clean) >= 14 and clean[:14].isdigit():
+            return datetime.strptime(clean[:14], "%Y%m%d%H%M%S")
+        
+        clean = clean.replace("'", "").replace("Z", "")
         return date_parser.parse(clean, fuzzy=True)
     except:
         return None

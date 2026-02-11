@@ -1,33 +1,19 @@
 import asyncio
 import json
 import google.generativeai as genai
-from typing import List, Dict
+from typing import List, Dict, Any
 from ..core.config import logger
 from ..utils.schemas import LayerResult, LayerStatus
 from ..utils.utils import clean_and_repair_json
 
 
-
-async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile: Dict) -> Dict:
-
-    # ================== AI Set-up ===================
-    generation_config = {
-        "temperature": 0.1,  # stable, not creative
-        "top_p": 0.95,
-        "top_k": 40,
-        "response_mime_type": "application/json"
-    }
-    
-    model = genai.GenerativeModel(
-        model_name='gemini-1.5-pro',
-        generation_config=generation_config
-    )
+async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile: Dict) -> Dict[str, Any]:
     
     # ================== Overall Evaluation ================
     weighted_score = 0.0
     total_weight = 0.0
     hard_fail_triggered = False
-    hard_fail_reason = ""
+    aggregated_risk_signals = []   # collect all layers' risk signals and hard fail signals
 
     # Load rules from profile
     weights = profile.get("weights", {})
@@ -46,17 +32,21 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         # Check if profile explicitly forbids screenshots (Default to True/Allowed if not set)
         if not profile.get("allow_screenshot", True):
             hard_fail_triggered = True
-            hard_fail_reason = f"Format Violation: Screenshot detected. {doc_type} requires original document."
+            aggregated_risk_signals.append(f"Hard Fail Triggered: Screenshot detected. {doc_type} requires original document.")
 
 
     for e in evidence:
-        # Hard Fail Check
-        if not hard_fail_triggered:
-            for check in hard_fail_list:
-                if check in e.details:
-                    hard_fail_triggered = True
-                    hard_fail_reason = f"Hard Fail Triggered: {check} in {e.layer_name}"
-                    break
+        # Risk Signal collect from each layer
+        if e.risk_signals:
+            aggregated_risk_signals.extend(e.risk_signals)
+
+        # Hard Fail Check (all details in layer)
+        for check in hard_fail_list:
+            val = e.details.get(check)
+            if val: 
+                hard_fail_triggered = True
+                aggregated_risk_signals.append(f"Hard Fail Triggered: {check} ({val}) in {e.layer_name}")
+                break
         
         # Weighted Calculation
         w_key = layer_map_keys.get(e.layer_name, "L1")
@@ -75,14 +65,18 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         total_weight += w
         
         # Clean up heatmap in the evidence chain for AI Prompt
-        ev_dict = e.dict()
-        if "visual_evidence_url" in ev_dict: del ev_dict["visual_evidence_url"]
-        evidence_summary.append(ev_dict)
+        # ev_dict = e.dict()
+        # if "visual_evidence_url" in ev_dict: del ev_dict["visual_evidence_url"]
+        # evidence_summary.append(ev_dict)
 
 
-    # Final Calculation
+    # =============== Final Calculation ===============
+    summary_code = "CALCULATED"
+    risk_level = "SAFE"
+
     if hard_fail_triggered:
         final_score = 95
+        summary_code = "HARD_FAIL"
         risk_level = "CRITICAL"
     else:
         final_score = int(weighted_score / total_weight) if total_weight > 0 else 0
@@ -93,46 +87,12 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         elif final_score > 20: risk_level = "CAUTION"
         else: risk_level = "SAFE"
 
+    # ==================== Pass Output to main.py =====================
+    distinct_risk_signals = list(set(aggregated_risk_signals))
 
-    # ==================== AI Prompt ========================
-    evidence_text = json.dumps(evidence_summary, indent=2)
-    
-    prompt = f"""
-    Role: TrustLens Context-Aware Risk Auditor.
-    
-    [CONTEXT]
-    Document Type: {doc_type.upper()}
-    Profile Rules: {profile.get('description')}
-    Allow Creative Software: {profile.get('allow_creative_software')}
-    Allow Screenshot: {profile.get('allow_screenshot', True)}
-    Hard Fail Checks: {hard_fail_list}
-    
-    [SYSTEM JUDGMENT]
-    Calculated Score: {final_score}/100
-    Hard Fail Triggered: {hard_fail_triggered} ({hard_fail_reason})
-    
-    [EVIDENCE CHAIN]
-    {evidence_text}
-    
-    [TASK]
-    Generate a JSON report explaining this judgment.
-    1. 'overall_risk_score': {final_score} (Do not change this unless System Judgment is clearly wrong).
-    2. 'risk_level': {risk_level}.
-    3. 'summary': Explain the score. 
-       - If Hard Fail was triggered, state clearly WHY (e.g., "Bank Statement cannot be a screenshot").
-       - If L1 flagged 'Canva' but document is a Resume, explain "Software risk deemed acceptable for Resume".
-    4. 'recommendation': Actionable advice (e.g., "Reject immediately", "Manual review required", "Accept").
-    """
-
-    # ======================= Execution ========================
-    try:
-        res = await asyncio.wait_for(model.generate_content_async(prompt), timeout=15.0)
-        return clean_and_repair_json(res.text)
-    except Exception as e:
-        logger.error(f"Judge Timeout/Error: {e}")
-        return {
-            "overall_risk_score": final_score, 
-            "risk_level": "Unknown", 
-            "summary": "AI Narrative Timeout. Logic Score Used.",
-            "recommendation": "Manual Review"
-        }
+    return {
+        "overall_risk_score": final_score, 
+        "risk_level": risk_level,
+        "risk_signals": distinct_risk_signals,
+        "summary_code": summary_code
+    }

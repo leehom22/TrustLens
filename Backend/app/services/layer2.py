@@ -1,12 +1,23 @@
 import os
 import uuid
-import tempfile
-from PIL import Image, ImageChops, ImageEnhance, ImageStat
+import io
+import cv2
+import numpy as np
+from PIL import Image, ImageChops, ImageEnhance
 from ..core.config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
 from ..utils.schemas import LayerResult, LayerStatus
 from ..utils.utils import downsample_image
 
-# Poppler Check
+# Import all utility functions
+from ..utils.layer2_utils import (
+    calculate_ela_metrics, 
+    analyze_fused_forensics,     # Black level detection
+    analyze_texture_consistency, # Texture detection
+    analyze_alignment_consistency, # Alignment detection
+    pil_to_cv2
+)
+
+# ================ Poppler Check ====================
 try:
     from pdf2image import convert_from_path
     POPPLER_AVAILABLE = True
@@ -14,20 +25,36 @@ except ImportError:
     POPPLER_AVAILABLE = False
     logger.warning("⚠️ Poppler/pdf2image missing. PDF Visual ELA will be disabled.")
 
+
+# ================= Split document into pages function =========================
 def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
     if not POPPLER_AVAILABLE: return []
     try:
-        pages = convert_from_path(pdf_path, dpi=150, first_page=1, last_page=max_pages)
-        return [downsample_image(p) for p in pages]
+        # [Optimization] Memory protection: Read in chunks (generators) to prevent OOM
+        # Although it returns a List at the end for interface compatibility, the intermediate process is safer.
+        pages_list = []
+        for i in range(1, max_pages + 1):
+            try:
+                # Request only one page at a time
+                page_batch = convert_from_path(pdf_path, dpi=150, first_page=i, last_page=i)
+                if not page_batch: break
+                pages_list.append(downsample_image(page_batch[0]))
+            except Exception:
+                break # Stop on page number overflow or other errors
+        return pages_list
     except Exception as e:
         logger.error(f"PDF convert error: {e}")
         return []
 
+
+# ================================= Execution ====================================
 def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
     try:
         images = []
         if file_type.startswith("image/"):
-            images = [downsample_image(Image.open(file_path).convert("RGB"))]
+            with Image.open(file_path) as raw_img:
+                raw_img.load()
+                images = [downsample_image(raw_img.convert("RGB"))]
         elif file_type == "application/pdf":
             images = pdf_to_ela_pages(file_path)
             if not images and not POPPLER_AVAILABLE:
@@ -38,69 +65,165 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             return LayerResult(layer_name="L2_Visual", status=LayerStatus.SKIPPED, score=0, details={"reason": "Unsupported Type"})
 
         page_results = []
+        l2_signals = [] 
+        
+        max_visual_score = 0
         
         for idx, original in enumerate(images):
-            # 1. Generate ELA
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as tmp:
-                original.save(tmp.name, "JPEG", quality=90)
-                resaved = Image.open(tmp.name)
+            cv_img = pil_to_cv2(original)
+            
+            # 1. Convert to grayscale
+            gray_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+            
+            # 2. Noise detection (Determine if it is a photo/scan or digital screenshot)
+            lap_var = cv2.Laplacian(gray_img, cv2.CV_64F).var()
+            is_noisy_source = lap_var > 80 # >80 is usually a photo or scan (high frequency noise)
+            
+            # 3. Unified text contour extraction (Only for clean screenshots, reducing repetitive overhead)
+            shared_contours = None
+            if not is_noisy_source:
+                # Simple brightness check to adapt to Dark Mode screenshots
+                mean_brightness = np.mean(gray_img)
+                thresh_type = cv2.THRESH_BINARY if mean_brightness < 100 else cv2.THRESH_BINARY_INV
+                _, thresh = cv2.threshold(gray_img, 200, 255, thresh_type)
+                shared_contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # --- Call detection functions (Pass pre-computed parameters) ---
+            
+            # 1. Black level detection (For digital screenshots)
+            black_score, black_mask, black_sigs = analyze_fused_forensics(
+                cv_img, pre_contours=shared_contours
+            )
+            
+            # 2. Texture detection (For photos/scans)
+            tex_score, tex_mask, tex_sigs = analyze_texture_consistency(
+                cv_img, is_photo=is_noisy_source
+            )
+            
+            # 3. Alignment detection (For digital screenshots)
+            align_score, align_mask, align_sigs = analyze_alignment_consistency(
+                cv_img, pre_contours=shared_contours, is_photo=is_noisy_source
+            )
+            
+            # --- Score Fusion Logic ---
+            # Take the highest score among the three detectors (Max Voting)
+            current_max = max(black_score, tex_score, align_score)
+            
+            if current_max > 0:
+                max_visual_score = max(max_visual_score, current_max)
+                
+            # Collect signals
+            if black_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in black_sigs])
+            if tex_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in tex_sigs])
+            if align_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in align_sigs])
+
+            # --- 3. ELA Generation (Visual Base) ---
+            with io.BytesIO() as buffer:
+                original.save(buffer, "JPEG", quality=90)
+                buffer.seek(0)
+                resaved = Image.open(buffer)
                 ela_img = ImageChops.difference(original, resaved)
             
-            # 2. Enhance
+            # Enhance ELA visualization contrast
             extrema = ela_img.getextrema()
             max_diff = max([ex[1] for ex in extrema]) or 1
             scale = 255.0 / max_diff
-            ela_img = ImageEnhance.Brightness(ela_img).enhance(scale)
+            visual_ela = ImageEnhance.Brightness(ela_img).enhance(scale)
+            
+            # --- 3. Visualization Fusion (Draw Boxes) ---
+            heatmap_cv = pil_to_cv2(visual_ela)
+            
+            # Draw texture anomalies (Cyan box BGR: 255, 255, 0)
+            if tex_mask is not None:
+                contours, _ = cv2.findContours(tex_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for cnt in contours:
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (255, 255, 0), 2)
+                    
+            # Draw black level anomalies (Red box BGR: 0, 0, 255)
+            if black_mask is not None:
+                contours, _ = cv2.findContours(black_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for cnt in contours:
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (0, 0, 255), 2)
 
+            # Draw alignment anomalies (Orange box BGR: 0, 165, 255)
+            if align_mask is not None:
+                contours, _ = cv2.findContours(align_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for cnt in contours:
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (0, 165, 255), 2)
+            
+            # --- 4. Save Heatmap ---
             heatmap_name = f"heatmap_{uuid.uuid4().hex[:8]}_p{idx+1}.jpg"
             heatmap_path = os.path.join(EVIDENCE_DIR, heatmap_name)
-            ela_img.save(heatmap_path)
+            cv2.imwrite(heatmap_path, heatmap_cv)
 
-            # 3. Dynamic Grid Scan
-            gray_ela = ela_img.convert("L")
-            w, h = gray_ela.size
-            grid_size = max(32, min(w, h) // 25) 
+            # --- 5. ELA Stats (Rigorous Z-Score) ---
+            w, h = ela_img.size
+            # Dynamically calculate grid size, usually 32 or smaller
+            grid_size = max(32, min(w, h) // 25)
+            # Calling the optimized vectorized version here
+            metrics = calculate_ela_metrics(ela_img, grid_size)
             
-            suspicious_grids = 0
-            stat_global = ImageStat.Stat(gray_ela)
-            global_avg = stat_global.mean[0]
+            # Corrected judgment logic using data returned by metrics
+            is_noisy_source_ela = metrics["global_mean"] > 15
+            confidence = "LOW" if is_noisy_source_ela else "HIGH"
 
-            for x in range(0, w, grid_size):
-                for y in range(0, h, grid_size):
-                    box = (x, y, min(x + grid_size, w), min(y + grid_size, h))
-                    region = gray_ela.crop(box)
-                    local_avg = ImageStat.Stat(region).mean[0]
-                    
-                    if local_avg > (global_avg * 3.5) and local_avg > 18:
-                        suspicious_grids += 1
-
+            # ELA Scoring Logic (Conservative)
             page_score = 0
-            if global_avg > 20: page_score += 30
-            if suspicious_grids > 0: page_score += 50
+            if confidence == "HIGH":
+                # Deduct points only if Z-Score is extremely high and there are multiple suspicious grids
+                if metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
+                    page_score = 40
             
             page_results.append({
                 "page": idx + 1,
                 "score": min(page_score, 100),
                 "url": f"/evidence/{heatmap_name}",
-                "grid_size_used": grid_size,
-                "suspicious_grids": suspicious_grids
+                "metrics": metrics,
+                "confidence": confidence,
+                "note": "Native Digital" if confidence == "HIGH" else "Scan/Noisy"
             })
 
-        if not page_results: return LayerResult(layer_name="L2_Visual", status=LayerStatus.CLEAN, score=0, details={})
-        
+        if not page_results: 
+            return LayerResult(layer_name="L2_Visual", status=LayerStatus.CLEAN, score=0, details={})
+
+        # ======================== Final Evaluation =======================
         worst = max(page_results, key=lambda x: x["score"])
+        
+        # Final score takes the maximum of (ELA Score) and (Advanced Detection Score)
+        final_score = max(worst["score"], max_visual_score)
+        final_score = min(final_score, 100)
+
         status = LayerStatus.CLEAN
-        if worst["score"] > 80: status = LayerStatus.HIGH_RISK
-        elif worst["score"] > 30: status = LayerStatus.SUSPICIOUS
+        l2_signals = list(set(l2_signals))
+        
+        if final_score > 70:
+            status = LayerStatus.HIGH_RISK
+        elif final_score > 30:
+            status = LayerStatus.SUSPICIOUS
+            
+        if worst["confidence"] == "LOW":
+            l2_signals.append("Note: Source image quality is low/noisy, visual analysis reliability is reduced.")
 
         return LayerResult(
-            layer_name="L2_Visual",
-            status=status,
-            score=worst["score"],
-            details={"analyzed_pages": len(images), "worst_page": worst},
-            visual_evidence_url=worst["url"]
+            layer_name = "L2_Visual",
+            status = status,
+            score = final_score,
+            risk_signals = l2_signals,
+            details = {
+                "analyzed_pages": len(images), 
+                "worst_page_details": worst,
+                "advanced_analysis": {
+                     "fused_check": "Triggered" if max_visual_score > 0 else "Pass"
+                },
+                "forensic_note": "Fused Analysis: ELA + Texture (for Photos) + Intensity (for Screenshots).",
+                "visual_tampering": (final_score > 60 and worst["confidence"] == "HIGH")
+            },
+            visual_evidence_url = worst["url"]
         )
-
+        
     except Exception as e:
-        logger.error(f"ELA Logic Error: {e}", extra={"request_id": "internal"})
+        logger.error(f"Layer 2 Error: {e}")
         return LayerResult(layer_name="L2_Visual", status=LayerStatus.ERROR, score=0, details={"error": str(e)})
