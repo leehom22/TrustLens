@@ -8,7 +8,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # Backend/app/core -> Backend/
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Backend/app/core -> Backend/
 # print(f"BASE_DIR set to: {BASE_DIR}")
 load_dotenv(BASE_DIR / ".env")  # Make sure .env is loaded
 
@@ -17,6 +17,9 @@ GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 # print(f"Current Directory: {os.getcwd()}")
 # print(f"GEMINI_API_KEY exists in env: {GEMINI_API_KEY is not None} - {GEMINI_API_KEY}")
 # =================== Basic Architecture Set-up =======================
+# load API Key from .env
+load_dotenv()
+
 # API Key Check
 class Config:
     if not GEMINI_API_KEY:
@@ -35,7 +38,7 @@ ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
 PDF_ELA_MAX_PAGES = 3
 
 # Manage the Static Evidence of heatmaps storage
-EVIDENCE_DIR = "static_evidence"
+EVIDENCE_DIR = "Backend\static_evidence"
 if os.path.exists(EVIDENCE_DIR):
     shutil.rmtree(EVIDENCE_DIR)   # delete the old directory
 os.makedirs(EVIDENCE_DIR, exist_ok=True)   # create a new directory

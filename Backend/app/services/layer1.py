@@ -154,13 +154,14 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
         return LayerResult(layer_name="L1_Metadata", status=LayerStatus.ERROR, score=0, details={"error": str(e)})
 
 
-    # =================== Final Risk Synthesis ===================
+    # =================== Final Output ===================
     if risk_factors:
-        details["risk_analysis_summary"] = "; ".join(risk_factors)
+        details["risk_factors"] = "; ".join(risk_factors)
 
     return LayerResult(
-        layer_name="L1_Metadata", 
-        status=status, 
-        score=min(score, 100), 
-        details=details
+        layer_name = "L1_Metadata", 
+        status = status, 
+        score = min(score, 100), 
+        risk_signals = risk_factors,
+        details = details
     )

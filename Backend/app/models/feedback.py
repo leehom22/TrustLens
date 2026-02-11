@@ -15,11 +15,17 @@ class FeedbackCreate(BaseModel):
     label: str | None = None # correct, incorrect, warning 
     ai_lessons: str | None = None # what the AI should learn from this feedback
     
+class ExpertReview(BaseModel):
+    document_id: str
+    user_id: str # expert id 
+    review_decision: str
+    review_notes: str
+    review_agrees: bool
+
 class FeedbackModel:
     
     @staticmethod
     def create_feedback(feedback: FeedbackCreate, user_id: str = 'anonymous', email: str = 'anonymous'):
-        print(f"Creating feedback for {feedback.analysis_type}...")
         
         # --- AI ANALYZE USER FEEDBACK ---
         analysis = analyze_feedback_content(feedback.feedback_text, feedback.analysis_type)
@@ -44,5 +50,14 @@ class FeedbackModel:
     def get_all_feedback():
         docs = db.collection("feedback").stream()
         return [doc.to_dict() for doc in docs]
+    
+    @staticmethod
+    def create_expert_review(review: ExpertReview):
+        data = review.model_dump()
+        data['timestamp'] = firestore.SERVER_TIMESTAMP
+        
+        _, doc_ref = db.collection('document_review').add(data)
+        
+        return doc_ref.id
     
     

@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends
-from app.models.feedback import FeedbackModel,FeedbackCreate
+from app.models.feedback import FeedbackModel,FeedbackCreate, ExpertReview
 from app.core.auth import get_current_user
 feedback_router = APIRouter()
 
+# user feedback
 @feedback_router.post("/submit_feedback")
 def submit_feedback(data: FeedbackCreate , user = Depends(get_current_user)):
-    print("--------------- Received feedback data ----------------")
-    print(data)
+    # print("--------------- Received feedback data ----------------")
+    # print(data)
     userIid = user['uid'] if user else 'anonymous'
     email = user['email'] if user and 'email' in user else 'anonymous'
     
@@ -22,4 +23,24 @@ def submit_feedback(data: FeedbackCreate , user = Depends(get_current_user)):
         "success": True,
         "message": "Feedback received",
         "feedback_id": feedback_id
+    }
+
+# expert review
+@feedback_router.post("/submit_document_review")
+def submit_document_review(data: ExpertReview):
+    print("----------- Received Document Review ----------------")
+    
+    review_id = FeedbackModel.create_expert_review(data)
+    
+    if not review_id:
+        return {
+            "success": False,
+            "message": "Failed to submit document review"
+        }
+    
+    print(f"Document Reviwe submitted with ID {review_id}")
+    return {
+        "success": True,
+        "message":"Document Review submitted",
+        "review_id": review_id
     }

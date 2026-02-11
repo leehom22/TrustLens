@@ -79,6 +79,10 @@ export default function App() {
   }, [currentUserId]);
 
   const handleFileUpload = async (file: File) => {
+    // //! Development 
+    // setUploadedFile(file);
+    // setAppState("analysis");
+    // return 
     if (!file) return
     const storageRef = ref(storage, `documents/${file.name}`)
 
