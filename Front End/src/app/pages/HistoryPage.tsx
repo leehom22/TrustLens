@@ -16,64 +16,6 @@ import { toast } from 'sonner';
 import { formatDateTime, getRiskColor } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 
-// --- 1. Mock Data (This simulates your Database) ---
-const MOCK_HISTORY = [
-  {
-    id: "DOC-2025-001",
-    fileName: "Q4_Financial_Report.pdf",
-    uploadDate: "2025-02-04 14:30",
-    riskScore: 12,
-    riskLevel: "Low",
-    fileSize: "2.4 MB",
-    analyzedBy: "John Doe"
-  },
-  {
-    id: "DOC-2025-002",
-    fileName: "Vendor_Contract_v2_SIGNED.pdf",
-    uploadDate: "2025-02-03 09:15",
-    riskScore: 88,
-    riskLevel: "High",
-    fileSize: "1.1 MB",
-    analyzedBy: "System Admin"
-  },
-  {
-    id: "DOC-2025-003",
-    fileName: "Invoice_#99281.jpg",
-    uploadDate: "2025-02-02 11:45",
-    riskScore: 65,
-    riskLevel: "Medium",
-    fileSize: "450 KB",
-    analyzedBy: "Jane Smith"
-  },
-  {
-    id: "DOC-2025-004",
-    fileName: "Salary_Slip_Jan_2025.pdf",
-    uploadDate: "2025-01-30 16:20",
-    riskScore: 45,
-    riskLevel: "Medium",
-    fileSize: "890 KB",
-    analyzedBy: "John Doe"
-  },
-  {
-    id: "DOC-2025-005",
-    fileName: "Uber_Receipt_Dec24.png",
-    uploadDate: "2025-01-28 10:00",
-    riskScore: 5,
-    riskLevel: "Low",
-    fileSize: "2.1 MB",
-    analyzedBy: "Jane Smith"
-  },
-  {
-    id: "DOC-2025-006",
-    fileName: "Project_Proposal_Draft.docx",
-    uploadDate: "2025-01-25 13:10",
-    riskScore: 92,
-    riskLevel: "High",
-    fileSize: "5.6 MB",
-    analyzedBy: "Guest User"
-  }
-];
-
 interface Files {
   id: string,
   fileName: string,

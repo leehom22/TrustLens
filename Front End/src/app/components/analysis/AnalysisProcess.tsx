@@ -75,7 +75,7 @@ export function AnalysisProcess() {
             : step
         ));
         setCurrentStepIndex(prev => prev + 1);
-      }, 1200); // Each step takes 1.2 seconds
+      }, 200); // Each step takes 1.2 seconds
 
       return () => clearTimeout(timer);
     }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { FileText, Send, Loader2, Mic, MicOff, AlertTriangle, Mail, Download } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
 import { toast } from "sonner";
-import { generateAnalysisPDF, downloadPDF, type AnalysisData } from "@/lib/pdfGenerator";
 import { AnalysisProcess } from "./AnalysisProcess";
 import { AnalysisResults } from "./AnalysisResults";
 import { createClient, LiveTranscriptionEvents, type LiveClient } from "@deepgram/sdk";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import DocumentViewer from "./DocumentViewer";
+import AiAssistant from "./AiAssistant";
 
 interface AnalysisInterfaceProps {
   fileName: string;
@@ -20,12 +21,10 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [message, setMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
-  const [isRecording, setIsRecording] = useState(false);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [allAnalysisComplete, setAllAnalysisComplete] = useState(false);
-  
+
   // --- REFS ---
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const liveConnectionRef = useRef<LiveClient | null>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for auto-scroll
 
@@ -34,7 +33,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
     const timer = setTimeout(() => startAnalysis(), 500);
     return () => { clearTimeout(timer); if (liveConnectionRef.current) liveConnectionRef.current.finish(); };
   }, []);
-  
+
   // Prevent accidental close
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -48,7 +47,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
   // Whenever 'message' updates, force the input to scroll to the far right
   useEffect(() => {
     if (inputRef.current) {
-        inputRef.current.scrollLeft = inputRef.current.scrollWidth;
+      inputRef.current.scrollLeft = inputRef.current.scrollWidth;
     }
   }, [message]);
 
@@ -62,119 +61,21 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
       setChatMessages(prev => [...prev, { role: "assistant", content: "✅ Analysis complete! Please review the detailed results below." }]);
       sendEmailNotification(userEmail);
       toast.success("Analysis complete! Notification email sent.");
-    }, 8000); 
+    }, 8000);
   };
 
   const sendEmailNotification = async (email: string) => {
     if (!email) return;
     try {
-        const formData = new FormData();
-        formData.append("email", email);
-        formData.append("file", new Blob([""], {type: 'application/pdf'}), `${fileName}_Report.pdf`);
-        await fetch("http://127.0.0.1:8000/email/send-report", { method: "POST", body: formData });
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("file", new Blob([""], { type: 'application/pdf' }), `${fileName}_Report.pdf`);
+      await fetch("http://127.0.0.1:8000/email/send-report", { method: "POST", body: formData });
     } catch (error) { console.error('Email failed:', error); }
   };
 
-  const handleSendMessage = () => {
-    if (!message.trim()) return;
-    setChatMessages(prev => [...prev, { role: "user", content: message }]);
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { role: "assistant", content: "I understand. What else would you like to know?" }]);
-    }, 1000);
-    setMessage("");
-  };
-
-  // --- "HEAVY DUTY" AUDIO LOGIC (The one that works) ---
-  const startRecording = async () => {
-    try {
-      console.log("🎤 Requesting Microphone...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // FORCE audio/webm (Standard for Windows/Chrome)
-      const mimeType = 'audio/webm';
-      console.log(`🎤 Using Format: ${mimeType}`);
-
-      console.log("🔑 Connecting to Backend...");
-      const response = await fetch("http://127.0.0.1:8000/api/deepgram");
-      const data = await response.json();
-      if (!data.key) throw new Error("No key from backend");
-
-      const deepgram = createClient(data.key);
-      
-      // BASIC CONFIG: No fancy settings.
-      const connection = deepgram.listen.live({
-        model: "nova-2",
-        language: "en-US",
-        punctuate: true, 
-      });
-
-      connection.on(LiveTranscriptionEvents.Open, () => {
-        console.log("🟢 Deepgram Connection OPEN");
-      });
-
-      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
-        const transcript = data.channel.alternatives[0]?.transcript;
-        if (transcript && transcript.trim().length > 0) {
-            console.log("📝 TEXT RECEIVED:", transcript);
-            setMessage((prev) => prev + " " + transcript);
-        }
-      });
-
-      connection.on(LiveTranscriptionEvents.Error, (err) => {
-          console.error("❌ Deepgram Error:", err);
-      });
-
-      liveConnectionRef.current = connection;
-
-      // RECORDER SETUP
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && connection.getReadyState() === 1) {
-            connection.send(event.data);
-        }
-      };
-
-      // SLOW DOWN: Send chunks every 1000ms (1 second) to prevent silence bug
-      mediaRecorder.start(1000); 
-      
-      mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
-      toast.info("Listening... Speak continuously.");
-
-    } catch (error) {
-      console.error("Recording Error:", error);
-      toast.error("Mic Error: " + String(error));
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-    }
-    
-    toast.info("Finalizing speech...");
-
-    // Wait 3 seconds for the last big chunk to process
-    setTimeout(() => {
-        if (liveConnectionRef.current) {
-            liveConnectionRef.current.finish();
-            liveConnectionRef.current = null;
-        }
-        setIsRecording(false);
-        
-        if (message.trim()) {
-            handleSendMessage();
-        } else {
-            console.warn("Message still empty.");
-            toast.warning("No text received.");
-        }
-    }, 3000); 
-  };
-
   return (
-  <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 w-385">
       {/* Warning Banner */}
       {stage === "analyzing" && !hasShownWarning && (
         <div className="fixed top-23 left-0 right-0 z-40 bg-yellow-500 dark:bg-yellow-600 px-6 py-3">
@@ -215,56 +116,44 @@ export function AnalysisInterface({ fileName, onBack, userEmail }: AnalysisInter
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 pt-24 md:pt-28">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+      <div className="w-full mx-auto px-4 md:px-6 py-6 md:py-8 pt-24 md:pt-28">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
           {/* Chat Column */}
-          <div className="lg:col-span-1 order-2 lg:order-1">
-            <div className="lg:sticky lg:top-32">
-              <div className="bg-white dark:bg-slate-800/80 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg flex flex-col h-[500px] lg:h-[calc(100vh-140px)]">
-                <div className="p-3 md:p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl">
-                  <h3 className="font-semibold text-gray-900">AI Assistant</h3>
-                  <p className="text-xs text-gray-600">Ask questions about your analysis</p>
-                </div>
+          <Tabs className="lg:col-span-5 order-2 lg:order-1 gap-4" defaultValue="document">
+            <TabsList className="grid w-full grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 bg-gray-50 dark:bg-slate-900/50">
-                  {chatMessages.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[85%] rounded-lg p-3 shadow-sm text-sm ${ msg.role === "user" ? "bg-blue-600 text-white" : "bg-white border"}`}>
-                        <p>{msg.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <TabsTrigger
+                value="document"
+                className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+               data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
+               dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
+               text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Document
+              </TabsTrigger>
 
-                {/* Input Area */}
-                <div className="p-3 md:p-4 border-t border-gray-200 bg-white">
-                  <div className="flex gap-2 mb-2">
-                    <Input 
-                      ref={inputRef} // <--- ATTACHED REF FOR SCROLLING
-                      value={message} 
-                      onChange={(e) => setMessage(e.target.value)} 
-                      onKeyPress={(e) => e.key === "Enter" && handleSendMessage()} 
-                      placeholder="Ask about the analysis..." 
-                      disabled={stage !== "complete"} 
-                    />
-                    <Button onClick={isRecording ? stopRecording : startRecording} disabled={stage !== "complete"} variant="outline" size="icon" className={isRecording ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : ""}>
-                      {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </Button>
-                    <Button onClick={handleSendMessage} disabled={stage !== "complete" || !message.trim()} size="icon" className="bg-blue-600 text-white">
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 text-center">
-                    {isRecording ? "Listening... (Speak for 3s)" : "Click mic to speak"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+              <TabsTrigger
+                value="ai-assistant"
+                className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+               data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
+               dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
+               text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                AI Assistant
+              </TabsTrigger>
+
+            </TabsList>
+
+            <TabsContent value="document">
+              <DocumentViewer fileType="image" fileUrl="https://firebasestorage.googleapis.com/v0/b/trustlens-632fa.firebasestorage.app/o/documents%2Fgoogle%20(2).png?alt=media&token=dc5a9691-9aeb-42dd-bdc1-b6ee34184337" />
+            </TabsContent>
+            <TabsContent value="ai-assistant" >
+              <AiAssistant messages={chatMessages} stage={stage}/>
+            </TabsContent>
+          </Tabs>
 
           {/* Analysis Column */}
-          <div className="lg:col-span-2 order-1 lg:order-2">
+          <div className="lg:col-span-7 order-1 lg:order-2">
             {stage === "analyzing" && <AnalysisProcess />}
             {stage === "complete" && <AnalysisResults />}
           </div>

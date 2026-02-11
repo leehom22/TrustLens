@@ -16,51 +16,82 @@ import { ai_analysis_format } from '@/app/data/db-ai-analysis';
 import { VisualManipulation } from '@/app/components/analysis/HeatmapVisualization';
 import LogicalConsistency from '../../components/expert/expertDocumentAnalysis/analysisTab/KeyFindings';
 import { FileHeader } from '@/app/types/db-ai-analysis-type';
+import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
+import AiAssistant from '@/app/components/analysis/AiAssistant';
 
-const DocumentAnalysis = (props: { userId : string }) => {
-    // {selectedDocument}:{selectedDocument: DocumentAnalysisResult | null}
+type AnalysisStage = "idle" | "analyzing" | "complete";
+
+const DocumentAnalysis = (props: { userId: string }) => {
+    // ** Expert side - Document Analysis with document viewer 
     const params = useParams()
     const docId = params.docId
     const backendUrl = import.meta.env.VITE_BACKEND_URL
     const [loading, setLoading] = useState(true)
-    const [selectedDocument, setSelectedDocument] = useState<FileHeader | null> (null)
+    const [selectedDocument, setSelectedDocument] = useState<FileHeader | null>(null)
+    const [stage, setStage] = useState<AnalysisStage>("complete");
+    const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([{ role: "assistant", content: `I've received your document . Starting comprehensive forensic analysis...` }]);
     // fetch selected file from db 
     const fetchingFile = async () => {
         try {
-            if(docId){
+            if (docId) {
                 const response = await axios.get(`${backendUrl}/files/get_selected_files/${docId}`)
                 const result = response.data
-                
-                if(result.success === true){
-                   console.log("files from db: ",result.data)
-                   setSelectedDocument(result.data)
+
+                if (result.success === true) {
+                    setSelectedDocument(result.data)
                 }
             } else {
                 toast.error("Document Id not found!")
                 return
             }
-        } catch (error) {   
+        } catch (error) {
             toast.error("Failed to laod document")
-            console.log("Error loading document: ",error)
+            console.log("Error loading document: ", error)
         } finally {
             setLoading(false)
         }
     }
-    useEffect(()=>{
-        console.log("the Document Id is :",docId)
+    useEffect(() => {
+        console.log("the Document Id is :", docId)
         // fetch document from backend
         fetchingFile()
-    },[docId])
-    
+    }, [docId])
+
     return (
         <div className="flex-1 overflow-y-auto w-385">
             {
                 selectedDocument ? (
                     <div className='grid grid-cols-2'>
                         {/* Document Preview */}
-                        {/* Onl */}
-                        <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id}/>
-                        {/* <DocumentPreview/> */}
+                        <Tabs className="gap-4" defaultValue='document'>
+                            <TabsList className="grid w-full grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <TabsTrigger value='document' className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+               data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
+               dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
+               text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Document</TabsTrigger>
+                                <TabsTrigger value='ai-assistant' className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+               data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
+               dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
+               text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Ai Assistant</TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value='document'>
+                                {
+                                    // PDF
+                                    selectedDocument.mimeType === 'application/pdf' &&
+                                    <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} />
+                                }
+                                {
+                                    // IMAGES
+                                    selectedDocument.mimeType.startsWith('image/') &&
+                                    <DocumentImages userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} />
+                                }
+                            </TabsContent>
+                            <TabsContent value='ai-assistant'>
+                                <AiAssistant messages={chatMessages} stage={stage} />
+                            </TabsContent>
+                        </Tabs>
+
                         <div className="p-6 max-w-5xl mx-auto ">
 
                             {/* Document Header */}
@@ -86,7 +117,7 @@ const DocumentAnalysis = (props: { userId : string }) => {
 
                                 {/* Heatmap Tab */}
                                 <TabsContent value="heatmap">
-                                    <VisualManipulation layer={ai_analysis_format[0].layer_results[1]}/>
+                                    <VisualManipulation layer={ai_analysis_format[0].layer_results[1]} />
                                 </TabsContent>
 
                                 {/* Content Analysis Tab */}
@@ -102,7 +133,7 @@ const DocumentAnalysis = (props: { userId : string }) => {
 
                             {/* Expert Review Section */}
                             {ai_analysis_format[0].status === 'Pending' && (
-                                <ExpertReview />
+                                <ExpertReview documentId={selectedDocument.id} userId={selectedDocument.user_id}/>
                             )}
 
                             {selectedDocument.status === 'Reviewed' && (
