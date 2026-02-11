@@ -33,3 +33,11 @@ export interface ImageViewerProps {
     documentUrl: string;
     documentId: string;
 }
+
+interface Note {
+  id: number;
+  content: string;
+  highlightAreas: HighlightArea[];
+  quote: string;
+  firestoreId?: string  // Firestore document ID
+}
