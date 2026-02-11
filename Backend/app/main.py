@@ -270,6 +270,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
             grounding_score = grounding_score,
             grounding_result = ai_results.get("grounding_result"),
             layer_summaries = ai_results.get("layer_summaries"),
+            active_lessons_applied = ai_results.get("active_lessons_applied", []),
             
             # Fill in Deterministic Score
             final_recommendation = final_rec
