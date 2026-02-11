@@ -22,11 +22,11 @@ from .routers.email import router as email_router
 from .routers.feedback import feedback_router
 from .routers.user import user_router
 from .routers.files import files_router
-# This is the critical line that was missing or broken before:
-from .routers.speech import router as speech_router 
+from .routers.speech import router as speech_router
+from .routers.chat import chat_router
 
+# ------- Import internal modules ------
 from .core.config import Config
-# Import internal modules
 from .core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
 from .utils.schemas import FinalReport, LayerStatus, LayerResult
 from .services.layer1 import run_layer_1_metadata
@@ -35,8 +35,11 @@ from .services.layer3 import run_layer_3_extraction
 from .services.layer4 import run_layer_4_logic
 from .services.layer0 import run_layer_0_judge
 
-from .routers.feedback import feedback_router
-from .routers.user import user_router
+# ------ Import for AI and DB connection ---------
+from .services.agent import run_agent_analysis
+from .utils.schemas import FinalReport, AnalysisRecord
+from .core.firebase import db
+
 
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
@@ -45,8 +48,7 @@ Config.setup_ai()
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
 
-# Allow all(*) terminals / front-end terminal can access data in this terminal
-# In deploy environment have to alter * into frontend HTTP address
+# Allow all(*) terminals / frontend terminal can access data in this terminal
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -55,7 +57,7 @@ app.add_middleware(
 )
 
 # API Routing: An endpoint as a tool for the AI Agent
-@app.post("/analyze", response_model=FinalReport)
+@app.post("/analyze", response_model = AnalysisRecord)
 async def analyze_document(request: Request, file: UploadFile = File(...)):
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
@@ -72,7 +74,6 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
     if verified_content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
     
-
     with tempfile.TemporaryDirectory() as temp_dir:
         ext = os.path.splitext(file.filename)[1]
         temp_path = os.path.join(temp_dir, f"{req_id}{ext}")
@@ -176,7 +177,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
     
         
-        # ================ Packing Analysis Report to AI Agent =====================
+        # [Step 7] Packing Analysis Report to AI Agent
         rule_metadata = {
                 "description": profile.get("description", ""),
                 "hard_fail_triggers": profile.get("hard_fail_checks", []),
@@ -187,6 +188,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         if l3_data:
             # Basic Info
             # Helper to safely get nested dicts
+            raw_content = l3_data.get("raw_document_content", "")
             vendor = l3_data.get("vendor_info", {})
             fins = l3_data.get("financials", {})
             dates = l3_data.get("dates", {})
@@ -230,13 +232,63 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
 
             rule_metadata = rule_metadata,
             grounding_info = grounding_info,
+            raw_document_content = raw_content
+        )
+
+        logger.info("Technical Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
+
+
+        # [Step 8] AI Agent Investigation (Contextual Layer) 
+        ai_results = await run_agent_analysis(report)
+        
+        # [Step 9] Hybrid Merge (Grounding and Technical)
+        tech_score = report.overall_risk_score
+        grounding_score = ai_results.get("grounding_score", 0)
+        
+        # Max Voting
+        final_risk_score = max(tech_score, grounding_score)
+        
+        final_rec = "REVIEW"
+        if final_risk_score > 80:
+            final_rec = "REJECT"
+        elif final_risk_score < 30:
+            final_rec = "ACCEPT"
+        else:
+            final_rec = "REVIEW"
+
+        # If AI feels suspicious, recommend for expert review even with low score
+        if ai_results.get("verification_status") == "SUSPICIOUS" and final_rec == "ACCEPT":
+            final_rec = "REVIEW"
+
+        # [Step 10] Packaging AnalysisRecord
+        final_record = AnalysisRecord(
+            **report.dict(),    # parsing report
+            
+            # Fill in AI result
+            agent_summary = ai_results.get("agent_summary"),
+            verification_status = ai_results.get("verification_status"),
+            grounding_score = grounding_score,
+            grounding_result = ai_results.get("grounding_result"),
+            layer_summaries = ai_results.get("layer_summaries"),
+            active_lessons_applied = ai_results.get("active_lessons_applied", []),
+            
+            # Fill in Deterministic Score
+            final_recommendation = final_rec
         )
         
-        logger.info("Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
-        return report   
+        # [Step 11] Session Memory in Firestore (As RAG of Chatbot)
+        try:
+            db.collection("analysis_results").document(req_id).set(final_record.dict())
+            logger.info(f"Report saved to Firestore: {req_id}")
+        except Exception as e:
+            logger.error(f"Firestore Save Error: {e}")
+
+        # Sent back to front-end
+        return final_record
+
+
 
 # ====================== Register Routers =======================
-
 app.include_router(
      feedback_router,
     prefix="/feedback",
@@ -256,6 +308,12 @@ app.include_router(
     files_router,
     prefix="/files",
     tags=["Files"]   
+)
+
+app.include_router(
+    chat_router,
+    prefix="/chat",
+    tags=["Chatbot"]
 )
 
 # --- Register the Deepgram/Speech Router ---

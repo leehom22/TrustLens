@@ -3,9 +3,14 @@ from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Force load the .env file from the app folder, just like the test script did
-load_dotenv(dotenv_path="app/.env")
+# load_dotenv(dotenv_path="app/.env")
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent # Path to Backend/
+load_dotenv(BASE_DIR / ".env")
+
 
 router = APIRouter()
 
