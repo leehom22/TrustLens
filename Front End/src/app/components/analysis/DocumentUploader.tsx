@@ -26,8 +26,8 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
     // Check file type
     const allowedTypes = [
       'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      // 'application/msword',
+      // 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'image/png',
       'image/jpeg',
       'image/jpg'
@@ -42,7 +42,6 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
     }
 
     // File is valid
-    toast.success(`File "${file.name}" uploaded successfully!`);
     onFileUpload(file);
   };
 
@@ -73,7 +72,7 @@ export function DocumentUploader({ onFileUpload }: DocumentUploaderProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-6 pl-64">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-6 w-385 ">
       <div className="max-w-4xl w-full">
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-600 mb-6">
