@@ -7,7 +7,7 @@ const ExpertReview = (props: {userId: string, documentId: string}) => {
     const [reviewDecision, setReviewDecision] = useState<String | null>(null);
     const [reviewNotes, setReviewNotes] = useState('');
     const [agreeAnalysis, setAgreeAnalysis] = useState(null)
-    const [isLoading, setIsLoading] = useState(true)
+    const [isLoading, setIsLoading] = useState(false)
     const backendUrl = import.meta.env.VITE_BACKEND_URL
 
     const handleReviewSubmit = async () => {
