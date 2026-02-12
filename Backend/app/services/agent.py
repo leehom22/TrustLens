@@ -12,7 +12,7 @@ from google.cloud import firestore
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Google Search Grounding
-tools = [{"google_search_retrieval": {}}]
+tools = {'google_search': {}}
 
 # =============== SYSTEM PROMPT =================
 AGENT_SYSTEM_INSTRUCTION = """

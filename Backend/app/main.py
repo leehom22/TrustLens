@@ -4,7 +4,7 @@ import tempfile
 import asyncio
 import mimetypes
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -26,6 +26,7 @@ from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 
 # ------- Import internal modules ------
+from .core.auth import get_current_user
 from .core.config import Config
 from .core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
 from .utils.schemas import FinalReport, LayerStatus, LayerResult
@@ -58,7 +59,8 @@ app.add_middleware(
 
 # API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model = AnalysisRecord)
-async def analyze_document(request: Request, file: UploadFile = File(...)):
+async def analyze_document(request: Request, file: UploadFile = File(...), user_payload: dict = Depends(get_current_user)):
+    user_id = user_payload.get("uid")
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
 
@@ -264,6 +266,9 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         final_record = AnalysisRecord(
             **report.dict(),    # parsing report
             
+            user_id = user_id, 
+            file_name = file.filename,
+
             # Fill in AI result
             agent_summary = ai_results.get("agent_summary"),
             verification_status = ai_results.get("verification_status"),
@@ -279,7 +284,7 @@ async def analyze_document(request: Request, file: UploadFile = File(...)):
         # [Step 11] Session Memory in Firestore (As RAG of Chatbot)
         try:
             db.collection("analysis_results").document(req_id).set(final_record.dict())
-            logger.info(f"Report saved to Firestore: {req_id}")
+            logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
 
