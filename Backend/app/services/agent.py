@@ -73,6 +73,11 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
     1. Hard Filter for current doc_type
     2. Soft Filter for matching current flagged_layers or General
     3. Prioritise the current extracted vendor
+
+    RAG Retrieving Logic (Refactored):
+    1. Query 'feedback' collection directly.
+    2. Filter by doc_type and weight.
+    3. In-memory filter for 'target_layer' matching.
     """
 
     lessons_text = []
@@ -81,13 +86,13 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
     valid_labels = ["incorrect", "warning", "correct"]
 
     try:
-        # 1. For current doc type (collect 10)
-        query = db.collection("feedback_analysis")\
+        # 1. For current doc type (collect 15 for further filter)
+        query = db.collection("feedback")\
                   .where("applicable_doc_types", "array_contains", doc_type)\
                   .where("label", "in", valid_labels)\
                   .where("weight", ">=", 0.6)\
                   .order_by("weight", direction=firestore.Query.DESCENDING)\
-                  .limit(10)
+                  .limit(15)
 
         docs = query.stream()
         
@@ -105,9 +110,6 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
             if count >= 5: break   # Retrieve at most five lessons
             
             data = d.to_dict()
-            label = data.get("label", "neutral")
-
-            prefix = PREFIX_MAP.get(label)
 
             # Filter lessons with unmatch layers
             l_layer = data.get("target_layer", "General")
@@ -119,10 +121,11 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
                 continue
 
             # --- Format Prompt ---
+            label = data.get("label", "neutral")
+            prefix = PREFIX_MAP.get(label)
+
             entity_tag = f"[SPECIFIC: {l_entities[0]}]" if l_entities else "[GENERIC]"
-            
             line = f"{count+1}. {prefix} {entity_tag} (Layer: {l_layer}): {data.get('ai_lessons')}"
-            
             lessons_text.append(line)
             raw_lessons.append(data.get('ai_lessons'))
             count += 1
@@ -183,7 +186,7 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
 
     # 2. Execution
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash', 
+        model_name='gemini-2.5-flash', 
         tools=tools,
         system_instruction=AGENT_SYSTEM_INSTRUCTION
     )

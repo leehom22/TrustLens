@@ -12,7 +12,7 @@ from google.cloud import firestore
 import uuid
 
 @user_router.post("/register_user", status_code=status.HTTP_201_CREATED)
-@user_router.post("/register_user")
+# @user_router.post("/register_user")
 def register_user(user_data: UserRegisterSchema):
     # displayName
     # email
@@ -34,7 +34,7 @@ def register_user(user_data: UserRegisterSchema):
         # 2. Save User Profile/Role in Firestore 'users' collection
         db.collection("users").document(user_record.uid).set({
             "email": user_data.email,
-            "role": "user",  # or "expert"
+            "role": user_data.role,
             "displayName": user_data.display_name,
             "created_at": firestore.SERVER_TIMESTAMP,
             "is_immunized": False
