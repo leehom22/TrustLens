@@ -32,10 +32,11 @@ export default function App() {
   const [url, setUrl] = useState<string>("")
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
   // Reset to upload page when user logs in or changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // 1. Handle Logout
+      // 1. Handle Logout / No User
       if (!currentUser) {
         setUser(null);
         setExpert(false);
@@ -44,7 +45,12 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
-        navigate('/login');
+        
+        // --- CHANGE MADE HERE ---
+        // Removed: navigate('/login'); 
+        // Why: This was forcing a redirect to login on page load, blocking the Landing Page.
+        // The Sidebar's handleSignOut handles the manual redirect to /login.
+        
         return;
       }
 
@@ -78,7 +84,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [currentUserId]);
+  }, [currentUserId, navigate]); // Added navigate to dependency array
 
   const handleFileUpload = async (file: File) => {
     // //! Development 
@@ -143,15 +149,15 @@ export default function App() {
                 element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
               />
 
-              {/* Protected R outes */}
+              {/* Protected Routes */}
               {user && (
                 <>
-                  {/* uer & expert */}
+                  {/* user & expert */}
                   <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
                   <Route
                     path="/upload-document"
                     element={
-                      <div className="size-full  ">
+                      <div className="size-full">
                         {appState === "upload" && (
                           <DocumentUploader onFileUpload={handleFileUpload} />
                         )}
@@ -183,9 +189,12 @@ export default function App() {
                       )
                   }
                 </>
-
               )}
 
+              {/* Catch-all route: 
+                  If user is logged in -> goes to Dashboard/Upload via the "/" redirect logic or specific routes.
+                  If user is NOT logged in -> goes to Landing Page via "/" 
+              */}
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
 
