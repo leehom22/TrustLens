@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Toaster } from "./components/ui/sonner";
 import { auth } from "../lib/firebase";
@@ -21,6 +21,7 @@ import axios from 'axios'
 type AppState = "upload" | "analysis";
 
 export default function App() {
+  const navigate = useNavigate();
   const [appState, setAppState] = useState<AppState>("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
+        navigate('/login');
         return;
       }
 
@@ -124,11 +126,11 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+      <div className="w-screen">
         {/* Sidebar only appears if user is authenticated */}
         {user && <Sidebar user={user} />}
 
-        <main className={`flex-1 transition-all duration-300 `}>
+        <main className={`${user ? "flex-1" : "w-full"}`}>
           <div className={user ? "p-7 max-w-7xl mx-auto" : ""}>
 
             <Routes>

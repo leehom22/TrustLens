@@ -29,6 +29,7 @@ const Sidebar = ({ user }: SidebarProps) => {
   const handleSignOut = async () => {
     try {
       await auth.signOut();
+      navigate('/login');
     } catch (error) {
       console.error("Error signing out:", error);
     }

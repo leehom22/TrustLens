@@ -19,6 +19,7 @@ const LoginPage = () => {
     const [showPassword, setShowPassword] = useState(false)
     const [showRegister, setShowRegister] = useState(false)
     const [registerExpert, setRegisterExpert] = useState(false)
+    const [selectedRole, setSelectedRole] = useState<string>("user")
     const navigate = useNavigate()
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -61,43 +62,59 @@ const LoginPage = () => {
             const email = formData.get("email") as string
             const password = formData.get("password") as string
             const userName = formData.get("username") as string
+            const passkey = formData.get("passkey") as string
 
+            // Validate inputs
+            if (!email || !password || !userName || !role) {
+                toast.error("Please fill in all required fields");
+                setRegisterLoading(false);
+                return;
+            }
+
+            // Validate passkey for expert registration
+            if (role === "expert" && !passkey) {
+                toast.error("Passkey is required for expert registration");
+                setRegisterLoading(false);
+                return;
+            }
+
+            // Register user with backend (which will create in Firebase)
             const res = await axios.post(`${backendUrl}/user/register_user`, {
                 "email": email,
                 "password": password,
                 "display_name": userName,
-                "role": role
+                "role": role,
+                ...(role === "expert" && { "passkey": passkey })
             })
 
             console.log("response registration: ", res)
 
-            if (res.status === 200) {
-                toast.success("Register success. Please login again")
-                // // await signInWithEmailAndPassword(auth, email, password)
-
-                // const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                // await updateProfile(userCredential.user, {
-                //     displayName: userName
-                // });
-
-                navigate('/login')
+            if (res.status === 201) {
+                toast.success("Registration successful! Logging you in...")
+                // Now sign in with Firebase using the created credentials
+                await signInWithEmailAndPassword(auth, email, password);
+                navigate('/dashboard')
                 setShowRegister(false)
-                // navigate("/dashboard")
             }
 
-        } catch (error) {
-            console.log("Original Code: ", error.code);
+        } catch (error: any) {
+            console.log("Registration Error: ", error);
 
             // 1. Create a map of user-friendly messages
-            const errorMessages = {
+            const errorMessages: { [key: string]: string } = {
                 "auth/email-already-in-use": "This email is already registered.",
                 "auth/invalid-email": "The email address is not valid.",
-                "auth/weak-password": "Your password is too weak.",
+                "auth/weak-password": "Your password is too weak (minimum 6 characters).",
                 "auth/network-request-failed": "Please check your internet connection."
             };
 
             // 2. Extract the clean message or use a fallback
-            const cleanMessage = errorMessages[error.code] || "An unexpected error occurred.";
+            let cleanMessage = errorMessages[error.code] || error.message || "An unexpected error occurred.";
+            
+            // Check for API error responses
+            if (error.response?.status === 400) {
+                cleanMessage = error.response?.data?.detail || "Registration failed. Please check your inputs.";
+            }
 
             toast.error(cleanMessage);
         } finally {
