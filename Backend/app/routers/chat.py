@@ -5,8 +5,8 @@ from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-import google.generativeai as genai
-from google.api_core.exceptions import GoogleAPICallError
+from google import genai
+from google.genai import types
 from google.cloud import firestore
 from dotenv import load_dotenv
 from ..core.auth import get_current_user
@@ -18,9 +18,6 @@ GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 logger = logging.getLogger("TrustLens-Chat")
 chat_router = APIRouter()
-
-# --- Init Firebase & Gemini ---
-genai.configure(api_key=GEMINI_API_KEY)
 
 
 # ====================== Models & Schemas =======================
@@ -166,7 +163,7 @@ CORE_GUARDRAILS = """
 
 def get_mode_config(mode: str):
     # Google Search Tool Definition
-    google_search_tool = {{'google_search': {}}}
+    google_search_tool = types.Tool(google_search=types.GoogleSearch())
     
     # Formatting Prompt Structure: Guardrails + Role + Mission + Data Referred
     base_structure = lambda role, mission, data: f"""
@@ -274,26 +271,34 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         config = get_mode_config(request.mode)
         
         # Pass the functions into tools，SDK will analyse Docstring and apply
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash", 
-            tools=config["tools"]
-        )
+        client = genai.Client(api_key=GEMINI_API_KEY)
         
         # 2. History & Persistence
         history = get_chat_history(request.doc_id)
         save_chat_message(request.doc_id, current_user_id, "user", request.user_query)
-        
+
+        formatted_history = []
+        for h in history:
+            formatted_history.append(types.Content(
+                role=h['role'],
+                parts=[types.Part.from_text(p) for p in h['parts']]
+            ))
+
         # 3. Start Chat
         # enable_automatic_function_calling=True for SDK to automatically handle Tool Functions Call
-        chat = model.start_chat(
-            history=history,
-            enable_automatic_function_calling=True 
+        chat = client.aio.chats.create(
+            model="gemini-2.5-flash",
+            config=types.GenerateContentConfig(
+                tools=config["tools"],
+                system_instruction=config.get("prompt", "")
+            ),
+            history=formatted_history
         )
         
-        final_query = f"[SYSTEM: {config['prompt']}] \n\n USER QUERY: {request.user_query}"
+        final_query = request.user_query
         
         # 4. Gemini Call
-        response = await chat.send_message_async(final_query)
+        response = await chat.send_message(final_query)
         ai_raw_text = response.text
         
         # 5. Suggestion Engine

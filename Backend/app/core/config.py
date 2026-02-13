@@ -4,7 +4,6 @@ import logging
 import json
 import shutil
 from datetime import datetime
-import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -29,7 +28,7 @@ class Config:
     def setup_ai():
         if not GEMINI_API_KEY:
             raise ValueError("No GEMINI_API_KEY found in environment variables")
-        genai.configure(api_key=GEMINI_API_KEY)
+        pass
         
 
 # Safety Limitation

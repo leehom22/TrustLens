@@ -1,6 +1,7 @@
 import json
 import asyncio
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import Dict, Any, List
 from ..core.config import GEMINI_API_KEY, logger
 from ..utils.schemas import FinalReport
@@ -9,10 +10,6 @@ from ..core.firebase import db
 from google.cloud import firestore
 
 
-genai.configure(api_key=GEMINI_API_KEY)
-
-# Google Search Grounding
-tools = {'google_search': {}}
 
 # =============== SYSTEM PROMPT =================
 AGENT_SYSTEM_INSTRUCTION = """
@@ -185,16 +182,17 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
     """
 
     # 2. Execution
-    model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash', 
-        tools=tools,
-        system_instruction=AGENT_SYSTEM_INSTRUCTION
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     try:
-        response = await model.generate_content_async(
-            user_prompt,
-            generation_config={"response_mime_type": "application/json"}
+        response = await client.aio.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=AGENT_SYSTEM_INSTRUCTION,
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                # response_mime_type="application/json"
+            )
         )
         
         ai_output = clean_and_repair_json(response.text)

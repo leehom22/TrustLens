@@ -1,11 +1,11 @@
-import google.generativeai as genai
+from google import genai
 import json
-from ..core.config import logger, DOC_RISK_PROFILES
+from ..core.config import logger, DOC_RISK_PROFILES, GEMINI_API_KEY
 
 VALID_DOC_TYPES = list(DOC_RISK_PROFILES.keys())
 
 def analyze_feedback_content(text: str, current_doc_type: str, analysis_type: str):
-    model = genai.GenerativeModel('gemini-flash-latest')
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     layer_desc = {
         "layer1": "Metadata & File History Analysis",
@@ -50,9 +50,13 @@ def analyze_feedback_content(text: str, current_doc_type: str, analysis_type: st
     }}
     """
     
-    response = model.generate_content(prompt)
+
     # Extract the JSON part from the response text
     try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
         # Simple cleanup in case Gemini adds markdown code blocks
         json_text = response.text.strip().replace('```json', '').replace('```', '')
         return json.loads(json_text)
