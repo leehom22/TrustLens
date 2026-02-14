@@ -170,8 +170,8 @@ def analyze_fused_forensics(image_input, pre_contours=None):
     anomaly_mask = np.zeros((h, w), dtype=np.uint8)
     
     # ROI: Strictly limit to the middle area (Avoid Header/Footer)
-    y_start = int(h * 0.20)
-    y_end = int(h * 0.80)
+    y_start = int(h * 0.075)
+    y_end = int(h * 0.925)
     
     contours = pre_contours
     if contours is None:

@@ -7,8 +7,7 @@ from PIL import Image, ImageChops, ImageEnhance
 from ..core.config import logger, EVIDENCE_DIR, PDF_ELA_MAX_PAGES
 from ..utils.schemas import LayerResult, LayerStatus
 from ..utils.utils import downsample_image
-
-# Import all utility functions
+from ..utils.visualizer import generate_hud
 from ..utils.layer2_utils import (
     calculate_ela_metrics, 
     analyze_fused_forensics,     # Black level detection
@@ -105,6 +104,10 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 cv_img, pre_contours=shared_contours, is_photo=is_noisy_source
             )
             
+            current_detection_score = max(black_score, tex_score, align_score)
+            if current_detection_score > 0:
+                max_visual_score = max(max_visual_score, current_detection_score)
+
             # --- Score Fusion Logic ---
             # Take the highest score among the three detectors (Max Voting)
             current_max = max(black_score, tex_score, align_score)
@@ -124,42 +127,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 resaved = Image.open(buffer)
                 ela_img = ImageChops.difference(original, resaved)
             
-            # Enhance ELA visualization contrast
-            extrema = ela_img.getextrema()
-            max_diff = max([ex[1] for ex in extrema]) or 1
-            scale = 255.0 / max_diff
-            visual_ela = ImageEnhance.Brightness(ela_img).enhance(scale)
-            
-            # --- 3. Visualization Fusion (Draw Boxes) ---
-            heatmap_cv = pil_to_cv2(visual_ela)
-            
-            # Draw texture anomalies (Cyan box BGR: 255, 255, 0)
-            if tex_mask is not None:
-                contours, _ = cv2.findContours(tex_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                for cnt in contours:
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (255, 255, 0), 2)
-                    
-            # Draw black level anomalies (Red box BGR: 0, 0, 255)
-            if black_mask is not None:
-                contours, _ = cv2.findContours(black_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                for cnt in contours:
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (0, 0, 255), 2)
-
-            # Draw alignment anomalies (Orange box BGR: 0, 165, 255)
-            if align_mask is not None:
-                contours, _ = cv2.findContours(align_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                for cnt in contours:
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    cv2.rectangle(heatmap_cv, (x, y), (x+w, y+h), (0, 165, 255), 2)
-            
-            # --- 4. Save Heatmap ---
-            heatmap_name = f"heatmap_{uuid.uuid4().hex[:8]}_p{idx+1}.jpg"
-            heatmap_path = os.path.join(EVIDENCE_DIR, heatmap_name)
-            cv2.imwrite(heatmap_path, heatmap_cv)
-
-            # --- 5. ELA Stats (Rigorous Z-Score) ---
+            # --- 4. ELA Stats (Rigorous Z-Score) ---
             w, h = ela_img.size
             # Dynamically calculate grid size, usually 32 or smaller
             grid_size = max(32, min(w, h) // 25)
@@ -176,7 +144,39 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 # Deduct points only if Z-Score is extremely high and there are multiple suspicious grids
                 if metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
                     page_score = 40
+
+            current_page_score = max(current_detection_score, page_score)
+            current_page_score = min(current_page_score, 100)
+
+
+            masks_collection = {
+                "Texture": tex_mask,
+                "BlackLevel": black_mask,
+                "Alignment": align_mask
+            }
             
+            # 转换 ELA 为 OpenCV 格式
+            ela_cv = pil_to_cv2(ela_img)
+            
+            # [核心调用] 生成带 HUD 的战术图
+            try:
+                heatmap_cv = generate_hud(
+                    cv_img,          # 原图 (OpenCV)
+                    ela_cv,          # ELA图 (OpenCV)
+                    masks_collection, # 检测结果
+                    int(current_page_score) # 当前页分数
+                )
+            except Exception as e:
+                logger.error(f"Visualizer Error: {e}")
+                # 如果可视化失败，回退到原图，避免系统崩溃
+                heatmap_cv = cv_img
+            
+
+            # --- 5. Save Heatmap ---
+            heatmap_name = f"heatmap_{uuid.uuid4().hex[:8]}_p{idx+1}.jpg"
+            heatmap_path = os.path.join(EVIDENCE_DIR, heatmap_name)
+            cv2.imwrite(heatmap_path, heatmap_cv)
+
             page_results.append({
                 "page": idx + 1,
                 "score": min(page_score, 100),
