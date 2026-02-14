@@ -73,6 +73,8 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       // 1. Initialize FormData correctly
       const formData = new FormData(); 
       formData.append('file',file)
+      formData.append('doc_id',documentId)
+      formData.append('user_id',userId)
       console.log("The file is :",file)
 
       // 2. Initial Forensic Analysis
