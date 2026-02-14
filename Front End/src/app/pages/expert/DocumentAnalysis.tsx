@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import  { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { CheckCircle } from 'lucide-react';
 import Header from '../../components/expert/expertDocumentAnalysis/Header';
@@ -11,13 +11,11 @@ import DocumentVercel from '../../components/expert/expertDocumentAnalysis/Docum
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { ai_analysis_format } from '@/app/data/db-ai-analysis';
 import { VisualManipulation } from '@/app/components/analysis/HeatmapVisualization';
 import LogicalConsistency from '../../components/expert/expertDocumentAnalysis/analysisTab/KeyFindings';
-import { FileHeader } from '@/app/types/db-ai-analysis-type';
+import { DocumentAnalysisResult, FileHeader } from '@/app/types/db-ai-analysis-type';
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
-import UserFeedback from '@/app/components/expert/expertDocumentAnalysis/analysisTab/UserFeedback';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -30,7 +28,30 @@ const DocumentAnalysis = (props: { userId: string }) => {
     const [selectedDocument, setSelectedDocument] = useState<FileHeader | null>(null)
     const [stage, setStage] = useState<AnalysisStage>("complete");
     const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([{ role: "assistant", content: `I've received your document . Starting comprehensive forensic analysis...` }]);
-    // fetch selected file from db 
+    const [ai_analysis_format, setAiAnalysis] = useState<DocumentAnalysisResult | null>(null)
+
+    const fetchingDocucmentAnalysis = async (docId: string) => {
+        try {
+            const formData = new FormData()
+            formData.append('docId', docId)
+            console.log("Fetching structure analysis data")
+            const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData)
+            const result = res.data
+
+            if (result.success === true) {
+                setAiAnalysis(result.data?.analysis_content)
+                // console.log("The structure data is: ", result.data)
+            } else {
+                toast.error("Failed to fetch document analysis")
+                return
+            }
+        } catch (error) {
+            toast.error("Failed to fetch document analysis")
+            console.log("Error fetching document analysis: ", error)
+        }
+    }
+
+    //** fetch selected file from db 
     const fetchingFile = async () => {
         try {
             if (docId) {
@@ -38,7 +59,9 @@ const DocumentAnalysis = (props: { userId: string }) => {
                 const result = response.data
 
                 if (result.success === true) {
+                    await fetchingDocucmentAnalysis(docId)
                     setSelectedDocument(result.data)
+                    console.log("Expert Review: ",result.data.expertReview)
                 }
             } else {
                 toast.error("Document Id not found!")
@@ -98,7 +121,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                             <Header selectedDocument={selectedDocument} />
 
                             {/* AI Analysis Summary */}
-                            <AnalysisSummary selectedDocument={ai_analysis_format[0]} />
+                            <AnalysisSummary selectedDocument={ai_analysis_format} />
 
                             {/* Findings */}
                             <Tabs defaultValue="metadata" className="space-y-4">
@@ -112,46 +135,45 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                 {/* Metadata Tab */}
 
                                 <TabsContent value="metadata" className="main-card-container">
-                                    <Metadata layer={ai_analysis_format[0].layer_results[0]} />
+                                    <Metadata layer={ai_analysis_format!.layer_results[0]} />
                                 </TabsContent>
 
                                 {/* Heatmap Tab */}
                                 <TabsContent value="heatmap">
-                                    <VisualManipulation layer={ai_analysis_format[0].layer_results[1]} />
+                                    <VisualManipulation layer={ai_analysis_format!.layer_results[1]} />
                                 </TabsContent>
 
                                 {/* Content Analysis Tab */}
                                 <TabsContent value="content" className="main-card-container">
-                                    <ContentAnalysis layer={ai_analysis_format[0].layer_results[2]} />
+                                    <ContentAnalysis layer={ai_analysis_format!.layer_results[2]} />
                                 </TabsContent>
 
                                 {/* Findings Tab */}
                                 <TabsContent value="findings" className="main-card-container">
-                                    <LogicalConsistency layer={ai_analysis_format[0].layer_results[3]} />
+                                    <LogicalConsistency layer={ai_analysis_format!.layer_results[3]} />
                                 </TabsContent>
                             </Tabs>
 
-                            <UserFeedback/>
-
-                            {/* Expert Review Section */}
-                            {ai_analysis_format[0].status === 'Pending' && (
-                                <ExpertReview documentId={selectedDocument.id} userId={selectedDocument.user_id}/>
-                            )}
-
-                            {selectedDocument.status === 'Reviewed' && (
-                                <div className="bg-green-50 dark:bg-emerald-900/20 border border-green-200 dark:border-emerald-800/50 rounded-lg p-6 transition-colors">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        {/* Using emerald for better dark mode aesthetics */}
-                                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-emerald-400" />
-                                        <h3 className="text-lg font-bold text-green-900 dark:text-emerald-100">
-                                            Review Completed
-                                        </h3>
+                            {
+                                selectedDocument.expertReview === true ? (
+                                    <div className="bg-green-50 dark:bg-emerald-900/20 border border-green-200 dark:border-emerald-800/50 rounded-lg p-6 transition-colors">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            {/* Using emerald for better dark mode aesthetics */}
+                                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-emerald-400" />
+                                            <h3 className="text-lg font-bold text-green-900 dark:text-emerald-100">
+                                                Review Completed
+                                            </h3>
+                                        </div>
+                                        <p className="text-green-700 dark:text-emerald-300/90">
+                                            This document has already been reviewed by an expert.
+                                        </p>
                                     </div>
-                                    <p className="text-green-700 dark:text-emerald-300/90">
-                                        This document has already been reviewed by an expert.
-                                    </p>
-                                </div>
-                            )}
+                                ) : (
+                                    //  Expert Review section 
+                                    <ExpertReview documentId={selectedDocument.id} userId={selectedDocument.user_id}/>
+                                )
+                                
+                                }
                         </div>
                     </div>
                 ) : (
@@ -161,5 +183,5 @@ const DocumentAnalysis = (props: { userId: string }) => {
         </div>
     )
 }
-
+// 
 export default DocumentAnalysis

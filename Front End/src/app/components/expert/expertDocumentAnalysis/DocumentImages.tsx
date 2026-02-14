@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Stage, Layer, Rect } from 'react-konva';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { ZoomIn, ZoomOut, RotateCcw, Square, Trash2, GripVertical, Download } from 'lucide-react';
 import Konva from 'konva';
 import { Annotation, ImageViewerProps } from '@/app/types/document-highlight-type';

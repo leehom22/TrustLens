@@ -8,7 +8,7 @@ from pathlib import Path
 # Force load the .env file from the app folder, just like the test script did
 # load_dotenv(dotenv_path="app/.env")
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent # Path to Backend/
+BASE_DIR = Path(__file__).resolve().parent.parent # Path to Backend/
 load_dotenv(BASE_DIR / ".env")
 
 

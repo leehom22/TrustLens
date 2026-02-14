@@ -71,3 +71,6 @@ def analyze_feedback_content(text: str, current_doc_type: str, analysis_type: st
             "applicable_doc_types": [current_doc_type],
             "related_entities": []
         }
+        
+        
+   

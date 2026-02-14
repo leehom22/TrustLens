@@ -215,6 +215,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             ))
 
         # 3B: Missing Payment Route
+        payment = payment or {} 
         has_account = bool(payment.get("account_number"))
         has_ref_no = bool(data.get("reference_number") or data.get("invoice_number"))
         

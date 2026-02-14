@@ -41,12 +41,12 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) =>
           >
             {({ zoomIn, zoomOut, resetTransform }) => (
               <React.Fragment >
-                <div className='flex flex-col p-3'>
+                <div className='flex flex-col p-3 gap-4'>
                     {/* Floating Controls for Image */}
                     <div className=" z-10 flex gap-2">
-                    <button onClick={() => zoomIn()} className="bg-white/90 p-2 rounded shadow hover:bg-white">+</button>
-                    <button onClick={() => zoomOut()} className="bg-white/90 p-2 rounded shadow hover:bg-white">-</button>
-                    <button onClick={() => resetTransform()} className="bg-white/90 p-2 rounded shadow hover:bg-white">Reset</button>
+                      <button onClick={() => zoomIn()} className="bg-white/90 p-2 rounded shadow hover:bg-white">+</button>
+                      <button onClick={() => zoomOut()} className="bg-white/90 p-2 rounded shadow hover:bg-white">-</button>
+                      <button onClick={() => resetTransform()} className="bg-white/90 p-2 rounded shadow hover:bg-white">Reset</button>
                     </div>
                         
                     <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }}>
