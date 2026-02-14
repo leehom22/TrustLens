@@ -1,11 +1,11 @@
 import asyncio
-import google.generativeai as genai
+from google import genai
 from typing import Dict, Any
-from ..core.config import logger
+from ..core.config import logger, GEMINI_API_KEY
 from ..utils.utils import clean_and_repair_json
 
 async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, Any]:
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    client = genai.Client(api_key=GEMINI_API_KEY)
     
     extraction_prompt = """
     You are a Forensic Document Analyst. Analyze the document image/PDF and extract structured data with forensic precision.
@@ -70,10 +70,11 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     
     for attempt in range(2): 
         try:
-            sample_file = genai.upload_file(file_path, mime_type=mime_type)
-            res = await asyncio.wait_for(
-                model.generate_content_async([sample_file, extraction_prompt]), 
-                timeout = 60.0
+            file_ref = await client.aio.files.upload(file=file_path, config={'mime_type': mime_type})
+            
+            res = await client.aio.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[file_ref, extraction_prompt]
             )
 
             raw_text = res.text

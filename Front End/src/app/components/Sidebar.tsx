@@ -29,7 +29,15 @@ const Sidebar = ({ user }: SidebarProps) => {
 
   const handleSignOut = async () => {
     try {
+      // 1. Navigate FIRST. 
+      // This ensures we are safely on the Login page before the Sidebar unmounts.
+      navigate('/login'); 
+      
+      // 2. Then Sign Out.
+      // This triggers the App state update. Since we are already on '/login' (a public route),
+      // we won't get redirected to the landing page.
       await auth.signOut();
+      
     } catch (error) {
       console.error("Error signing out:", error);
     }

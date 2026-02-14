@@ -44,7 +44,11 @@ class ForensicLesson(BaseModel):
 
 class AnalysisRecord(FinalReport):
     # Inherit data from FinalReport (L1-L4 Technical Data)
-    
+    doc_id: str = Field(..., description="The unique Firestore ID of the uploaded file")
+    req_id: str = Field(..., description="The unique Firestore ID of the analysis")
+    user_id: str = "guest"
+    file_name: str = "unknown_file"
+
     # 1. AI Explanation Summary (Context)
     agent_summary: str = Field(..., description="AI generated executive summary combining forensics and grounding")
     final_recommendation: str = Field(..., description="ACCEPT | REVIEW | REJECT")

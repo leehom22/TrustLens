@@ -1,68 +1,111 @@
+import os
 import uuid
 import tempfile
 import asyncio
-import os
-import json
 import mimetypes
+import shutil
+import requests
+import json
 import google.generativeai as genai
 from datetime import datetime
-from fastapi import UploadFile, File, HTTPException, Request, APIRouter, Form
-from app.utils.schemas import FinalReport, LayerStatus, LayerResult
-from app.services.layer1 import run_layer_1_metadata
-from app.services.layer2 import run_layer_2_ela
-from app.services.layer3 import run_layer_3_extraction
-from app.services.layer4 import run_layer_4_logic
-from app.services.layer0 import run_layer_0_judge
-from app.core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, DOC_RISK_PROFILES
-# ------ Import for AI and DB connection ---------
-from app.services.agent import run_agent_analysis
-from app.utils.schemas import FinalReport, AnalysisRecord
-from app.core.firebase import db
+from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
+from app.models.files import FilesSchema
+from dotenv import load_dotenv
+# ------- Import internal modules ------
+from ..core.auth import get_current_user
+from ..core.config import Config
+from ..core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
+from ..utils.schemas import FinalReport, LayerStatus, LayerResult
+from ..services.layer1 import run_layer_1_metadata
+from ..services.layer2 import run_layer_2_ela
+from ..services.layer3 import run_layer_3_extraction
+from ..services.layer4 import run_layer_4_logic
+from ..services.layer0 import run_layer_0_judge
 
-analysis_router = APIRouter()
+# ------ Import for AI and DB connection ---------
+from ..services.agent import run_agent_analysis
+from ..utils.schemas import FinalReport, AnalysisRecord
+from ..core.firebase import db
+
+
+# --- Load Env Vars ---
+# This block ensures we find the .env file whether running from root or /app
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+else:
+    load_dotenv()
 
 raw_analysis_collection = 'upload_files'
 structure_analysis_collection = 'structure_analysis_result'
 
-# API Routing: An endpoint as a tool for the AI Agent
-@analysis_router.post("/ai-analyze-document", response_model = AnalysisRecord)
-# async def analyze_document(request: Request, file: UploadFile = File(...)):
-async def analyze_document(file: UploadFile = File(...)):
-    req_id = str(uuid.uuid4())
-    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})
+analysis_router = APIRouter()
 
-    verified_content_type = file.content_type 
-    guessed_type, _ = mimetypes.guess_type(file.filename)
-    if guessed_type and guessed_type != verified_content_type:
-        verified_content_type = guessed_type
-
-    if verified_content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
-        ext = os.path.splitext(file.filename)[1]
-        temp_path = os.path.join(temp_dir, f"{req_id}{ext}")
+async def analyze_pipeline(
+    doc_id: str, 
+    req_id: str,
+    user_id: str, 
+    file_name: str, 
+    original_mime_type: str, 
+    local_path_override: str = None,
+    file_url: str = None
+) -> AnalysisRecord:    
         
-        size = 0
-        with open(temp_path, "wb") as buffer:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > MAX_FILE_SIZE:
-                    raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
-                buffer.write(chunk)
 
-        # Pipeline Execution
+    temp_path = local_path_override
+    downloaded_temp = False 
+
+    try:
+        logger.info(f"🚀 [Analysis Pipeline] Processing {doc_id}...")
+
+        # --- Prepare Document ---
+        # If Main.py passes local file path, else try to download from Firestore
+
+        if not temp_path:
+            if not file_url:
+                raise ValueError("Neither local_path nor file_url provided.")
+            
+            suffix = os.path.splitext(file_name)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                try:
+                    response = requests.get(file_url, stream=True, timeout=30)
+                    if response.status_code != 200:
+                        raise Exception(f"Download failed: {response.status_code}")
+                    shutil.copyfileobj(response.raw, tmp)
+                    temp_path = tmp.name
+                    downloaded_temp = True
+                except Exception as dl_err:
+                    logger.error(f"Download error: {dl_err}")
+                    raise dl_err
+
+        # Mime Check again        
+        verified_content_type = original_mime_type
+        guessed_type, _ = mimetypes.guess_type(file_name)
+        if guessed_type and guessed_type != verified_content_type:
+            logger.info(f"MIME corrected: {verified_content_type} -> {guessed_type}")
+            verified_content_type = guessed_type
+
+
+        # ==================== Execution of Pipeline ======================        
+        # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
         loop = asyncio.get_running_loop()
+        logger.info("Dispatching parallel tasks for L1, L2, L3...", extra={"request_id": req_id})
+
+        # 1. Schedule CPU-bound tasks (L1 & L2) in default executor (ThreadPool)
+        # This prevents the main event loop from blocking during image processing
         t1 = loop.run_in_executor(None, run_layer_1_metadata, temp_path, verified_content_type)
         t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
+        
+        # 2. Schedule IO-bound task (L3) directly
         t3 = run_layer_3_extraction(temp_path, verified_content_type)
 
+        # 3. Wait for all layers to complete
         l1_res, l2_res, l3_data = await asyncio.gather(t1, t2, t3)
-        
-        # Ensure l3_data itself is a dict
-        l3_data = l3_data or {}
 
         evidence_chain = []
+        
+        # [Step 1: Process L3 Data & Profile Selection]
+        # Determine Doc Type and Load Risk Profile
         doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
         
         detected_profile_key = "unknown"
@@ -70,24 +113,37 @@ async def analyze_document(file: UploadFile = File(...)):
             if key in doc_type_raw:
                 detected_profile_key = key
                 break
-        profile = DOC_RISK_PROFILES.get(detected_profile_key, {})
+        profile = DOC_RISK_PROFILES[detected_profile_key]
+        logger.info(f"Document Classified as: {detected_profile_key.upper()}", extra={"request_id": req_id})
         
+        # [Step 2] Layer 1: Metadata
         evidence_chain.append(l1_res)
+        
+        # [Step 3] Layer 2: Visual ELA
         evidence_chain.append(l2_res)
             
+        # [Step 4] Layer 3: Content
         l3_score = 0
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
-        l3_inf = l3_data.get("risk_inference", {}) or {} # Safe Guard
         
+        # Helper: Get inference data safely
+        l3_inf = l3_data.get("risk_inference", {})
+        
+        # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
+        # Resume Specific Check: Hidden Text
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
             l3_score = 100
             l3_status = LayerStatus.HIGH_RISK
-            l3_risk_signals.append("Hidden text injection detected (ATS Cheating).")
+            msg = "Hidden text injection detected (ATS Cheating)."
+            l3_data["risk_note"] = msg
+            l3_risk_signals.append(msg)
 
+        # --- Check 2: Screenshot Check (Generic) ---
         if l3_data.get("is_screenshot"):
             l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
 
+        # --- Check 3: Urgency Language Check (Scam) ---
         if l3_inf.get("urgency_language"):
             if l3_score < 60: l3_score = 60
             if l3_status == LayerStatus.CLEAN: l3_status = LayerStatus.SUSPICIOUS
@@ -101,7 +157,9 @@ async def analyze_document(file: UploadFile = File(...)):
             details = l3_data
         ))
         
+        # [Step 5] Layer 4: Logic Audit
         logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "freelance_contract"]
+        
         if detected_profile_key in logic_required_types:
             evidence_chain.append(run_layer_4_logic(l3_data))
         else:
@@ -113,8 +171,12 @@ async def analyze_document(file: UploadFile = File(...)):
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
             
+            
+        # [Step 6] Layer 0: Final Technical Judge (Deterministic)
         judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
     
+        
+        # [Step 7] Packing Analysis Report to AI Agent
         rule_metadata = {
                 "description": profile.get("description", ""),
                 "hard_fail_triggers": profile.get("hard_fail_checks", []),
@@ -122,77 +184,197 @@ async def analyze_document(file: UploadFile = File(...)):
             }
 
         grounding_info = {}
-        # Ensure nested components are always dictionaries even if missing in L3
-        raw_content = l3_data.get("raw_document_content", "")
-        vendor = l3_data.get("vendor_info") or {}
-        fins = l3_data.get("financials") or {}
-        dates = l3_data.get("dates") or {}
-        payment = l3_data.get("payment_info") or {}
-        contact = vendor.get("contact") or {}
+        if l3_data:
+            # Basic Info
+            # Helper to safely get nested dicts
+            raw_content = l3_data.get("raw_document_content", "")
+            vendor = l3_data.get("vendor_info", {})
+            fins = l3_data.get("financials", {})
+            dates = l3_data.get("dates", {})
+            payment = l3_data.get("payment_info", {})
+            contact = vendor.get("contact", {})
 
-        grounding_info = {
-            "vendor_name": vendor.get("name"),
-            "vendor_address": vendor.get("address"),
-            "total_amount": fins.get("total_amount"),
-            "currency": fins.get("currency"),
-            "invoice_date": dates.get("invoice_date"),
-            # Re-calculated contact/payment safely within the dict
-            "vendor_contact": {
+            grounding_info = {
+                "vendor_name": vendor.get("name"),
+                "vendor_address": vendor.get("address"),
+                "total_amount": fins.get("total_amount"),
+                "currency": fins.get("currency"),
+                "invoice_date": dates.get("invoice_date")
+            }
+            
+            # Contact Method (Validate the contacts with vendors' official info)
+            contact = l3_data.get("vendor_info", {}).get("contact", {})
+            grounding_info["vendor_contact"] = {
                 "phone": contact.get("phone"),
                 "website": contact.get("website"),
                 "email": contact.get("email")
-            },
-            "payment_details": {
+            }
+
+            # Payment Info (Identify personal account as a common scamming mode)
+            payment = l3_data.get("payment_info", {})
+            grounding_info["payment_details"] = {
                 "bank_name": payment.get("bank_name"),
                 "account_no": payment.get("account_number"),
                 "holder_name": payment.get("account_holder_name")
             }
-        }
 
         report = FinalReport(
             request_id = req_id,
             timestamp = datetime.now(),
             doc_type = detected_profile_key,
+
             overall_risk_score = judge_res.get("overall_risk_score", 0),
             risk_level = judge_res.get("risk_level", "Unknown"),
             risk_signals = judge_res.get("risk_signals", []),
             summary_code = judge_res.get("summary_code", "UNKNOWN"),
             evidence_chain = evidence_chain,
+
             rule_metadata = rule_metadata,
             grounding_info = grounding_info,
             raw_document_content = raw_content
         )
 
+        logger.info("Technical Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
+
+
+        # [Step 8] AI Agent Investigation (Contextual Layer) 
         ai_results = await run_agent_analysis(report)
         
+        # [Step 9] Hybrid Merge (Grounding and Technical)
         tech_score = report.overall_risk_score
         grounding_score = ai_results.get("grounding_score", 0)
+        
+        # Max Voting
         final_risk_score = max(tech_score, grounding_score)
         
-        if final_risk_score > 80: final_rec = "REJECT"
-        elif final_risk_score < 30: final_rec = "ACCEPT"
-        else: final_rec = "REVIEW"
+        final_rec = "REVIEW"
+        if final_risk_score > 80:
+            final_rec = "REJECT"
+        elif final_risk_score < 30:
+            final_rec = "ACCEPT"
+        else:
+            final_rec = "REVIEW"
 
+        # If AI feels suspicious, recommend for expert review even with low score
         if ai_results.get("verification_status") == "SUSPICIOUS" and final_rec == "ACCEPT":
             final_rec = "REVIEW"
 
+        # [Step 10] Packaging AnalysisRecord
         final_record = AnalysisRecord(
-            **report.dict(),
+            **report.dict(),    # parsing report
+            doc_id = doc_id, 
+            req_id = req_id,
+            user_id = user_id, 
+            file_name = file_name,
+
+            # Fill in AI result
             agent_summary = ai_results.get("agent_summary"),
             verification_status = ai_results.get("verification_status"),
             grounding_score = grounding_score,
             grounding_result = ai_results.get("grounding_result"),
             layer_summaries = ai_results.get("layer_summaries"),
             active_lessons_applied = ai_results.get("active_lessons_applied", []),
+            
+            # Fill in Deterministic Score
             final_recommendation = final_rec
         )
         
+        # [Step 11] Session Memory in Firestore (As RAG of Chatbot)
         try:
             db.collection("analysis_results").document(req_id).set(final_record.dict())
+            logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
 
+        # Sent back to front-end
         return final_record
+    
+    except Exception as e:
+        logger.error(f"Pipeline Critical Error: {e}")
+        db.collection("analysis_results").document(doc_id).set({"status": "error", "error_msg": str(e)}, merge=True)
+        raise e
+
+    finally:
+        if downloaded_temp and temp_path and os.path.exists(temp_path):
+            try: os.remove(temp_path)
+            except: pass
+
+
+# =============== Backup for Async Calling ==============
+@analysis_router.post("/trigger/{doc_id}", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTasks):
+    file_record = FilesSchema.get_selected_file(doc_id)
+    if isinstance(file_record, tuple): file_record = file_record[0]
+    if "error" in file_record: raise HTTPException(status_code=404, detail="File not found")
+
+    background_tasks.add_task(
+        analyze_pipeline,
+        doc_id=doc_id,
+        user_id=str(file_record.get("user_id", "guest")),
+        file_name=file_record.get("fileName", "unknown"),
+        original_mime_type=file_record.get("mimeType", "application/octet-stream"),
+        file_url=file_record.get("fileUrl")
+    )
+    return {"message": "Analysis started", "doc_id": doc_id, "status": "processing"}
+
+
+
+# API Routing: An endpoint as a tool for the AI Agent
+@analysis_router.post("/ai-analyze-document", response_model = AnalysisRecord)
+async def analyze_document(
+    request: Request, 
+    file: UploadFile = File(...), 
+    doc_id: str = Form(...),
+    user_id: str = Form(...)
+):
+    req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
+    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
+
+    verified_content_type = file.content_type 
+    # If the guess type different with the file type sent from the user terminal, follow guess type
+    guessed_type, _ = mimetypes.guess_type(file.filename)
+    if guessed_type and guessed_type != verified_content_type:
+        logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
+                    extra={"request_id": req_id})
+        verified_content_type = guessed_type
+
+    # Security check for invalid or unsafe file source
+    if verified_content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
+
+    try:
+        ext = os.path.splitext(file.filename)[1]
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, f"{doc_id}{ext}")
+        
+        size = 0
+        with open(temp_path, "wb") as buffer:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
+                buffer.write(chunk)
+
+        final_record = await analyze_pipeline(
+            doc_id=doc_id,
+            req_id=req_id,
+            user_id=user_id,
+            file_name=file.filename,
+            original_mime_type=verified_content_type,
+            file_url=None,
+            local_path_override=temp_path
+        )
+        
+        # Cleaning
+        if os.path.exists(temp_path): os.remove(temp_path)
+        return final_record
+    
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=str(e))    
+
+        # ====================== Pipeline Execution (Parallelized) =======================
 
 
 @analysis_router.post("/ai-restructure-data")

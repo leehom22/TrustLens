@@ -1,20 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.core.firebase import db
 from google.cloud import firestore
 from app.services.layerFeedback import analyze_feedback_content
 
 class FeedbackCreate(BaseModel):
-    # user_id: str
-    # tmestamp: firestore.SERVER_TIMESTAMP
     analysis_id: str
-    analysis_type: str # metadata, heatmap, content analysis, key findings
+    analysis_type: str = Field(..., description="layer1 | layer2 | layer3 | layer4")
     feedback_text: str
-    document_class: str # legal, medical, ...
-    # AI analyze feedback fields
-    weight: float | None = None # how much the feedback should influence the model
-    label: str | None = None # correct, incorrect, warning 
-    ai_lessons: str | None = None # what the AI should learn from this feedback
-    
+
 class ExpertReview(BaseModel):
     document_id: str
     user_id: str # expert id 
@@ -27,25 +20,44 @@ class FeedbackModel:
     @staticmethod
     def create_feedback(feedback: FeedbackCreate, user_id: str = 'anonymous', email: str = 'anonymous'):
         
-        # --- AI ANALYZE USER FEEDBACK ---
-        analysis = analyze_feedback_content(feedback.feedback_text, feedback.analysis_type)
+        # --- Get Doc Type ---
+        record_snapshot = db.collection("analysis_results").document(feedback.analysis_id).get()
         
-        # Update the object with AI insights
-        feedback.weight = analysis.get('weight')
-        feedback.label = analysis.get('label')
-        feedback.ai_lessons = analysis.get('ai_lessons')
-        # --------------------------------
+        current_doc_type = "general_document"   # Default
         
-        data = feedback.model_dump()
-        data['timestamp'] = firestore.SERVER_TIMESTAMP
-        data['user_id'] = user_id
-        data['email'] = email
-        
-        # Add to Firestore
-        _, doc_ref = db.collection("feedback").add(data)
-        
-        return doc_ref.id
+        if record_snapshot.exists:
+            record_data = record_snapshot.to_dict()
+            current_doc_type = record_data.get("doc_type") or record_data.get("type", "general_document")
+        else:
+            print(f"Warning: Analysis Record not found for ID {feedback.analysis_id}")
 
+        # --- Execution of AI Lesson Learning ---
+        lesson = analyze_feedback_content(
+            text = feedback.feedback_text, 
+            current_doc_type = current_doc_type,
+            analysis_type = feedback.analysis_type
+        )
+        
+        # --- Save into Firebase ---
+        data = feedback.model_dump()
+        data.update({
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "user_id": user_id,
+            "email": email,
+            "doc_type": current_doc_type, 
+            "target_layer": feedback.analysis_type,
+            
+            # AI Lesson Summary
+            "weight": lesson.get('weight', 0.5),
+            "label": lesson.get('label', 'neutral'),
+            "ai_lessons": lesson.get('ai_lessons', feedback.feedback_text),
+            "applicable_doc_types": lesson.get('applicable_doc_types', [current_doc_type]),
+            "related_entities": lesson.get('related_entities', [])
+        })
+        
+        _, new_feedback_ref = db.collection("feedback").add(data)
+        return new_feedback_ref.id
+    
     @staticmethod
     def get_all_feedback():
         docs = db.collection("feedback").stream()

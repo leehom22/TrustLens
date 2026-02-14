@@ -4,14 +4,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# --- Load Env Vars ---
-# This block ensures we find the .env file whether running from root or /app
-dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
-else:
-    load_dotenv()
-
 # --- Import Routers ---
 from .routers.email import router as email_router
 from .routers.feedback import feedback_router
@@ -20,10 +12,18 @@ from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
-# ------- Import internal modules ------
-from .core.config import Config
-from .core.config import EVIDENCE_DIR 
 
+from .core.config import Config
+from .core.config import EVIDENCE_DIR
+
+# --- Load Env Vars ---
+# This block ensures we find the .env file whether running from root or /app
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+else:
+    load_dotenv()
+    
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -39,10 +39,9 @@ origins = [
 # Allow all(*) terminals / frontend terminal can access data in this terminal
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=["*"], 
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ====================== Register Routers =======================

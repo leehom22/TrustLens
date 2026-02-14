@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Toaster } from "./components/ui/sonner";
 import { auth } from "../lib/firebase";
@@ -24,6 +24,7 @@ import ReviewDocumentList from "./pages/expert/ReviewDocumentList";
 type AppState = "upload" | "analysis";
 
 export default function App() {
+  const navigate = useNavigate();
   const [appState, setAppState] = useState<AppState>("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function App() {
   // Reset to upload page when user logs in or changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // 1. Handle Logout
+      // 1. Handle Logout / No User
       if (!currentUser) {
         setUser(null);
         setExpert(false);
@@ -47,6 +48,12 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
+        
+        // --- CHANGE MADE HERE ---
+        // Removed: navigate('/login'); 
+        // Why: This was forcing a redirect to login on page load, blocking the Landing Page.
+        // The Sidebar's handleSignOut handles the manual redirect to /login.
+        
         return;
       }
 
@@ -80,7 +87,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [currentUserId]);
+  }, [currentUserId, navigate]); // Added navigate to dependency array
 
   const handleFileUpload = async (file: File) => {
     // //! Development 
@@ -133,11 +140,11 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+      <div className="w-screen">
         {/* Sidebar only appears if user is authenticated */}
         {user && <Sidebar user={user} />}
 
-        <main className={`flex-1 transition-all duration-300 `}>
+        <main className={`${user ? "flex-1" : "w-full"}`}>
           <div className={user ? "p-7 max-w-7xl mx-auto" : ""}>
 
             <Routes>
@@ -150,7 +157,7 @@ export default function App() {
                 element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
               />
 
-              {/* Protected R outes */}
+              {/* Protected Routes */}
               {user && (
                 <>
                   {/* uer & expert */}
@@ -203,9 +210,12 @@ export default function App() {
                       )
                   }
                 </>
-
               )}
 
+              {/* Catch-all route: 
+                  If user is logged in -> goes to Dashboard/Upload via the "/" redirect logic or specific routes.
+                  If user is NOT logged in -> goes to Landing Page via "/" 
+              */}
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
 
