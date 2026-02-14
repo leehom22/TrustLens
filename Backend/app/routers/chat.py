@@ -288,6 +288,15 @@ def get_mode_config(mode: str, req_id: str):
             "tools": [forensic_tool],
             "prompt": build_prompt("Letter Drafter", "Draft a professional rejection email based on specific risk factors found.")
         }
+    elif mode == "contract_guardian":
+        return {
+            "tools": [forensic_tool, raw_text_tool, google_search_tool],
+            "prompt": build_prompt(
+                "Contract Guardian", 
+                "Audit the document for unfair clauses (pitfalls), hidden liabilities, and strict chronological consistency. "
+                "Use Google Search to verify if the quoted prices/rates are consistent with current market standards."
+            )
+        }
     elif mode == "policy_advisor":
         return {
             "tools": [forensic_tool, raw_text_tool, google_search_tool],
@@ -295,7 +304,7 @@ def get_mode_config(mode: str, req_id: str):
         }
     else: # Default: forensic_analyst
         return {
-            "tools": [forensic_tool, raw_text_tool, google_search_tool],
+            "tools": [forensic_tool, google_search_tool],
             "prompt": build_prompt("Forensic Analyst", "Explain the detected risks, evidence, and answer user questions.")
         }
 
