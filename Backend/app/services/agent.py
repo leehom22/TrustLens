@@ -8,6 +8,7 @@ from ..utils.schemas import FinalReport
 from ..utils.utils import clean_and_repair_json
 from ..core.firebase import db
 from google.cloud import firestore
+from google.cloud.firestore import FieldFilter
 
 
 
@@ -85,9 +86,9 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
     try:
         # 1. For current doc type (collect 15 for further filter)
         query = db.collection("feedback")\
-                  .where("applicable_doc_types", "array_contains", doc_type)\
-                  .where("label", "in", valid_labels)\
-                  .where("weight", ">=", 0.6)\
+                  .where(filter=FieldFilter("applicable_doc_types", "array_contains", doc_type))\
+                  .where(filter=FieldFilter("label", "in", valid_labels))\
+                  .where(filter=FieldFilter("weight", ">=", 0.6))\
                   .order_by("weight", direction=firestore.Query.DESCENDING)\
                   .limit(15)
 
