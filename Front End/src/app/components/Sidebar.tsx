@@ -22,7 +22,8 @@ const Sidebar = ({ user }: SidebarProps) => {
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard />, requiredRole: 'user' },
     { name: 'Dashboard', path: '/admin-dashboard', icon: <LayoutDashboard />, requiredRole: 'expert' },
     { name: 'Upload', path: '/upload-document', icon: <FileScan /> },
-    { name: 'History', path: '/history', icon: <FileClock /> },
+    { name: 'History', path: '/history', icon: <FileClock />, requiredRole: 'user' },
+    { name: 'Review', path: '/review-document-list', icon: <FileClock />, requiredRole: 'expert' },
     // { name: 'Review', path: '/review-document', icon: <BadgeAlert />, requiredRole: 'expert' },
   ];
 

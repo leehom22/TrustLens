@@ -53,11 +53,23 @@ class FeedbackModel:
     
     @staticmethod
     def create_expert_review(review: ExpertReview):
-        data = review.model_dump()
-        data['timestamp'] = firestore.SERVER_TIMESTAMP
-        
-        _, doc_ref = db.collection('document_review').add(data)
-        
-        return doc_ref.id
+        try:
+            data = review.model_dump()
+            data['timestamp'] = firestore.SERVER_TIMESTAMP
+            
+            _, doc_ref = db.collection('document_review').add(data)
+            
+            # update 'expertReview' to true (from upload_files)
+            document = db.collection('upload_files')
+            docId = review.document_id
+            
+            document.document(docId).update({
+                "expertReview" : True # for Js 
+            })
+            
+            return doc_ref.id
+        except Exception as e:
+            print("Error creating expert review: ",e)
+            raise e
     
-    
+  

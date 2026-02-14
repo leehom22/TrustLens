@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, HTTPException
+from fastapi import APIRouter, status, HTTPException,Form
 from app.models.files import FilesSchema
 from app.core.firebase import db
 from google.cloud import firestore
@@ -12,7 +12,8 @@ def upload_files(file_data: FilesSchema):
         
         update_time, doc_ref = db.collection("upload_files").add({
             **data_to_save,
-            "created_at": firestore.SERVER_TIMESTAMP
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updatedAt": ''
         })
             
         return {
@@ -60,3 +61,45 @@ def get_selected_files(doc_id:str):
             status_code=500,
             detail="Failed to fetch selected data from database"
         )
+        
+@files_router.post("/delete_selected_files") # Added trailing slash for better compatibility
+def delete_selected_files(doc_id: str = Form(...)):
+    try:
+        res = FilesSchema.delete_selected_file(doc_id=doc_id)
+        
+        # If the internal logic reported a failure, we should reflect that
+        if not res.get("success"):
+            raise HTTPException(
+                status_code=400, 
+                detail=res.get("error", "Failed to delete file")
+            )
+            
+        return {
+            "success": True,
+            "data": res
+        }
+    except HTTPException:
+        raise # Re-raise FastAPI HTTP exceptions so they aren't caught by the general Exception
+    except Exception as e:
+        print(f"Failed to delete selected file with id {doc_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal Server Error: {str(e)}"
+        )
+        
+# get flagged document for expert side
+@files_router.get("/flagged_document") 
+def get_flagged_document():
+    try:
+        data = FilesSchema.get_flagged_files()
+        
+        return {
+            "success":"true",
+            "files":data
+        }
+    except Exception as e:
+        print("Error while fetching flagged document: ",e)
+        return {
+            "success":"false",
+            "data":str(e)
+        }

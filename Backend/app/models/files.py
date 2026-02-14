@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from app.core.firebase import db
-from firebase_admin import auth
+from firebase_admin import auth, storage
 
 file_collection = "upload_files"
 class FilesSchema(BaseModel):
@@ -9,6 +9,7 @@ class FilesSchema(BaseModel):
     fileUrl: str
     fileSize: int
     mimeType: str
+    flagged: bool
     
     # get user uploaded files
     @staticmethod
@@ -52,3 +53,64 @@ class FilesSchema(BaseModel):
             "id": doc_ref.id,
             "user": user_info
         }
+        
+        
+    # get selected files
+    def get_flagged_files():
+        try:
+            # 1. Get the document from Firestore
+            doc_ref = db.collection(file_collection)
+
+            # if return array, use stream() or get()
+            docs = doc_ref.where("flagged","==","True").stream()
+            flagged_list = []
+            
+            for doc in docs:
+                file_data = doc.to_dict()
+                file_data['id'] = doc.id 
+                flagged_list.append(file_data)
+            
+            # 4. Return combined data
+            return flagged_list
+        except Exception as e:
+            print("Error occur while fetching flag document: ",e)
+            return {
+                "success" : False,
+                "error": str(e)
+            }
+            
+    @staticmethod
+    def delete_selected_file (doc_id : str) :
+        try:
+            file_ref = db.collection(file_collection).document(doc_id)
+            
+            doc = file_ref.get()
+            if doc.exists:
+                analysis_ref = db.collection('structure_analysis_result')
+                
+                related_analysis = analysis_ref.where("documentId", "==" , doc_id).stream()
+                
+                for analysis_doc in related_analysis:
+                    analysis_doc.reference.delete()
+                    print(f"Delete analysis with id {analysis_doc.id}")
+                    
+                data = doc.to_dict()
+                file_path = data.get('fileUrl')
+                
+                if file_path:
+                    try:
+                        bucket = storage.bucket()
+                        blob = bucket.blob(file_path)
+                        blob.delete()
+                    except Exception as e:
+                        print(f"Storage deletion failed (file might not exist): {e}")
+                        
+                file_ref.delete()
+                return { "success" : True}
+                
+            print(f"Document {doc_id} not found")
+            return {"success": False, "error": "Not found"}
+        
+        except Exception as e:
+            print("Error occur while deleting document")
+            return {"success" : False}

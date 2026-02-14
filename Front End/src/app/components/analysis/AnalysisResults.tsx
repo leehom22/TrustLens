@@ -1,21 +1,25 @@
-import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2, CircleAlert } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { motion } from "motion/react";
 import { useState } from "react";
-import { contentAnalysis, findings, metadata } from "../../data/dummy";
 import axios from 'axios'
 import { toast } from "react-toastify";
 import { getAuth} from 'firebase/auth'
 import { VisualManipulation } from "./HeatmapVisualization";
-import { ai_analysis_format } from "@/app/data/db-ai-analysis";
+// import { ai_analysis_format } from "@/app/data/db-ai-analysis";
 import Metadata from "../expert/expertDocumentAnalysis/analysisTab/Metadata";
 import ContentAnalysis from "../expert/expertDocumentAnalysis/analysisTab/ContentAnalysis";
 import LogicalConsistency from "../expert/expertDocumentAnalysis/analysisTab/KeyFindings";
+import { DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
 
-export function AnalysisResults() {
+interface AnalysisResultProps {
+  setRequestReview: React.Dispatch<React.SetStateAction<boolean>> 
+  ai_analysis_format: DocumentAnalysisResult 
+}
+export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
-  const riskLevel = ai_analysis_format[0].dashboard_header.risk_level; // low, medium, high
+  const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
   const [openFeedback, setOpenFeedback] = useState({
@@ -103,31 +107,35 @@ export function AnalysisResults() {
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {riskLevel === "CRITICAL" ? "High Risk Detected" : riskLevel === "SUSPICIOUS" ? "Medium Risk - Review Required" : "Low Risk"}
               </h2>
-              <p className="text-gray-700 dark:text-slate-300">{ai_analysis_format[0].dashboard_header.verdict_title}</p>
+              <p className="text-gray-700 dark:text-slate-300">{ai_analysis_format?.dashboard_header?.verdict_title}</p>
             </div>
           </div>
           <Badge variant={riskLevel === "CRITICAL" ? "destructive" : "default"} className="text-sm">
-            Risk Level: {ai_analysis_format[0].dashboard_header.risk_level}
+            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}
           </Badge>
         </div>
         <p className="text-gray-800 dark:text-slate-200">
-          {ai_analysis_format[0].dashboard_header.ai_executive_summary}
+          {ai_analysis_format?.dashboard_header?.ai_executive_summary}
         </p>
       </div>
 
       {/* Tabs for Different Analysis Views */}
       <Tabs defaultValue="metadata" className="space-y-4">
-        <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3">
-            <TabsTrigger value="metadata" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Metadata & Source</TabsTrigger>
-            <TabsTrigger value="heatmap" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Visual Manipulation</TabsTrigger>
-            <TabsTrigger value="content" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Content Semantics</TabsTrigger>
-            <TabsTrigger value="findings" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Logical Consistency</TabsTrigger>
-        </TabsList>
-
+        <div className="w-full flex justify-between">
+          <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3">
+              <TabsTrigger value="metadata" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Metadata & Source</TabsTrigger>
+              <TabsTrigger value="heatmap" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Visual Manipulation</TabsTrigger>
+              <TabsTrigger value="content" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Content Semantics</TabsTrigger>
+              <TabsTrigger value="findings" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Logical Consistency</TabsTrigger>
+          </TabsList>
+          <button className="py-1 px-4 border rounded-lg border-red-500 text-red-500 cursor-pointer" onClick={()=> setRequestReview(true)}>
+            <p>Request for a review</p> 
+          </button>
+        </div>
         {/* Metadata Tab */}
 
         <TabsContent value="metadata" className="main-card-container">
-          <Metadata layer={ai_analysis_format[0].layer_results[0]} />
+          <Metadata layer={ai_analysis_format?.layer_results[0]} />
           {
             !openFeedback.metadata &&
             <div className="flex justify-end">
@@ -142,7 +150,7 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("metadata & source", e)}
+                onSubmit={(e) => submitFeedback("layer1", e)}
               >
                 <p className="text-gray-900 dark:text-white">What do you think about the <b>Metadata & Source</b> analysis?</p>
 
@@ -180,7 +188,7 @@ export function AnalysisResults() {
 
         {/* Heatmap Tab */}
         <TabsContent value="heatmap" className="main-card-container">
-          <VisualManipulation layer={ai_analysis_format[0].layer_results[1]} />
+          <VisualManipulation layer={ai_analysis_format?.layer_results[1]} />
           {
             !openFeedback.heatmap &&
             <div className="flex justify-end mt-4">
@@ -195,7 +203,7 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("visual manipulation", e)}
+                onSubmit={(e) => submitFeedback("layer2", e)}
               >
                 <p className="text-gray-900 dark:text-white">What do you think about the <b>Visual Manipulation</b> analysis?</p>
 
@@ -233,7 +241,7 @@ export function AnalysisResults() {
 
         {/* Content Analysis Tab */}
         <TabsContent value="content" className="main-card-container">
-          <ContentAnalysis layer={ai_analysis_format[0].layer_results[2]} />
+          <ContentAnalysis layer={ai_analysis_format?.layer_results[2]} />
           {
             !openFeedback.contentAnalysis &&
             <div className="flex justify-end">
@@ -248,7 +256,7 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("content semantics", e)}
+                onSubmit={(e) => submitFeedback("layer3", e)}
               >
                 <p className="text-gray-900 dark:text-white">What do you think about the <b>Content Semantics</b> analysis?</p>
 
@@ -286,7 +294,7 @@ export function AnalysisResults() {
 
         {/* Findings Tab */}
         <TabsContent value="findings" className="main-card-container">
-          <LogicalConsistency layer={ai_analysis_format[0].layer_results[3]} />
+          <LogicalConsistency layer={ai_analysis_format?.layer_results[3]} />
           {
             !openFeedback.findings &&
             <div className="flex justify-end">
@@ -301,7 +309,7 @@ export function AnalysisResults() {
             <div className="relative"> {/* Added relative wrapper */}
               <form
                 className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("logical consistency", e)}
+                onSubmit={(e) => submitFeedback("layer4", e)}
               >
                 <p className="text-gray-900 dark:text-white">What do you think about the <b>Logical Consistency</b> analysis?</p>
 

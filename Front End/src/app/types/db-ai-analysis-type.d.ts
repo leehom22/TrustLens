@@ -10,7 +10,6 @@ export interface User {
 }
 export interface FileHeader {
     id: string
-    status: string
     user_id: string
     user: User
     fileName: string
@@ -18,6 +17,8 @@ export interface FileHeader {
     fileSize: number
     mimeType: string
     created_at: string
+    flagged?: boolean | null
+    expertReview?: boolean | null 
 }
 
 export interface DashboardHeader {

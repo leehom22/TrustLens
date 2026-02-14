@@ -17,6 +17,9 @@ import { storage } from "../lib/firebase";
 import DocumentReview from "./pages/expert/DocumentReviewPage";
 import DocumentAnalysis from "./pages/expert/DocumentAnalysis";
 import axios from 'axios'
+import { Loader2 } from "lucide-react";
+import { HistoryDocumentAnalysis } from "./pages/HistoryDocumentAnalysis";
+import ReviewDocumentList from "./pages/expert/ReviewDocumentList";
 
 type AppState = "upload" | "analysis";
 
@@ -29,8 +32,9 @@ export default function App() {
   const [expert, setExpert] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState<string>("")
-
+  const [documentId, setDocumentId] = useState <string | null> (null)
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  const [fileUploadLoading, setFileUploadLoading] = useState(false)
   // Reset to upload page when user logs in or changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -88,6 +92,7 @@ export default function App() {
 
     try {
       // 2. Upload the file
+      setFileUploadLoading(true)
       const snapshot = await uploadBytes(storageRef, file);
 
       // 3. Get the public download URL
@@ -100,11 +105,13 @@ export default function App() {
           "fileName":file.name,
           "fileUrl":downloadURL,
           'fileSize':file.size,
-          'mimeType':file.type
+          'mimeType':file.type,
+          'flagged': "False"
         })
 
         if(res.status === 201){
           setUploadedFile(file);
+          setDocumentId(res.data.id)
           setAppState("analysis");
           toast.success("File successfully uploaded")
         } else {
@@ -114,6 +121,8 @@ export default function App() {
       }
     } catch (error) {
       console.error("Upload failed", error);
+    } finally {
+      setFileUploadLoading(false)
     }
   };
 
@@ -145,21 +154,31 @@ export default function App() {
               {user && (
                 <>
                   {/* uer & expert */}
-                  <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
+                  
                   <Route
                     path="/upload-document"
                     element={
                       <div className="size-full  ">
-                        {appState === "upload" && (
+                        {
+                          fileUploadLoading && (
+                            <div className="w-full flex items-center justify-center inset-0 fixed z-50">
+                                <Loader2 className="relative animate-spin mx-auto" size={50}/>
+                            </div>
+                          )
+                        }
+                        {!fileUploadLoading && appState === "upload" && (
                           <DocumentUploader onFileUpload={handleFileUpload} />
                         )}
-                        {appState === "analysis" && uploadedFile && (
+                        {!fileUploadLoading && appState === "analysis" && uploadedFile && (
                           <AnalysisInterface
                             fileName={uploadedFile.name}
                             onBack={handleBack}
                             userEmail={user.email || "user@example.com"}
                             documentUrl={url}
                             fileType={uploadedFile.type}
+                            file={uploadedFile}
+                            documentId={documentId}
+                            userId={currentUserId}
                           />
                         )}
                       </div>
@@ -169,6 +188,7 @@ export default function App() {
                     expert ?
                       <>
                         {/* only expert */}
+                        <Route path="/review-document-list" element={<ReviewDocumentList/>} />
                         <Route path="/expert-dashboard" element={<DocumentReview />} />
                         <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
                       </>
@@ -176,7 +196,9 @@ export default function App() {
                       : (
                         <>
                           {/* only user */}
+                          <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
                           <Route path="/dashboard" element={<Dashboard />} />
+                          <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
                         </>
                       )
                   }

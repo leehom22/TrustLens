@@ -1,31 +1,39 @@
 import { useState, useEffect, useRef } from "react";
 import { FileText, Send, Loader2, Mic, MicOff, AlertTriangle, Mail, Download } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
-import { toast } from "sonner";
 import { AnalysisProcess } from "./AnalysisProcess";
 import { AnalysisResults } from "./AnalysisResults";
 import { createClient, LiveTranscriptionEvents, type LiveClient } from "@deepgram/sdk";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import DocumentViewer from "./DocumentViewer";
 import AiAssistant from "./AiAssistant";
+import { setFileAsFlagged } from "@/api/document";
+import { toast } from "react-toastify";
+import axios from "axios";
+import { DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
 
 interface AnalysisInterfaceProps {
   fileName: string;
   onBack: () => void;
   userEmail: string;
   documentUrl: string
-  fileType : string
+  fileType: string
+  documentId: string
+  file: File
+  userId: string
 }
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
-export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType }: AnalysisInterfaceProps) {
+export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType, documentId, file, userId }: AnalysisInterfaceProps) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
-  const [message, setMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [allAnalysisComplete, setAllAnalysisComplete] = useState(false);
-  console.log("The document URL is: ",documentUrl)
+  const [requestReview, setRequestReview] = useState<boolean>(false)
+  const [flaggedReason, setflaggedReason] = useState<string>('')
+  const [ai_analysis, setAi_analysis] = useState<DocumentAnalysisResult | null>(null)
+  // console.log("The document URL is: ",documentUrl)
   // --- REFS ---
   const liveConnectionRef = useRef<LiveClient | null>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for auto-scroll
@@ -51,20 +59,87 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
     if (inputRef.current) {
       inputRef.current.scrollLeft = inputRef.current.scrollWidth;
     }
-  }, [message]);
+  }, [chatMessages]);
 
-  const startAnalysis = () => {
+  const startAnalysis = async () => {
     setStage("analyzing");
     setAllAnalysisComplete(false);
-    setChatMessages([{ role: "assistant", content: `I've received your document "${fileName}". Starting comprehensive forensic analysis...` }]);
-    setTimeout(() => {
-      setAllAnalysisComplete(true);
-      setStage("complete");
-      setChatMessages(prev => [...prev, { role: "assistant", content: "✅ Analysis complete! Please review the detailed results below." }]);
-      sendEmailNotification(userEmail);
-      toast.success("Analysis complete! Notification email sent.");
-    }, 8000);
+    setChatMessages([{
+      role: "assistant",
+      content: `I've received your document "${fileName}". Starting comprehensive forensic analysis...`
+    }]);
+
+    try {
+      // 1. Initialize FormData correctly
+      const formData = new FormData(); 
+      formData.append('file',file)
+      console.log("The file is :",file)
+
+      // 2. Initial Forensic Analysis
+      const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, formData);
+
+      if (aiAnalysis.status === 200) {
+        const rawAnalysisData = aiAnalysis.data;
+        console.log("Rawdata: ", rawAnalysisData);
+
+        // 3. Prepare for Restructuring (Multi-modal)
+        // We use a fresh FormData or append to the existing one to ensure visual grounding
+        formData.append('document_raw_data', JSON.stringify(rawAnalysisData));
+        console.log("The document Id is: ",documentId)
+        formData.append('documentId', documentId);
+
+        // Fixed: Removed double slash //
+        const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        if (res.status === 200) {
+          console.log("Data from ai analysis: ", res.data);
+          setAi_analysis(res.data)
+          localStorage.setItem('ai_analysis',res.data)
+          // 4. Success Logic - Move this INSIDE the successful result block
+          setAllAnalysisComplete(true);
+          setStage("complete");
+          setChatMessages(prev => [
+            ...prev,
+            { role: "assistant", content: " Analysis complete! Please review the detailed results below." }
+          ]);
+
+          sendEmailNotification(userEmail);
+          toast.success("Analysis complete! Notification email sent.");
+
+          // Optionally store res.data in your state here
+          // setFinalAnalysis(res.data); 
+        }
+      } else {
+        toast.error("Failed to generate analysis")
+        throw new Error("Initial analysis failed");
+        return
+      }
+
+    } catch (error) {
+      console.error(error);
+      setStage("idle"); // Set a proper error stage
+      toast.error("Analysis Failed. Please try again later");
+    }
   };
+
+  const handleConfirmReview = async () => {
+    try {
+      const res = await setFileAsFlagged(documentId, flaggedReason)
+
+      if (res.success) {
+        toast.success("Successfully request for review")
+        setRequestReview(false)
+      } else {
+        toast.error("Failed to request for review. Please try again later")
+      }
+    } catch (error) {
+      console.log("Error request for a review: ", error)
+    }
+  }
 
   const sendEmailNotification = async (email: string) => {
     if (!email) return;
@@ -150,17 +225,75 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
               <DocumentViewer fileType={fileType} fileUrl={documentUrl} />
             </TabsContent>
             <TabsContent value="ai-assistant" >
-              <AiAssistant messages={chatMessages} stage={stage}/>
+              <AiAssistant messages={chatMessages} stage={stage} />
             </TabsContent>
           </Tabs>
 
           {/* Analysis Column */}
           <div className="lg:col-span-7 order-1 lg:order-2">
             {stage === "analyzing" && <AnalysisProcess />}
-            {stage === "complete" && <AnalysisResults />}
+            {stage === "complete" && <AnalysisResults setRequestReview={setRequestReview} ai_analysis_format={ai_analysis!}/>}
           </div>
         </div>
       </div>
+      {
+        requestReview && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setRequestReview(false)}
+            />
+
+            {/* Modal Content */}
+            <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+              {/* Header Section */}
+              <div className="flex items-start gap-4 mb-6">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Request Forensic Review</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    This document will be prioritized for manual verification by our forensic team.
+                  </p>
+                </div>
+              </div>
+
+              {/* Form Section */}
+              <div className="flex flex-col gap-3">
+                <label
+                  htmlFor="review-reason"
+                  className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1"
+                >
+                  Reason for manual review
+                </label>
+                <textarea
+                  id="review-reason"
+                  rows={4}
+                  placeholder="Briefly describe why this document requires human oversight..."
+                  onChange={(e) => setflaggedReason(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 mt-8">
+                <Button
+                  variant="ghost"
+                  className="flex-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-gray-500"
+                  onClick={() => setRequestReview(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all active:scale-95"
+                  onClick={handleConfirmReview}
+                >
+                  Confirm Request
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      }
     </div>
   );
 }

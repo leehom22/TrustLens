@@ -4,19 +4,20 @@ import {
   Filter,
   FileText,
   Eye,
-  Download,
   Calendar,
   ChevronLeft,
   ChevronRight,
-  MoreVertical,
   Loader2,
   RotateCcw,
-  Trash
+  Trash,
+  Check,
+  CheckCheck
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { formatDateTime, getRiskColor } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { FileHeader } from '@/app/types/db-ai-analysis-type';
 
 interface Files {
   id: string,
@@ -27,22 +28,22 @@ interface Files {
   riskScore: number
   riskLevel: string
   analyzedBy: string
+  expertReview?: boolean | null
 }
 
-const HistoryPage = (props: { userId: string }) => {
+const ReviewDocumentList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [riskFilter, setRiskFilter] = useState('All');
   const [loading, setLoading] = useState(true)
-  const [historyFiles, setHistoryFiles] = useState<Files[]>([])
+  const [flaggedFile, setFlaggedFile] = useState<Files[] | null>(null)
   const [sortConfig, setSortConfig] = useState({
     key: 'created_at',
     direction: 'desc' as 'asc' | 'desc'
   });
-
-  const userId = props.userId
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
   const navigate = useNavigate()
   const backendUrl = import.meta.env.VITE_BACKEND_URL
-  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<boolean>(false)
   const [deleteDocLoading, setDeleteDocLoading] = useState<boolean>(false)
   // Add toggle sort function
   const toggleSort = (key: string) => {
@@ -60,29 +61,24 @@ const HistoryPage = (props: { userId: string }) => {
   };
 
   // Update your filteredData logic to include sorting
-  const filteredData = useMemo(() => {
-    // First, filter by search term and risk level
-    let filtered = historyFiles.filter((doc) => {
+  const { totalPages, paginatedData } = useMemo(() => {
+    let filtered = flaggedFile ? [...flaggedFile] : [];
+
+    // 1. Filter
+    filtered = filtered.filter((doc) => {
       const matchesSearch = doc.fileName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRisk = riskFilter === "All" || doc.riskLevel === riskFilter;
       return matchesSearch && matchesRisk;
     });
 
-    // Then, sort the filtered results
+    // 2. Sort
     filtered.sort((a, b) => {
-      let aValue = a[sortConfig.key];
-      let bValue = b[sortConfig.key];
+      let aValue = a[sortConfig.key as keyof Files];
+      let bValue = b[sortConfig.key as keyof Files];
 
-      // Handle date sorting specifically
       if (sortConfig.key === 'created_at') {
-        aValue = new Date(aValue).getTime();
-        bValue = new Date(bValue).getTime();
-      }
-
-      // Handle numeric sorting
-      if (sortConfig.key === 'riskScore' || sortConfig.key === 'fileSize') {
-        aValue = Number(aValue);
-        bValue = Number(bValue);
+        aValue = new Date(aValue as string).getTime();
+        bValue = new Date(bValue as string).getTime();
       }
 
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -90,14 +86,19 @@ const HistoryPage = (props: { userId: string }) => {
       return 0;
     });
 
-    return filtered;
-  }, [historyFiles, searchTerm, riskFilter, sortConfig]);
+    // 3. Paginate
+    const total = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const sliced = filtered.slice(start, start + ITEMS_PER_PAGE);
+
+    return { totalPages: total, paginatedData: sliced };
+  }, [flaggedFile, searchTerm, riskFilter, sortConfig, currentPage]);
 
   const fetchingFiles = async () => {
     try {
-      console.log("the user id is ", userId)
-      const res = await axios.get(`${backendUrl}/files/get_uploaded_files/${userId}`);
-      if (res.data.success) setHistoryFiles(res.data.data)
+      const res = await axios.get(`${backendUrl}/files/flagged_document`);
+      console.log("Data from flagged files: ", res.data.files)
+      if (res.data.success) setFlaggedFile(res.data.files)
 
     } catch (error) {
       toast.error("Failed to fetch files")
@@ -108,39 +109,17 @@ const HistoryPage = (props: { userId: string }) => {
   }
   useEffect(() => {
     fetchingFiles()
-  }, [userId])
+  }, [])
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, riskFilter]);
 
   // --- Action Handler (Placeholder) ---
   const handleViewReport = (docId: string) => {
     // In the future, you will use: navigate(`/analysis/${docId}`);
-    navigate(`/review-document-analysis/${docId}`)
+    navigate(`/review-document/${docId}`)
   };
-
-  const handleDeleteDocument = async (docId: string, docName: string) => {
-    setConfirmDeleteDoc(true)
-    if (confirmDeleteDoc) {
-      try {
-        setDeleteDocLoading(true)
-        const formData = new FormData()
-        formData.append('doc_id', docId)
-        console.log("The document id is:", docId)
-        const res = await axios.post(`${backendUrl}/files/delete_selected_files`, formData)
-        const result = res.data
-
-        if (result.success) {
-          toast.success("Successfully delete document")
-          await fetchingFiles()
-        } else {
-          toast.error("Failed to delete document")
-        }
-      } catch (error) {
-        console.log("Failed to delete document: ", error)
-      } finally {
-        setDeleteDocLoading(false)
-      }
-    }
-  }
 
   return (
     <>
@@ -161,8 +140,8 @@ const HistoryPage = (props: { userId: string }) => {
               {/* --- Page Header --- */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Analysis History</h1>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Archive of all documents processed by TrustLens.</p>
+                  <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Flagged Document</h1>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Flagged for Manual Review</p>
                 </div>
               </div>
 
@@ -205,13 +184,13 @@ const HistoryPage = (props: { userId: string }) => {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                        Analysis History
+                        Flagged Document
                       </h1>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Archive of all documents processed by TrustLens.
+                        Flagged for Manual Review.
                       </p>
                     </div>
-                    
+
                     {/* Reset Button */}
                     <button
                       onClick={handleReset}
@@ -335,9 +314,9 @@ const HistoryPage = (props: { userId: string }) => {
                             </td>
                           </tr>
                         ))
-                      ) : filteredData.length > 0 ? (
+                      ) : paginatedData.length > 0 ? (
                         /* Data Rows */
-                        filteredData.map((doc) => (
+                        paginatedData.map((doc) => (
                           <tr
                             key={doc.id}
                             className="group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
@@ -397,17 +376,30 @@ const HistoryPage = (props: { userId: string }) => {
                             </td>
 
                             {/* Actions */}
-                            <td className="p-4 text-right flex gap-3">
-                              <button
-                                onClick={() => handleViewReport(doc.id)}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
-                              >
-                                <Eye size={14} />
-                                View
-                              </button>
-                              <button className='cursor-pointer' onClick={() => handleDeleteDocument(doc.id, doc.fileName)}>
-                                <Trash color='red' size={20} />
-                              </button>
+                            <td className="p-4">
+                              <div className='flex items-center justify-end gap-3'>
+                                <button
+                                  onClick={() => handleViewReport(doc.id)}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
+                                >
+                                  <Eye size={14} />
+                                  View
+                                </button>
+                                <button className='cursor-pointer'>
+                                  {
+                                    doc.expertReview === true ? (
+                                      <div className='tooltip' data-tip="Waiting for review">
+                                        <CheckCheck size={20} color='green' />
+                                      </div>
+
+                                    ) : (
+                                      <div className='tooltip' data-tip="Already reviewed">
+                                        <Check size={20} />
+                                      </div>
+                                    )
+                                  }
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -429,17 +421,22 @@ const HistoryPage = (props: { userId: string }) => {
                 {/* Pagination Footer */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-800">
                   <span className="text-sm text-slate-500 dark:text-slate-400">
-                    Showing {filteredData.length} result{filteredData.length !== 1 ? 's' : ''}
+                   Page {currentPage} of {totalPages}
                   </span>
 
                   <div className="flex items-center gap-2">
                     <button
                       disabled
                       className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => setCurrentPage(prev => prev - 1)}
                     >
                       <ChevronLeft size={16} />
                     </button>
-                    <button className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <button className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    disabled={currentPage === 1}
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    >
                       <ChevronRight size={16} />
                     </button>
                   </div>
@@ -454,4 +451,4 @@ const HistoryPage = (props: { userId: string }) => {
 
 };
 
-export default HistoryPage;
+export default ReviewDocumentList;
