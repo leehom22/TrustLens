@@ -22,7 +22,7 @@ chat_router = APIRouter()
 
 # ====================== Models & Schemas =======================
 class ChatRequest(BaseModel):
-    doc_id: str = Field(..., description="Document ID")
+    req_id: str = Field(..., description="Request ID")
     user_query: str = Field(..., description="The user's question")
     mode: str = Field(default="forensic_analyst", description="Active Persona Mode")
 
@@ -32,28 +32,30 @@ class ChatResponse(BaseModel):
 
 
 # ========================= History & Persistence ======================
-def get_chat_history(doc_id: str, limit: int = 10):
+def get_chat_history(req_id: str, limit: int = 10):
     # Retrieve recent chat history for context
     try:
-        msgs_ref = db.collection("analysis_results").document(doc_id).collection("messages")
+        msgs_ref = db.collection("analysis_results").document(req_id).collection("messages")
         docs = msgs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit).stream()
         
         history = []
         for doc in docs:
             data = doc.to_dict()
-            history.append({
-                "role": "user" if data["role"] == "user" else "model",
-                "parts": [data["content"]]
-            })
+            # Prevent empty history
+            if data.get("content"):
+                history.append({
+                    "role": "user" if data["role"] == "user" else "model",
+                    "parts": [data["content"]]
+                })
         return history[::-1] # Reverse to chronological order
     except Exception as e:
         logger.error(f"History fetch error: {e}")
         return []
 
-def save_chat_message(doc_id: str, user_id: str, role: str, content: str):
+def save_chat_message(req_id: str, user_id: str, role: str, content: str):
     # Save chat message to Firestore
     try:
-        msgs_ref = db.collection("analysis_results").document(doc_id).collection("messages")
+        msgs_ref = db.collection("analysis_results").document(req_id).collection("messages")
         msgs_ref.add({
             "user_id": user_id,
             "role": role,
@@ -65,15 +67,15 @@ def save_chat_message(doc_id: str, user_id: str, role: str, content: str):
 
 
 # ========================= Defined Tools (With Strict Typing & Docstrings) =======================
-def get_forensic_summary(doc_id: str) -> Dict[str, Any]:
+def get_forensic_summary(req_id: str) -> Dict[str, Any]:
     """
     Retrieves the structured forensic analysis summary.
     Use this to get Risk Scores, Fraud Signals, Visual ELA results, and Logic Audits.
     Does NOT contain the full raw text of the document.
-    Argument: doc_id: The unique identifier of the document.
+    Argument: req_id: The unique identifier of the document.
     """
     try:
-        doc_ref = db.collection("analysis_results").document(doc_id)
+        doc_ref = db.collection("analysis_results").document(req_id)
         snapshot = doc_ref.get()
         
         if not snapshot.exists:
@@ -118,11 +120,11 @@ def get_forensic_summary(doc_id: str) -> Dict[str, Any]:
         logger.error(f"Tool Error (get_forensic_summary): {e}")
         return {"error": str(e)}
 
-def get_document_raw_text(doc_id: str) -> Dict[str, Any]:
+def get_document_raw_text(req_id: str) -> Dict[str, Any]:
     # Retrieves the full raw text content of the document.
     # Use this ONLY when you need to read specific clauses, terms, or check compliance against laws.
     try:
-        doc_ref = db.collection("analysis_results").document(doc_id)
+        doc_ref = db.collection("analysis_results").document(req_id)
         snapshot = doc_ref.get(["raw_document_content", "grounding_info"])
         
         if not snapshot.exists:
@@ -138,6 +140,57 @@ def get_document_raw_text(doc_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Tool Error (get_document_raw_text): {e}")
         return {"error": str(e)}
+    
+
+TOOL_IMPLEMENTATIONS = {
+    "get_forensic_summary": get_forensic_summary,
+    "get_document_raw_text": get_document_raw_text
+}
+
+
+
+# ========================= Tool Schemas (Declarations) =========================
+
+forensic_tool = types.Tool(
+    function_declarations=[
+        types.FunctionDeclaration(
+            name="get_forensic_summary",
+            description="Retrieves the forensic analysis summary (Risk Scores, Signals, Logic Audits). Use this FIRST.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "req_id": {
+                        "type": "string",
+                        "description": "The unique identifier of the analysis request."
+                    }
+                },
+                "required": ["req_id"]
+            }
+        )
+    ]
+)
+
+raw_text_tool = types.Tool(
+    function_declarations=[
+        types.FunctionDeclaration(
+            name="get_document_raw_text",
+            description="Retrieves the FULL raw text. Use ONLY when checking specific clauses.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "req_id": {
+                        "type": "string",
+                        "description": "The unique identifier of the analysis request."
+                    }
+                },
+                "required": ["req_id"]
+            }
+        )
+    ]
+)
+
+# Google Search Tool Definition
+google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
 
 # ========================= Guardrails (Chat Content Boundaries) =========================
@@ -161,61 +214,91 @@ CORE_GUARDRAILS = """
 
 # ========================= Mode Configuration =========================
 
-def get_mode_config(mode: str):
-    # Google Search Tool Definition
-    google_search_tool = types.Tool(google_search=types.GoogleSearch())
-    
-    # Formatting Prompt Structure: Guardrails + Role + Mission + Data Referred
-    base_structure = lambda role, mission, data: f"""
-    {CORE_GUARDRAILS}
-    
-    ROLE: {role}
-    MISSION: {mission}
-    DATA SOURCE: {data}
-    """
+def get_mode_config(mode: str, req_id: str):
 
-    if mode == "forensic_analyst":
+    def build_prompt(role, mission):
+        return f"""
+        {CORE_GUARDRAILS}
+        
+        --- IDENTITY & CONTEXT ---
+        ROLE: {role}
+        MISSION: {mission}
+        CURRENT TASK: Analyzing document with req_id: '{req_id}'.
+        
+        --- TRUSTLENS KNOWLEDGE BASE (INTERNAL MECHANISMS) ---
+        
+        ### 1. DOCUMENT PROFILES (Why rules differ)
+        We apply different strictness levels based on 'doc_type':
+        - **Strict Financial** (Bank Statement/Payslip): 
+          - MUST be system-generated PDF. NO editing software allowed (Adobe/Canva = Fraud).
+          - Math & Dates must be perfect. No screenshots allowed.
+        - **Transactional** (Invoice/Receipt):
+          - Screenshots are ALLOWED (Mobile receipts).
+          - Account numbers required for Invoices.
+        - **Creative/Personal** (Resume/Certificate):
+          - Editing software (Canva/Word) is ALLOWED (Software risk is forgiven).
+          - Focus checks on "Hidden Text" (ATS Cheating) and visual splicing.
+        - **Legal** (Contract):
+          - Strict chronology. No editing traces.
+
+        ### 2. FORENSIC LAYERS (How we analyze)
+        **Layer 1: Metadata (Digital Fingerprint)**
+        - **Software Traces**: We look for 'Photoshop', 'GIMP', 'Meitu'.
+        - **Time Paradox**: If 'Creation Date' is *after* 'Modification Date', or 'Document Date' is before 'ID Generation Date', it implies logic failure.
+        
+        **Layer 2: Visual Forensics (Pixel Analysis)**
+        - **ELA (Error Level Analysis)**: Detects compression artifacts. High Z-Score (>4.5) means manipulation.
+        - **Texture/Luminance**: Detects 'Smoothing' (Smudging text) or 'Digital Insertion' (Pure black text on scanned gray bg).
+        - **Alignment**: Checks if text rows 'jitter' (Bad cut-and-paste jobs).
+        
+        **Layer 3: Content & Semantics**
+        - **Hidden Text**: White-on-white text used to trick AI Resume readers (ATS).
+        - **Urgency**: "Pay now or legal action" combined with bad quality = Scam.
+
+        **Layer 4: Logic Audit (The Mathematician)**
+        - **Math Integrity**: `Qty x Unit Price == Total`? `Subtotal + Tax == Total`?
+        - **Chronology**: Do dates flow sequentially? (Time Travel check).
+        - **Beneficiary Check**: Does `Account Holder` match `Vendor Name`? (Prevents Injection Fraud).
+        - **Balance Reconciliation**: `Opening + Flow == Closing`?
+
+        ### 3. SCORING RUBRIC
+        - **CRITICAL / HARD FAIL (95-100)**: Proven Tampering, Time Paradox, or Math Fail. REJECT.
+        - **HIGH RISK (70-94)**: Strong evidence of manipulation.
+        - **SUSPICIOUS (30-69)**: Anomalies found. Manual review needed.
+        - **SAFE (0-29)**: Document appears authentic.
+
+        --- COGNITIVE BEHAVIOR GUIDELINES ---
+        
+        1. **DETECTIVE VS. PROFESSOR**:
+           - **Analyzing THIS document**: Be a DETECTIVE. Rely STRICTLY on `req_id` tools. If the tool says "Safe", do not imagine a risk.
+           - **Explaining concepts**: Be a PROFESSOR. You ARE ALLOWED to use general knowledge to explain terms (e.g., "What is ELA?", "Why is Metadata important?").
+           
+        2. **EXPLAINING THE 'WHY'**:
+           - If a Resume uses Canva, say: "It's fine for Resumes, as they are personal marketing docs."
+           - If a Bank Statement uses Canva, say: "This is critical. Bank docs are automated; Canva implies forgery."
+           
+        3. **INSTRUCTIONS**:
+           - **ALWAYS** call `get_forensic_summary` first.
+           - Use the provided `req_id` for all tool calls.
+           - Be Rational, Objective, and Evidence-based.
+        """
+
+    if mode == "rejection_letter":
         return {
-            "tools": [get_forensic_summary],
-            "prompt": base_structure(
-                role="TrustLens Forensic Analyst",
-                mission="Explain tampering risks (Visual/Logic/Metadata).",
-                data="Use 'get_forensic_summary'. Focus on 'risk_signals' and 'l2_visual_analysis'."
-            )
-        }
-    elif mode == "rejection_letter":
-        return {
-            "tools": [get_forensic_summary],
-            "prompt": base_structure(
-                role="TrustLens Letter Generator",
-                mission="Draft a formal business rejection email based on risk findings.",
-                data="Use 'get_forensic_summary'. If Risk > 70, be firm. If Risk < 50, ask for clarification. DO NOT CHAT, JUST DRAFT."
-            )
+            "tools": [forensic_tool],
+            "prompt": build_prompt("Letter Drafter", "Draft a professional rejection email based on specific risk factors found.")
         }
     elif mode == "policy_advisor":
         return {
-            "tools": [get_forensic_summary, get_document_raw_text, google_search_tool],
-            "prompt": base_structure(
-                role="TrustLens Policy Advisor",
-                mission="Check compliance against Malaysia Regulations (e.g., SST, e-Invoice).",
-                data="Use 'get_document_raw_text' for clauses and Google Search for laws."
-            )
+            "tools": [forensic_tool, raw_text_tool, google_search_tool],
+            "prompt": build_prompt("Policy Advisor", "Check compliance with local regulations and tax rules.")
         }
-    elif mode == "contract_guardian":
+    else: # Default: forensic_analyst
         return {
-            "tools": [get_document_raw_text, google_search_tool],
-            "prompt": base_structure(
-                role="TrustLens Contract Guardian",
-                mission="Identify unfair clauses, hidden traps, and verify market rates.",
-                data="Use 'get_document_raw_text' for text analysis and Google Search for price verification."
-            )
+            "tools": [forensic_tool, raw_text_tool, google_search_tool],
+            "prompt": build_prompt("Forensic Analyst", "Explain the detected risks, evidence, and answer user questions.")
         }
-    else:
-        # Default
-        return {
-            "tools": [get_forensic_summary], 
-            "prompt": f"{CORE_GUARDRAILS}\nYou are TrustLens AI. Help user understand the document risks."
-        }
+
 
 
 # ========================= Smart Suggestion Engine =========================
@@ -266,43 +349,47 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
 async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(get_current_user)):
     try:
         current_user_id = user_payload.get("uid")
+        req_id = request.req_id
 
         # 1. Config & Model
-        config = get_mode_config(request.mode)
-        
-        # Pass the functions into tools，SDK will analyse Docstring and apply
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        config = get_mode_config(request.mode, req_id)
         
         # 2. History & Persistence
-        history = get_chat_history(request.doc_id)
-        save_chat_message(request.doc_id, current_user_id, "user", request.user_query)
+        history = get_chat_history(request.req_id)
+        save_chat_message(request.req_id, current_user_id, "user", request.user_query)
 
         formatted_history = []
         for h in history:
+            parts = [types.Part(text=part) for part in h['parts']]
             formatted_history.append(types.Content(
                 role=h['role'],
-                parts=[types.Part.from_text(p) for p in h['parts']]
+                parts=[types.Part(text=p) for p in h['parts']]
             ))
+
+        # Pass the functions into tools，SDK will analyse Docstring and apply
+        client = genai.Client(api_key=GEMINI_API_KEY)
 
         # 3. Start Chat
         # enable_automatic_function_calling=True for SDK to automatically handle Tool Functions Call
         chat = client.aio.chats.create(
-            model="gemini-2.5-flash",
+            model="gemini-3-pro-preview",
             config=types.GenerateContentConfig(
                 tools=config["tools"],
-                system_instruction=config.get("prompt", "")
+                system_instruction=config.get("prompt", ""),
+                temperature=0.3
             ),
             history=formatted_history
         )
         
-        final_query = request.user_query
         
-        # 4. Gemini Call
-        response = await chat.send_message(final_query)
-        ai_raw_text = response.text
+        # 4a. Gemini Call
+        response = await chat.send_message(request.user_query)
+
+        # 4b. Gemini Response
+        ai_raw_text = response.text if response.text else "I've processed that info."
         
         # 5. Suggestion Engine
-        doc_ref = db.collection("analysis_results").document(request.doc_id)
+        doc_ref = db.collection("analysis_results").document(request.req_id)
         doc_snap = doc_ref.get(["overall_risk_score", "doc_type"])
         doc_meta = doc_snap.to_dict() if doc_snap.exists else {}
         
@@ -316,7 +403,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
             final_text += hint_msg
 
         # 7. Save Response
-        save_chat_message(request.doc_id, current_user_id, "model", final_text)
+        save_chat_message(request.req_id, current_user_id, "model", final_text)
 
         return ChatResponse(
             response=final_text,
@@ -324,7 +411,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         )
 
     except Exception as e:
-        logger.exception("Chat Error")
+        logger.exception("Chat Error (req_id: {request.req_id})")
         return ChatResponse(
             response="I'm analyzing the document securely, but the connection timed out. Please try asking again.",
             suggested_actions=[]

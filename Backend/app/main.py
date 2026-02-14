@@ -4,7 +4,7 @@ import tempfile
 import asyncio
 import mimetypes
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -24,12 +24,13 @@ from .routers.user import user_router
 from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
+from .routers.analysis import analysis_router, analyze_pipeline
 
 # ------- Import internal modules ------
 from .core.auth import get_current_user
 from .core.config import Config
 from .core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
-from .utils.schemas import FinalReport, LayerStatus, LayerResult
+from .utils.schemas import AnalysisRecord
 from .services.layer1 import run_layer_1_metadata
 from .services.layer2 import run_layer_2_ela
 from .services.layer3 import run_layer_3_extraction
@@ -59,7 +60,12 @@ app.add_middleware(
 
 # API Routing: An endpoint as a tool for the AI Agent
 @app.post("/analyze", response_model = AnalysisRecord)
-async def analyze_document(request: Request, file: UploadFile = File(...), user_payload: dict = Depends(get_current_user)):
+async def analyze_document(
+    request: Request, 
+    file: UploadFile = File(...), 
+    doc_id: str = Query(..., description="The Doc ID returned from the upload_files endpoint"), # <--- 必须传 ID
+    user_payload: dict = Depends(get_current_user)
+):
     user_id = user_payload.get("uid")
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
@@ -75,10 +81,11 @@ async def analyze_document(request: Request, file: UploadFile = File(...), user_
     # Security check for invalid or unsafe file source
     if verified_content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
+
+    try:
         ext = os.path.splitext(file.filename)[1]
-        temp_path = os.path.join(temp_dir, f"{req_id}{ext}")
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, f"{doc_id}{ext}")
         
         size = 0
         with open(temp_path, "wb") as buffer:
@@ -87,209 +94,28 @@ async def analyze_document(request: Request, file: UploadFile = File(...), user_
                 if size > MAX_FILE_SIZE:
                     raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
                 buffer.write(chunk)
+
+        final_record = await analyze_pipeline(
+            doc_id=doc_id,
+            req_id=req_id,
+            user_id=user_id,
+            file_name=file.filename,
+            original_mime_type=verified_content_type,
+            file_url=None,
+            local_path_override=temp_path
+        )
         
+        # Cleaning
+        if os.path.exists(temp_path): os.remove(temp_path)
+        return final_record
+    
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=str(e))    
 
         # ====================== Pipeline Execution (Parallelized) =======================
-        # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
-        loop = asyncio.get_running_loop()
-        logger.info("Dispatching parallel tasks for L1, L2, L3...", extra={"request_id": req_id})
 
-        # 1. Schedule CPU-bound tasks (L1 & L2) in default executor (ThreadPool)
-        # This prevents the main event loop from blocking during image processing
-        t1 = loop.run_in_executor(None, run_layer_1_metadata, temp_path, verified_content_type)
-        t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
-        
-        # 2. Schedule IO-bound task (L3) directly
-        t3 = run_layer_3_extraction(temp_path, verified_content_type)
-
-        # 3. Wait for all layers to complete
-        l1_res, l2_res, l3_data = await asyncio.gather(t1, t2, t3)
-
-        evidence_chain = []
-        
-        # [Step 1: Process L3 Data & Profile Selection]
-        # Determine Doc Type and Load Risk Profile
-        doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
-        
-        detected_profile_key = "unknown"
-        for key in DOC_RISK_PROFILES:
-            if key in doc_type_raw:
-                detected_profile_key = key
-                break
-        profile = DOC_RISK_PROFILES[detected_profile_key]
-        logger.info(f"Document Classified as: {detected_profile_key.upper()}", extra={"request_id": req_id})
-        
-        # [Step 2] Layer 1: Metadata
-        evidence_chain.append(l1_res)
-        
-        # [Step 3] Layer 2: Visual ELA
-        evidence_chain.append(l2_res)
-            
-        # [Step 4] Layer 3: Content
-        l3_score = 0
-        l3_status = LayerStatus.CLEAN
-        l3_risk_signals = []
-        
-        # Helper: Get inference data safely
-        l3_inf = l3_data.get("risk_inference", {})
-        
-        # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
-        # Resume Specific Check: Hidden Text
-        if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
-            l3_score = 100
-            l3_status = LayerStatus.HIGH_RISK
-            msg = "Hidden text injection detected (ATS Cheating)."
-            l3_data["risk_note"] = msg
-            l3_risk_signals.append(msg)
-
-        # --- Check 2: Screenshot Check (Generic) ---
-        if l3_data.get("is_screenshot"):
-            l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
-
-        # --- Check 3: Urgency Language Check (Scam) ---
-        if l3_inf.get("urgency_language"):
-            if l3_score < 60: l3_score = 60
-            if l3_status == LayerStatus.CLEAN: l3_status = LayerStatus.SUSPICIOUS
-            l3_risk_signals.append("High-pressure urgency language detected (Potential Scam Pattern).")
-
-        evidence_chain.append(LayerResult(
-            layer_name = "L3_Content", 
-            status = l3_status, 
-            score = l3_score, 
-            risk_signals = l3_risk_signals,
-            details = l3_data
-        ))
-        
-        # [Step 5] Layer 4: Logic Audit
-        logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "freelance_contract"]
-        
-        if detected_profile_key in logic_required_types:
-            evidence_chain.append(run_layer_4_logic(l3_data))
-        else:
-            evidence_chain.append(LayerResult(
-                layer_name="L4_Logic", 
-                status=LayerStatus.SKIPPED, 
-                score=0, 
-                risk_signals = [],
-                details={"reason": f"Not applicable for {detected_profile_key}"}
-            ))
-            
-            
-        # [Step 6] Layer 0: Final Technical Judge (Deterministic)
-        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
-    
-        
-        # [Step 7] Packing Analysis Report to AI Agent
-        rule_metadata = {
-                "description": profile.get("description", ""),
-                "hard_fail_triggers": profile.get("hard_fail_checks", []),
-                "allow_screenshot": profile.get("allow_screenshot", True)
-            }
-
-        grounding_info = {}
-        if l3_data:
-            # Basic Info
-            # Helper to safely get nested dicts
-            raw_content = l3_data.get("raw_document_content", "")
-            vendor = l3_data.get("vendor_info", {})
-            fins = l3_data.get("financials", {})
-            dates = l3_data.get("dates", {})
-            payment = l3_data.get("payment_info", {})
-            contact = vendor.get("contact", {})
-
-            grounding_info = {
-                "vendor_name": vendor.get("name"),
-                "vendor_address": vendor.get("address"),
-                "total_amount": fins.get("total_amount"),
-                "currency": fins.get("currency"),
-                "invoice_date": dates.get("invoice_date")
-            }
-            
-            # Contact Method (Validate the contacts with vendors' official info)
-            contact = l3_data.get("vendor_info", {}).get("contact", {})
-            grounding_info["vendor_contact"] = {
-                "phone": contact.get("phone"),
-                "website": contact.get("website"),
-                "email": contact.get("email")
-            }
-
-            # Payment Info (Identify personal account as a common scamming mode)
-            payment = l3_data.get("payment_info", {})
-            grounding_info["payment_details"] = {
-                "bank_name": payment.get("bank_name"),
-                "account_no": payment.get("account_number"),
-                "holder_name": payment.get("account_holder_name")
-            }
-
-        report = FinalReport(
-            request_id = req_id,
-            timestamp = datetime.now(),
-            doc_type = detected_profile_key,
-
-            overall_risk_score = judge_res.get("overall_risk_score", 0),
-            risk_level = judge_res.get("risk_level", "Unknown"),
-            risk_signals = judge_res.get("risk_signals", []),
-            summary_code = judge_res.get("summary_code", "UNKNOWN"),
-            evidence_chain = evidence_chain,
-
-            rule_metadata = rule_metadata,
-            grounding_info = grounding_info,
-            raw_document_content = raw_content
-        )
-
-        logger.info("Technical Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
-
-
-        # [Step 8] AI Agent Investigation (Contextual Layer) 
-        ai_results = await run_agent_analysis(report)
-        
-        # [Step 9] Hybrid Merge (Grounding and Technical)
-        tech_score = report.overall_risk_score
-        grounding_score = ai_results.get("grounding_score", 0)
-        
-        # Max Voting
-        final_risk_score = max(tech_score, grounding_score)
-        
-        final_rec = "REVIEW"
-        if final_risk_score > 80:
-            final_rec = "REJECT"
-        elif final_risk_score < 30:
-            final_rec = "ACCEPT"
-        else:
-            final_rec = "REVIEW"
-
-        # If AI feels suspicious, recommend for expert review even with low score
-        if ai_results.get("verification_status") == "SUSPICIOUS" and final_rec == "ACCEPT":
-            final_rec = "REVIEW"
-
-        # [Step 10] Packaging AnalysisRecord
-        final_record = AnalysisRecord(
-            **report.dict(),    # parsing report
-            
-            user_id = user_id, 
-            file_name = file.filename,
-
-            # Fill in AI result
-            agent_summary = ai_results.get("agent_summary"),
-            verification_status = ai_results.get("verification_status"),
-            grounding_score = grounding_score,
-            grounding_result = ai_results.get("grounding_result"),
-            layer_summaries = ai_results.get("layer_summaries"),
-            active_lessons_applied = ai_results.get("active_lessons_applied", []),
-            
-            # Fill in Deterministic Score
-            final_recommendation = final_rec
-        )
-        
-        # [Step 11] Session Memory in Firestore (As RAG of Chatbot)
-        try:
-            db.collection("analysis_results").document(req_id).set(final_record.dict())
-            logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
-        except Exception as e:
-            logger.error(f"Firestore Save Error: {e}")
-
-        # Sent back to front-end
-        return final_record
 
 
 
