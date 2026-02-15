@@ -11,6 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
 from app.models.files import FilesSchema
 from dotenv import load_dotenv
+
 # ------- Import internal modules ------
 from ..core.auth import get_current_user
 from ..core.config import Config
@@ -301,7 +302,7 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
 
 
 
-# API Routing: An endpoint as a tool for the AI Agent
+# ========== API Routing: An endpoint as a tool for the AI Agent =================
 @analysis_router.post("/ai-analyze-document", response_model = AnalysisRecord)
 async def analyze_document(
     request: Request, 
@@ -356,9 +357,8 @@ async def analyze_document(
         if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))    
 
-        # ====================== Pipeline Execution (Parallelized) =======================
 
-
+# =============== AI for Restructuring Data (Frontend Display Structure) ==============
 @analysis_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
     documentId: str = Form(...), 
@@ -463,7 +463,8 @@ async def generate_document_dashboard(
     return db_payload  # This is perfectly fine!
 
     
-    
+
+# ============= Get Doc Analysis at Frontend for History Chat Display =============
 @analysis_router.post("/get-doc-analysis")
 async def get_document_analysis(docId: str = Form(...)):
     try:

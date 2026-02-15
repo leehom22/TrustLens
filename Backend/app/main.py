@@ -13,8 +13,10 @@ from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
 
+# ------- Import internal modules ------
 from .core.config import Config
 from .core.config import EVIDENCE_DIR
+
 
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
@@ -43,6 +45,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ====================== Register Routers =======================
 app.include_router(
