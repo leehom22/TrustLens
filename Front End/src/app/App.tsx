@@ -168,8 +168,11 @@ export default function App() {
                       <div className="size-full  ">
                         {
                           fileUploadLoading && (
-                            <div className="w-full flex items-center justify-center inset-0 fixed z-50">
-                                <Loader2 className="relative animate-spin mx-auto" size={50}/>
+                            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+                              <div className="flex flex-col items-center gap-4">
+                                <Loader2 className="animate-spin text-primary" size={50} />
+                                <p className="text-lg font-medium animate-pulse">Uploading Document...</p>
+                              </div>
                             </div>
                           )
                         }

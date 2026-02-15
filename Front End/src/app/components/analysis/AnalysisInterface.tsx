@@ -10,7 +10,8 @@ import AiAssistant from "./AiAssistant";
 import { setFileAsFlagged } from "@/api/document";
 import { toast } from "react-toastify";
 import axios from "axios";
-import { DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
+import { DocumentAnalysisOverallResult, DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
+import { useNavigate } from "react-router-dom";
 
 interface AnalysisInterfaceProps {
   fileName: string;
@@ -33,11 +34,14 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
   const [requestReview, setRequestReview] = useState<boolean>(false)
   const [flaggedReason, setflaggedReason] = useState<string>('')
   const [ai_analysis, setAi_analysis] = useState<DocumentAnalysisResult | null>(null)
+  const [ai_analysis_header, setAi_analysis_header] = useState<DocumentAnalysisOverallResult | null>(null)
+  const [rawAnalysisData, setRawAnalysisData] = useState(null)
   // console.log("The document URL is: ",documentUrl)
   // --- REFS ---
   const liveConnectionRef = useRef<LiveClient | null>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for auto-scroll
   const backendUrl = import.meta.env.VITE_BACKEND_URL
+  const navigate = useNavigate()
   // Auto-start analysis
   useEffect(() => {
     const timer = setTimeout(() => startAnalysis(), 500);
@@ -81,12 +85,12 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, formData);
 
       if (aiAnalysis.status === 200) {
-        const rawAnalysisData = aiAnalysis.data;
-        console.log("Rawdata: ", rawAnalysisData);
+        console.log("Rawdata: ", aiAnalysis);
+        console.log("Rawdata: ", aiAnalysis.data);
 
         // 3. Prepare for Restructuring (Multi-modal)
         // We use a fresh FormData or append to the existing one to ensure visual grounding
-        formData.append('document_raw_data', JSON.stringify(rawAnalysisData));
+        formData.append('document_raw_data', JSON.stringify(aiAnalysis.data));
         console.log("The document Id is: ",documentId)
         formData.append('documentId', documentId);
 
@@ -98,9 +102,10 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
         });
 
         if (res.status === 200) {
-          console.log("Data from ai analysis: ", res.data);
-          setAi_analysis(res.data)
-          localStorage.setItem('ai_analysis',res.data)
+          console.log("Data from structure ai analysis: ", res.data);
+          setRawAnalysisData(aiAnalysis.data)
+          setAi_analysis(res.data.analysis_content)
+          setAi_analysis_header(res.data)
           // 4. Success Logic - Move this INSIDE the successful result block
           setAllAnalysisComplete(true);
           setStage("complete");
@@ -118,13 +123,15 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       } else {
         toast.error("Failed to generate analysis")
         throw new Error("Initial analysis failed");
-        return
+        
       }
 
     } catch (error) {
       console.error(error);
       setStage("idle"); // Set a proper error stage
       toast.error("Analysis Failed. Please try again later");
+      navigate("/dashboard")
+      return 
     }
   };
 
@@ -234,7 +241,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
           {/* Analysis Column */}
           <div className="lg:col-span-7 order-1 lg:order-2">
             {stage === "analyzing" && <AnalysisProcess />}
-            {stage === "complete" && <AnalysisResults setRequestReview={setRequestReview} ai_analysis_format={ai_analysis!}/>}
+            {stage === "complete" && <AnalysisResults setRequestReview={setRequestReview} ai_analysis_format={ai_analysis!} doc_type={ai_analysis_header?.doc_type!} raw_analysis_id={ai_analysis_header?.raw_analysis_id!}/>}
           </div>
         </div>
       </div>

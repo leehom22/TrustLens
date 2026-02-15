@@ -62,7 +62,7 @@ class FilesSchema(BaseModel):
             doc_ref = db.collection(file_collection)
 
             # if return array, use stream() or get()
-            docs = doc_ref.where("flagged","==","True").stream()
+            docs = doc_ref.where("flagged","==",True).stream()
             flagged_list = []
             
             for doc in docs:

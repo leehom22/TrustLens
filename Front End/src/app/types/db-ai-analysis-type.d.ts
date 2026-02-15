@@ -51,3 +51,12 @@ export interface DocumentAnalysisResult {
   dashboard_header: DashboardHeader;
   layer_results: LayerResult[];
 }
+
+export interface DocumentAnalysisOverallResult {
+  analysis_content: DocumentAnalysisOverallResult
+  created_at: string
+  documentId: string
+  raw_analysis_id: string
+  doc_type: string
+}
+
