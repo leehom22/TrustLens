@@ -318,65 +318,7 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
     return {"message": "Analysis started", "doc_id": doc_id, "status": "processing"}
 
 
-
-# API Routing: An endpoint as a tool for the AI Agent
-@analysis_router.post("/ai-analyze-document", response_model = AnalysisRecord)
-async def analyze_document(
-    request: Request, 
-    file: UploadFile = File(...), 
-    doc_id: str = Form(...),
-    user_id: str = Form(...)
-):
-    req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
-    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
-
-    verified_content_type = file.content_type 
-    # If the guess type different with the file type sent from the user terminal, follow guess type
-    guessed_type, _ = mimetypes.guess_type(file.filename)
-    if guessed_type and guessed_type != verified_content_type:
-        logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
-                    extra={"request_id": req_id})
-        verified_content_type = guessed_type
-
-    # Security check for invalid or unsafe file source
-    if verified_content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
-
-    try:
-        ext = os.path.splitext(file.filename)[1]
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, f"{doc_id}{ext}")
-        
-        size = 0
-        with open(temp_path, "wb") as buffer:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > MAX_FILE_SIZE:
-                    raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
-                buffer.write(chunk)
-
-        final_record = await analyze_pipeline(
-            doc_id=doc_id,
-            req_id=req_id,
-            user_id=user_id,
-            file_name=file.filename,
-            original_mime_type=verified_content_type,
-            file_url=None,
-            local_path_override=temp_path
-        )
-        
-        # Cleaning
-        if os.path.exists(temp_path): os.remove(temp_path)
-        return final_record
-    
-    except Exception as e:
-        logger.error(f"Analysis failed: {e}")
-        if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
-        raise HTTPException(status_code=500, detail=str(e))    
-
-        # ====================== Pipeline Execution (Parallelized) =======================
-
-
+# ==================== AI for Restructuring Data (suit for Frontend Display) ==================
 @analysis_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
     documentId: str = Form(...), 
@@ -456,7 +398,8 @@ async def generate_document_dashboard(
     except Exception as e:
         return {"error": f"Forensic analysis failed: {str(e)}"}
     
-    
+
+# ================== Get Structured Data for Frontend =====================
 @analysis_router.post("/get-doc-analysis")
 async def get_document_analysis (docId: str = Form(...)):
     try:
