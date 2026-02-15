@@ -3,11 +3,21 @@ import { AlertCircle, CheckCircle, Loader2, ThumbsDown, ThumbsUp, XCircle } from
 import React, { useState } from 'react'
 import { toast } from 'react-toastify';
 
-const ExpertReview = (props: {userId: string, documentId: string}) => {
+interface ExpertReviewProps {
+    userId: string, 
+    documentId: string, 
+    doc_type: string, 
+    structure_analysis_id: string, 
+    analysis_id: string, 
+    target_layer: string
+}
+
+const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , analysis_id, target_layer } : ExpertReviewProps) => {
     const [reviewDecision, setReviewDecision] = useState<String | null>(null);
     const [reviewNotes, setReviewNotes] = useState('');
-    const [agreeAnalysis, setAgreeAnalysis] = useState(null)
+    const [agreeAnalysis, setAgreeAnalysis] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
+    const [selectedTabs, setSelectedTabs] = useState<string>("layer1")
     const backendUrl = import.meta.env.VITE_BACKEND_URL
 
     const handleReviewSubmit = async () => {
@@ -16,24 +26,41 @@ const ExpertReview = (props: {userId: string, documentId: string}) => {
             return;
         }
         try {
-            // alert(`Review submitted: ${reviewDecision}\nNotes: ${reviewNotes} \nAgree analysis : ${agreeAnalysis}`);
-            // const document_review = {
-            //     document_id: props.documentId,
-            //     user_id: props.userId, 
-            //     review_decision: reviewDecision,
-            //     review_notes: reviewNotes,
-            //     review_agrees: agreeAnalysis
-            // }
+            switch(target_layer){
+                case 'metadata':
+                    setSelectedTabs('layer1')
+                    break
+                case 'heatmap':
+                    setSelectedTabs('layer2')
+                    break
+                case 'content':
+                    setSelectedTabs('layer3')
+                    break
+                case 'findings':
+                    setSelectedTabs('layer4')
+                    break
+                default:
+                    setSelectedTabs('layer1')
+                    break
+            }
+            
             setIsLoading(true)
+            console.log("Layer: ",selectedTabs, analysis_id, structure_analysis_id, doc_type, documentId, userId, )
             const res = await axios.post(`${backendUrl}/feedback/submit_document_review`,  {
-                document_id: props.documentId,
-                user_id: props.userId, 
+                target_layer: selectedTabs,
+                analysis_id: analysis_id, // raw analysis id 
+                structure_analysis_id : structure_analysis_id,
+                doc_type: doc_type,
+                docId: documentId,
+                user_id: userId, 
                 review_decision: reviewDecision,
                 review_notes: reviewNotes,
                 review_agrees: agreeAnalysis
             })
             const result = res.data
+
             if(result.success){
+                console.log("SelectedTabs: ",selectedTabs)
                 toast.success("Review submitted")
                 setReviewDecision(null);
                 setReviewNotes('');

@@ -5,15 +5,20 @@ from app.services.layerFeedback import analyze_feedback_content
 
 class FeedbackCreate(BaseModel):
     analysis_id: str
+    doc_type : str
     analysis_type: str = Field(..., description="layer1 | layer2 | layer3 | layer4")
     feedback_text: str
 
 class ExpertReview(BaseModel):
-    document_id: str
+    docId: str
     user_id: str # expert id 
     review_decision: str
     review_notes: str
     review_agrees: bool
+    target_layer: str
+    analysis_id: str 
+    structure_analysis_id : str
+    doc_type: str
 
 class FeedbackModel:
     
@@ -34,7 +39,7 @@ class FeedbackModel:
         # --- Execution of AI Lesson Learning ---
         lesson = analyze_feedback_content(
             text = feedback.feedback_text, 
-            current_doc_type = current_doc_type,
+            current_doc_type = current_doc_type, # get from frontend 
             analysis_type = feedback.analysis_type
         )
         
@@ -44,7 +49,7 @@ class FeedbackModel:
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user_id": user_id,
             "email": email,
-            "doc_type": current_doc_type, 
+            # "doc_type": current_doc_type, 
             "target_layer": feedback.analysis_type,
             
             # AI Lesson Summary
@@ -68,12 +73,12 @@ class FeedbackModel:
         try:
             data = review.model_dump()
             data['timestamp'] = firestore.SERVER_TIMESTAMP
-            
+            print("Expert Review data: ",data)
             _, doc_ref = db.collection('document_review').add(data)
             
             # update 'expertReview' to true (from upload_files)
             document = db.collection('upload_files')
-            docId = review.document_id
+            docId = review.docId
             
             document.document(docId).update({
                 "expertReview" : True # for Js 
@@ -83,5 +88,23 @@ class FeedbackModel:
         except Exception as e:
             print("Error creating expert review: ",e)
             raise e
+        
+    @staticmethod
+    def get_expert_review(docId: str):
+        try:
+            query = db.collection('document_review').where("docId","==",docId)
+            
+            docs_snap = query.get()
+            
+            data = []
+            for doc in docs_snap:
+                doc_data = doc.to_dict()
+                doc_data['id'] = doc.id
+                data.append(doc_data)
+                
+            return data
+        except Exception as e:
+            print("Error reading document expert review: ",e)
+            return []
     
   

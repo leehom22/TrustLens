@@ -53,7 +53,6 @@ async def analyze_pipeline(
     file_url: str = None
 ) -> AnalysisRecord:    
         
-
     temp_path = local_path_override
     downloaded_temp = False 
 
@@ -61,8 +60,6 @@ async def analyze_pipeline(
         logger.info(f"🚀 [Analysis Pipeline] Processing {doc_id}...")
 
         # --- Prepare Document ---
-        # If Main.py passes local file path, else try to download from Firestore
-
         if not temp_path:
             if not file_url:
                 raise ValueError("Neither local_path nor file_url provided.")
@@ -87,22 +84,19 @@ async def analyze_pipeline(
             logger.info(f"MIME corrected: {verified_content_type} -> {guessed_type}")
             verified_content_type = guessed_type
 
-
         # ==================== Execution of Pipeline ======================        
-        # Optimization: Run L1, L2, and L3 in parallel to avoid blocking logic
         loop = asyncio.get_running_loop()
         logger.info("Dispatching parallel tasks for L1, L2, L3...", extra={"request_id": req_id})
 
-        # 1. Schedule CPU-bound tasks (L1 & L2) in default executor (ThreadPool)
-        # This prevents the main event loop from blocking during image processing
         t1 = loop.run_in_executor(None, run_layer_1_metadata, temp_path, verified_content_type)
         t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
-        
-        # 2. Schedule IO-bound task (L3) directly
         t3 = run_layer_3_extraction(temp_path, verified_content_type)
 
         # 3. Wait for all layers to complete
-        l1_res, l2_res, l3_data = await asyncio.gather(t1, t2, t3)
+        l1_res, l2_res, l3_data_raw = await asyncio.gather(t1, t2, t3)
+
+        # CRITICAL FIX: Prevent 'NoneType' error if extraction failed
+        l3_data = l3_data_raw if l3_data_raw is not None else {}
 
         evidence_urls = {
             "original_document": file_url 
@@ -126,33 +120,34 @@ async def analyze_pipeline(
         evidence_chain = []
         
         # [Step 1: Process L3 Data & Profile Selection]
-        # Determine Doc Type and Load Risk Profile
-        doc_type_raw = l3_data.get("doc_type", "unknown").lower().replace(" ", "_")
+        # Use str() and .get() with fallback to avoid crash on None
+        doc_type_raw = str(l3_data.get("doc_type", "unknown")).lower().replace(" ", "_")
         
         detected_profile_key = "unknown"
         for key in DOC_RISK_PROFILES:
             if key in doc_type_raw:
                 detected_profile_key = key
                 break
-        profile = DOC_RISK_PROFILES[detected_profile_key]
+        
+        # Safety check for profile dictionary
+        profile = DOC_RISK_PROFILES.get(detected_profile_key, DOC_RISK_PROFILES.get("unknown", {}))
         logger.info(f"Document Classified as: {detected_profile_key.upper()}", extra={"request_id": req_id})
         
         # [Step 2] Layer 1: Metadata
-        evidence_chain.append(l1_res)
+        if l1_res: evidence_chain.append(l1_res)
         
         # [Step 3] Layer 2: Visual ELA
-        evidence_chain.append(l2_res)
+        if l2_res: evidence_chain.append(l2_res)
             
         # [Step 4] Layer 3: Content
         l3_score = 0
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
         
-        # Helper: Get inference data safely
-        l3_inf = l3_data.get("risk_inference", {})
+        # Safety: risk_inference might be None
+        l3_inf = l3_data.get("risk_inference") or {}
         
         # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
-        # Resume Specific Check: Hidden Text
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
             l3_score = 100
             l3_status = LayerStatus.HIGH_RISK
@@ -192,10 +187,9 @@ async def analyze_pipeline(
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
             
-            
         # [Step 6] Layer 0: Final Technical Judge (Deterministic)
-        judge_res = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
-    
+        judge_res_raw = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
+        judge_res = judge_res_raw if judge_res_raw is not None else {}
         
         # [Step 7] Packing Analysis Report to AI Agent
         rule_metadata = {
@@ -205,51 +199,42 @@ async def analyze_pipeline(
             }
 
         grounding_info = {}
-        if l3_data:
-            # Basic Info
-            # Helper to safely get nested dicts
-            raw_content = l3_data.get("raw_document_content", "")
-            vendor = l3_data.get("vendor_info", {})
-            fins = l3_data.get("financials", {})
-            dates = l3_data.get("dates", {})
-            payment = l3_data.get("payment_info", {})
-            contact = vendor.get("contact", {})
+        raw_content = l3_data.get("raw_document_content", "")
+        
+        # Nested safety check for Step 7
+        vendor = l3_data.get("vendor_info") or {}
+        fins = l3_data.get("financials") or {}
+        dates = l3_data.get("dates") or {}
+        payment = l3_data.get("payment_info") or {}
+        contact = vendor.get("contact") or {}
 
-            grounding_info = {
-                "vendor_name": vendor.get("name"),
-                "vendor_address": vendor.get("address"),
-                "total_amount": fins.get("total_amount"),
-                "currency": fins.get("currency"),
-                "invoice_date": dates.get("invoice_date")
-            }
-            
-            # Contact Method (Validate the contacts with vendors' official info)
-            contact = l3_data.get("vendor_info", {}).get("contact", {})
-            grounding_info["vendor_contact"] = {
+        grounding_info = {
+            "vendor_name": vendor.get("name"),
+            "vendor_address": vendor.get("address"),
+            "total_amount": fins.get("total_amount"),
+            "currency": fins.get("currency"),
+            "invoice_date": dates.get("invoice_date"),
+            "vendor_contact": {
                 "phone": contact.get("phone"),
                 "website": contact.get("website"),
                 "email": contact.get("email")
-            }
-
-            # Payment Info (Identify personal account as a common scamming mode)
-            payment = l3_data.get("payment_info", {})
-            grounding_info["payment_details"] = {
+            },
+            "payment_details": {
                 "bank_name": payment.get("bank_name"),
                 "account_no": payment.get("account_number"),
                 "holder_name": payment.get("account_holder_name")
             }
+        }
 
         report = FinalReport(
             request_id = req_id,
             timestamp = datetime.now(),
             doc_type = detected_profile_key,
-
             overall_risk_score = judge_res.get("overall_risk_score", 0),
             risk_level = judge_res.get("risk_level", "Unknown"),
             risk_signals = judge_res.get("risk_signals", []),
             summary_code = judge_res.get("summary_code", "UNKNOWN"),
             evidence_chain = evidence_chain,
-
             rule_metadata = rule_metadata,
             grounding_info = grounding_info,
             raw_document_content = raw_content
@@ -257,15 +242,14 @@ async def analyze_pipeline(
 
         logger.info("Technical Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
 
-
-        # [Step 8] AI Agent Investigation (Contextual Layer) 
-        ai_results = await run_agent_analysis(report)
+        # [Step 8] AI Agent Investigation
+        ai_res_raw = await run_agent_analysis(report)
+        ai_results = ai_res_raw if ai_res_raw is not None else {}
         
-        # [Step 9] Hybrid Merge (Grounding and Technical)
-        tech_score = report.overall_risk_score
+        # [Step 9] Hybrid Merge
+        tech_score = report.overall_risk_score or 0
         grounding_score = ai_results.get("grounding_score", 0)
         
-        # Max Voting
         final_risk_score = max(tech_score, grounding_score)
         
         final_rec = "REVIEW"
@@ -276,43 +260,41 @@ async def analyze_pipeline(
         else:
             final_rec = "REVIEW"
 
-        # If AI feels suspicious, recommend for expert review even with low score
         if ai_results.get("verification_status") == "SUSPICIOUS" and final_rec == "ACCEPT":
             final_rec = "REVIEW"
 
         # [Step 10] Packaging AnalysisRecord
         final_record = AnalysisRecord(
-            **report.dict(),    # parsing report
+            **report.dict(),
             doc_id = doc_id, 
             req_id = req_id,
             user_id = user_id, 
             file_name = file_name,
-
-            # Fill in AI result
             agent_summary = ai_results.get("agent_summary"),
             verification_status = ai_results.get("verification_status"),
             grounding_score = grounding_score,
             grounding_result = ai_results.get("grounding_result"),
             layer_summaries = ai_results.get("layer_summaries"),
             active_lessons_applied = ai_results.get("active_lessons_applied", []),
-            
-            # Fill in Deterministic Score
             final_recommendation = final_rec
         )
         
-        # [Step 11] Session Memory in Firestore (As RAG of Chatbot)
+        # [Step 11] Session Memory
         try:
             db.collection("analysis_results").document(req_id).set(final_record.dict())
             logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
 
-        # Sent back to front-end
         return final_record
     
     except Exception as e:
         logger.error(f"Pipeline Critical Error: {e}")
-        db.collection("analysis_results").document(doc_id).set({"status": "error", "error_msg": str(e)}, merge=True)
+        # Use a safe fallback for Firestore if doc_id exists
+        if doc_id:
+            try:
+                db.collection("analysis_results").document(doc_id).set({"status": "error", "error_msg": str(e)}, merge=True)
+            except: pass
         raise e
 
     finally:
@@ -414,6 +396,7 @@ async def generate_document_dashboard(
     
     # Parse the raw data to include it in the prompt
     raw_json = json.loads(document_raw_data)
+    print("=========================== Raw json is f{raw_json}===========================")
     raw_analysis_id = raw_json.get('request_id', 'unknown')
     prompt = f"""
     You are a forensic document expert. Analyze the attached IMAGE and the provided DATA.
@@ -457,37 +440,81 @@ async def generate_document_dashboard(
     }}
     """
 
+   
+    if raw_json is not None:
+        raw_analysis_id = raw_json.get('request_id', 'unknown')
+    else:
+        # Fallback if raw_json is missing
+        raw_analysis_id = 'unknown'
+        print("Warning: raw_json was None. Using 'unknown' as ID.")
+
+    # 2. Extract and clean the AI response
     try:
-        # Multi-modal call: Pass both the prompt text AND the image
         response = model.generate_content([prompt, image_parts[0]])
-        
+
         clean_json = response.text.strip().replace('```json', '').replace('```', '')
         analysis_map = json.loads(clean_json)
-        db_payload = {
-            "documentId": documentId,
-            "raw_analysis_id": raw_analysis_id,
-            "analysis_content": analysis_map, # Saving as a Map/Object is better than a string
-            "created_at": datetime.utcnow().isoformat()
-        }
-        # request_id + documentId 
-        db.collection("structure_analysis_result").add(db_payload)
-        return json.loads(clean_json)
-
     except Exception as e:
-        return {"error": f"Forensic analysis failed: {str(e)}"}
+        # Fallback if JSON parsing fails
+        analysis_map = {"error": "Failed to parse AI response", "raw": response.text}
+
+    # 3. Initialize doc_type with a default value to avoid NameErrors
+    doc_type = "unknown" 
+
+    # 4. Firestore Fetch
+    doc_ref = db.collection('analysis_results').document(raw_analysis_id)
+    doc_snap = doc_ref.get()
+
+    if doc_snap.exists:
+        doc_data = doc_snap.to_dict()
+        doc_type = doc_data.get('doc_type', 'unknown')
+
+    # 5. Build Payload
+    db_payload = {
+        "documentId": documentId,
+        "raw_analysis_id": raw_analysis_id,
+        "doc_type": doc_type,
+        "analysis_content": analysis_map, 
+        "created_at": datetime.utcnow().isoformat()
+    }
+
+    # 6. Save and Return
+    db.collection("structure_analysis_result").add(db_payload)
+    return db_payload  # This is perfectly fine!
+
     
 
 # ============= Get Doc Analysis at Frontend for History Chat Display =============
 @analysis_router.post("/get-doc-analysis")
-async def get_document_analysis (docId: str = Form(...)):
+async def get_document_analysis(docId: str = Form(...)):
     try:
-        doc_ref = db.collection(structure_analysis_collection).where("documentId","==",docId)
+        # 1. Correctly define the query
+        query = db.collection(structure_analysis_collection).where("documentId", "==", docId)
         
-        docs = doc_ref.get()
-        if docs:
-            doc_data = docs[0].to_dict()
-            return {"success":True,"data":doc_data}
+        # 2. Execute the query to get a list of snapshots
+        docs = query.get()
+        
+        # 3. Check if any documents were found
+        if docs and len(docs) > 0:
+            # Get the first document found
+            doc_snap = docs[0]
+            doc_data = doc_snap.to_dict()
+            
+            # 4. Correctly attach the document ID to the data
+            doc_data['id'] = doc_snap.id
+            
+            return {"success": True, "data": doc_data}
+        
+        # Handle case where no document matches the ID
+        return {"success": False, "message": "Document not found"}
         
     except Exception as e:
-        print("Error occur while fetching document analysis: ",e)
-        return {"success":False}
+        # Use a logger in production instead of print
+        print(f"Error occurred while fetching document analysis: {e}")
+        return {"success": False, "error": str(e)}
+    
+        
+    
+        
+    
+    
