@@ -7,11 +7,21 @@ from ..utils.schemas import LayerResult, LayerStatus
 from ..utils.utils import parse_pdf_date
 
 
-# Source (Editor tools / Online PDF tools)
+# ===== Source (Editor tools / Online PDF tools) =====
+
 SOFTWARE_RISK_MAP = {
     "high": ["photoshop", "gimp", "paint", "meitu", "snapseed", "editor"],
     "medium": ["canva", "ilovepdf", "smallpdf", "foxyutils", "phantompdf", "camscanner"]
 }
+
+SOFTWARE_WHITELIST = [
+    "pdf-xchange", 
+    "acrobat distiller", 
+    "microsoft word", 
+    "canon", 
+    "hp", 
+    "brother" # 打印机驱动常被误报
+]
 
 
 # =============== Structural Check Function ==================
@@ -91,20 +101,22 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
 
             p_lower = producer.lower()
             c_lower = creator.lower()
+            full_meta_str = f"{p_lower} {c_lower}"
             
             # Evaluation 2: High Risk Tools and Medium Risk Tools
-            found_high = [t for t in SOFTWARE_RISK_MAP["high"] if t in p_lower or t in c_lower]
-            found_medium = [t for t in SOFTWARE_RISK_MAP["medium"] if t in p_lower or t in c_lower]
-            
-            if found_high:
-                score += 35
-                status = LayerStatus.SUSPICIOUS
-                risk_factors.append(f"Edited with high-risk image software: {found_high[0]}")
-                details["software_risk"] = "High"
-            elif found_medium:
-                score += 15
-                risk_factors.append(f"Processed by consumer tool: {found_medium[0]}")
-                details["software_risk"] = "Medium"
+            is_whitelisted = any(safe in full_meta_str for safe in SOFTWARE_WHITELIST)
+            if not is_whitelisted:
+                found_high = [t for t in SOFTWARE_RISK_MAP["high"] if t in full_meta_str]
+                found_medium = [t for t in SOFTWARE_RISK_MAP["medium"] if t in full_meta_str]
+                if found_high:
+                    score += 35
+                    status = LayerStatus.SUSPICIOUS
+                    risk_factors.append(f"Edited with high-risk image software: {found_high[0]}")
+                    details["software_risk"] = "High"
+                elif found_medium:
+                    score += 15
+                    risk_factors.append(f"Processed by consumer tool: {found_medium[0]}")
+                    details["software_risk"] = "Medium"
             
             # Evaluation 1 + 2: Contextualize (Risk Increases when both incremental updates and tools exist)
             if struct.get("has_incremental_updates") and (found_high or found_medium):
