@@ -312,7 +312,7 @@ def get_mode_config(mode: str, req_id: str):
         End your response with a clear summary:
         "**Final Verdict**: [Safe / Suspicious / High Risk / Critical]"
         """
-        return {"tools": [forensic_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary], "prompt": prompt}
 
     elif mode == "contract_guardian":
 
@@ -344,7 +344,7 @@ def get_mode_config(mode: str, req_id: str):
         End with:
         "**Commercial Risk Summary**: [Brief summary of unfair terms]"
         """
-        return {"tools": [forensic_tool, raw_text_tool, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
 
     elif mode == "policy_advisor":
 
@@ -368,7 +368,7 @@ def get_mode_config(mode: str, req_id: str):
         End with:
         "**Compliance Status**: [Compliant / Non-Compliant / Missing Info]"
         """
-        return {"tools": [forensic_tool, raw_text_tool, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
 
     elif mode == "rejection_letter":
 
@@ -385,11 +385,11 @@ def get_mode_config(mode: str, req_id: str):
         1. **GET FACTS**: Call `get_forensic_summary` to get the specific reasons (e.g., "Metadata inconsistency").
         2. **DRAFT**: Write the email citing the specific signals found.
         """
-        return {"tools": [forensic_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary], "prompt": prompt}
 
     else:
         # Default Fallback (All Knowledge Included for Safety)
-        return {"tools": [forensic_tool], "prompt": f"{UNIVERSAL_BEHAVIOR}\nROLE: Forensic Analyst.\n{ORIGINAL_FORENSIC_KNOWLEDGE}\n{COGNITIVE_GUIDELINES}"}
+        return {"tools": [get_forensic_summary], "prompt": f"{UNIVERSAL_BEHAVIOR}\nROLE: Forensic Analyst.\n{ORIGINAL_FORENSIC_KNOWLEDGE}\n{COGNITIVE_GUIDELINES}"}
 
 
 
@@ -401,38 +401,82 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
     doc_type = doc_meta.get("doc_type", "unknown").lower()
     q_lower = user_query.lower()
 
-    # Back to Summary
-    if current_mode != "forensic_analyst":
-        suggestions.append({
-            "label": "📊 Back to Analysis", "mode": "forensic_analyst", 
-            "query": "Show me the forensic summary again."
-        })
+    # -------------- Keywords Library for Modes Switch Suggestion ---------------- 
+    policy_keywords = [
+        "law", "legal", "legality", "act", "rule", "regulation", "compliance", "compliant", 
+        "tax", "sst", "vat", "lhdn", "irbm", "audit", "valid", "penalty", "statute", "jurisdiction",
+        "invoice rules", "e-invoice"
+    ]
+    policy_doc_types = ["invoice", "receipt", "tax", "statement"]
 
-    # High Risk -> Rejection
-    if risk_score > 70 and current_mode != "rejection_letter":
-        suggestions.append({
-            "label": "✉️ Draft Rejection", "mode": "rejection_letter", 
-            "query": "Draft a strong rejection letter based on these risks."
-        })
+    # 🛡️ Contract Guardian: 关注条款、陷阱、公平性
+    contract_keywords = [
+        "clause", "term", "agreement", "risk", "loophole", "fair", "unfair", 
+        "terminate", "liability", "sign", "trap", "hidden", "obligation", "right"
+    ]
+    contract_doc_types = ["contract", "agreement", "mou", "nda", "offer letter"]
 
-    # Doc Type Specific
-    if ("contract" in doc_type or "agreement" in doc_type) and current_mode != "contract_guardian":
-        suggestions.append({
-            "label": "🛡️ Audit Clauses", "mode": "contract_guardian", 
-            "query": "Check for unfair clauses."
-        })
+    # ✉️ Rejection Letter: 关注拒绝、欺诈、草拟邮件
+    rejection_keywords = [
+        "draft", "write", "email", "reject", "refuse", "fake", "scam", "reply", 
+        "decline", "deny", "letter"
+    ]
+
+    # 📊 Forensic Analyst: 关注原本的分析、总结
+    forensic_keywords = [
+        "summary", "analysis", "detect", "scan", "check", "evidence", "original", "metadata"
+    ]
+
+
+    # -------------------- Smart Logic ------------------------
+
+    # 1. Back to Summary (Intent)
+    # Any other modes can suggest going back to Forensic Analysis mode to review the summary, but Rejection Letter mode should not (to avoid confusion in tone and purpose)
+    if current_mode != "forensic_analyst" and current_mode != "rejection_letter" or (any(k in q_lower for k in forensic_keywords) or "show me" in q_lower):
+             suggestions.append({
+                "label": "📊 Back to Analysis",  
+                "mode": "forensic_analyst", 
+                "query": "Show me the forensic summary again."
+            })
+
+    # 2. Rejection Letter (High risk score + Intent) 
+    if current_mode != "rejection_letter":
+        if risk_score > 70 or any(k in q_lower for k in rejection_keywords):
+            suggestions.append({
+                "label": "✉️ Draft Rejection", 
+                "mode": "rejection_letter", 
+                "query": "Draft a strong rejection letter based on these risks."
+            })
+
+    # 3. Contract Guardian (Contract as doc_type + Intent)
+    if current_mode != "contract_guardian":
+        is_contract_doc = any(dt in doc_type for dt in contract_doc_types)
+        has_contract_intent = any(k in q_lower for k in contract_keywords)
+        
+        if is_contract_doc or has_contract_intent:
+            suggestions.append({
+                "label": "🛡️ Audit Clauses", 
+                "mode": "contract_guardian", 
+                "query": "Review this for unfair clauses and hidden risks."
+            })
     
-    if any(x in doc_type for x in ["invoice", "receipt", "tax"]) and current_mode != "policy_advisor":
-        suggestions.append({
-            "label": "⚖️ Check Compliance", "mode": "policy_advisor", 
-            "query": "Is this compliant with e-Invoice rules?"
-        })
+    # 4. Policy Advisor (Financial doc + Intent)
+    if current_mode != "policy_advisor":
+        is_financial_doc = any(dt in doc_type for dt in policy_doc_types)
+        has_policy_intent = any(k in q_lower for k in policy_keywords)
 
-    # Intent Trigger
-    if any(k in q_lower for k in ["law", "act", "compliance"]) and current_mode != "policy_advisor":
-        suggestions.append({"label": "⚖️ Switch to Policy Advisor", "mode": "policy_advisor", "query": user_query})
+        if is_financial_doc or has_policy_intent:
+            # If user query already has policy intent, keep it as is. Otherwise, provide a more specific query to guide the user
+            query_text = user_query if has_policy_intent else "Is this compliant with local regulations?"
+            
+            suggestions.append({
+                "label": "⚖️ Check Compliance", 
+                "mode": "policy_advisor", 
+                "query": query_text
+            })
 
-    return suggestions[:2]
+    # At most 3 suggestions
+    return suggestions[:3]
 
 
 # ========================= Main Endpoint =========================
@@ -464,11 +508,12 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         # 3. Start Chat
         # enable_automatic_function_calling=True for SDK to automatically handle Tool Functions Call
         chat = client.aio.chats.create(
-            model="gemini-3-pro-preview",
+            model="gemini-3-flash-preview",
             config=types.GenerateContentConfig(
                 tools=config["tools"],
                 system_instruction=config.get("prompt", ""),
-                temperature=0.3
+                temperature=0.3,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
             ),
             history=formatted_history
         )

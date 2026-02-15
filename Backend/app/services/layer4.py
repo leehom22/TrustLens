@@ -1,10 +1,27 @@
 import re
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from ..utils.schemas import LayerResult, LayerStatus
 
 
 # ================== Helpers ==================
+
+# Decimal Converter
+def to_decimal(val) -> Decimal:
+    if not val: 
+        return Decimal("0.00")
+    
+    if isinstance(val, dict):
+        val = val.get("value", 0)
+        
+    try:
+        # Cleaning punctuation and currency symbol in financing values
+        clean_str = re.sub(r"[^\d.-]", "", str(val))
+        if not clean_str: return Decimal("0.00")
+        return Decimal(clean_str)
+    except InvalidOperation:
+        return Decimal("0.00")
 
 # Parsing Date Time
 def parse_dt(date_str: str) -> Optional[datetime]:
@@ -57,7 +74,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     """
     Forensic Logic Audit Layer.
     Executes deterministic checks on extracted data:
-    1. Math Integrity (Row-level & Tax)
+    1. Math Integrity (Row-level & Tax) - Fully Decimal Based
     2. Payment Route Integrity
     3. Temporal Logic (Time Paradox)
     4. Format Hard Fails (Screenshot on strict docs)
@@ -85,6 +102,10 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     inf = data.get("risk_inference", {})
     doc_type = data.get("doc_type", "unknown")
 
+    total = to_decimal(fin.get("total_amount", data.get("total_amount")))
+    subtotal = to_decimal(fin.get("subtotal_amount"))
+    tax = to_decimal(fin.get("tax_amount"))
+
     # Format date
     invoice_date = parse_dt(dates.get("invoice_date"))
     due_date = parse_dt(dates.get("due_date"))
@@ -97,19 +118,6 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             d = extract_first_date(item.get("desc", ""))
         if d:
             line_item_dates.append(d)
-
-    # Format the values to float
-    def to_float(val):
-        if not val: return 0.0
-        if isinstance(val, dict): 
-            val = val.get("value", 0)
-        # possible to have negative sign on value
-        try: return float(re.sub(r"[^\d.-]", "", str(val))) 
-        except: return 0.0
-
-    total = to_float(fin.get("total_amount", data.get("total_amount")))
-    subtotal = to_float(fin.get("subtotal_amount"))
-    tax = to_float(fin.get("tax_amount"))
 
 
     # ============== Rule 1: Visual Hard Fail (Screenshot Check) ... if later Layer 0 perform well can consider to be removed ==============
@@ -144,19 +152,28 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 # ================= Rule 2: Math Integrity (Row & Tax) =================
     # 2.1 Row Audit
     row_errors = []
-    calc_subtotal = 0.0
+    calc_subtotal = Decimal("0.00")
     
     for idx, item in enumerate(items):
-        q = to_float(item.get("qty", 0))
-        u = to_float(item.get("unit_price", 0))
-        l_total = to_float(item.get("line_total", 0))
+        q = to_decimal(item.get("qty"))
+        u = to_decimal(item.get("unit_price"))
+        l_total = to_decimal(item.get("line_total"))
         
-        if q and u and l_total:
-            if abs((q * u) - l_total) > 0.1:
-                row_errors.append({"idx": idx + 1, "visual": f"{q} * {u} != {l_total}"})
-        
-        row_val = l_total if l_total else (q * u)
+        if q is not None and u is not None:
+            expected = q * u
+            # Check f line_total exists, else use the value in document
+            if l_total is not None and l_total != Decimal("0.00"):
+                # Decimal Comparison (0.02 Tolerance)
+                if abs(expected - l_total) > Decimal("0.02"):
+                    row_errors.append({"idx": idx + 1, "visual": f"{q} * {u} != {l_total}"})
+                row_val = l_total
+            else:
+                row_val = expected
+        else:
+            row_val = l_total # Fallback
+
         calc_subtotal += row_val
+
 
     if row_errors:
         l4_signals.append("MATH_ROW_MISMATCH")
@@ -178,16 +195,12 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
 
     # 2.2 Tax Logic
-    subtotal = to_float(fin.get("subtotal_amount"))
-    tax = to_float(fin.get("tax_amount"))
-    total = to_float(fin.get("total_amount"))
-    
-    base_val = subtotal if subtotal > 0 else calc_subtotal
+    base_val = subtotal if subtotal > Decimal("0.00") else calc_subtotal
 
-    if base_val > 0 and tax > 0:
+    if base_val > Decimal("0.00") and tax > Decimal("0.00"):
         expected = base_val + tax
         diff = abs(total - expected)
-        is_pass = diff <= 1.0
+        is_pass = diff <= Decimal("1.00")   # 1.00 Tolenrance for special tax rules or OCR faults
         
         if not is_pass:
             l4_signals.append("MATH_TAX_LOGIC_FAIL")
@@ -398,8 +411,19 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     if doc_type in ["bank_statement", "payslip"] and len(line_item_dates) > 1:
         
         # --- Real World Sanity Date Check ---
-        real_now = datetime.now()
-        future_violation = next((d for d in line_item_dates if d > real_now), None)
+        real_now = datetime.now(timezone.utc)
+        future_violation = None
+        for d in line_item_dates:
+            # Naive datetime converted into UTC for comparison
+            if d.tzinfo is None:
+                d_aware = d.replace(tzinfo=timezone.utc)
+            else:
+                d_aware = d
+            
+            # 24 hours tolerance for time zone errors
+            if d_aware > (real_now + timedelta(hours=24)):
+                future_violation = d
+                break
         
         if future_violation:
             l4_signals.append("DATE_FROM_FUTURE")
@@ -449,9 +473,10 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
     # ================= Rule 5: Balance Reconciliation =================
     if doc_type == "bank_statement":
-        op_bal = to_float(fin.get("opening_balance"))
-        cl_bal = to_float(fin.get("closing_balance"))
-        if cl_bal == 0 and fin.get("total_amount"): cl_bal = to_float(fin.get("total_amount"))
+        op_bal = to_decimal(fin.get("opening_balance"))
+        cl_bal = to_decimal(fin.get("closing_balance"))
+        if cl_bal == Decimal("0.00") and fin.get("total_amount"): 
+            cl_bal = to_decimal(fin.get("total_amount"))
 
         if op_bal is not None:
             # some bank statement will put Opening/Closing Balance as first or last line, need to filter in calculating the sum
@@ -464,11 +489,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                     continue
                 valid_items.append(i)
             
-            calc_flow = sum([to_float(i.get("line_total")) for i in valid_items])
+            calc_flow = sum([to_decimal(i.get("line_total")) for i in valid_items])
 
             calc_close = op_bal + calc_flow
             diff = abs(calc_close - cl_bal)
-            is_pass = diff <= 0.5    # for tolerance
+            is_pass = diff <= Decimal("0.50")    # for tolerance
             
             if not is_pass:
                 l4_signals.append("BALANCE_RECONCILIATION_FAIL")
