@@ -11,6 +11,9 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
 from app.models.files import FilesSchema
 from dotenv import load_dotenv
+import httpx
+import aiofiles
+
 # ------- Import internal modules ------
 from ..core.auth import get_current_user
 from ..core.config import Config

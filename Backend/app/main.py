@@ -2,6 +2,10 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import uuid
+import tempfile
+import mimetypes
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends, Query
 from dotenv import load_dotenv
 
 # --- Import Routers ---
@@ -12,9 +16,15 @@ from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
+from .routers.analysis import analysis_router, analyze_pipeline
 
+# ------- Import internal modules ------
+from .core.auth import get_current_user
 from .core.config import Config
 from .core.config import EVIDENCE_DIR
+from .core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
+from .utils.schemas import AnalysisRecord
+
 
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
@@ -43,6 +53,65 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API Routing: An endpoint as a tool for the AI Agent
+@app.post("/analyze", response_model = AnalysisRecord)
+async def analyze_document(
+    request: Request, 
+    file: UploadFile = File(...), 
+    doc_id: str = Query(..., description="The Doc ID returned from the upload_files endpoint"), # <--- 必须传 ID
+    user_payload: dict = Depends(get_current_user)
+):
+    user_id = user_payload.get("uid")
+    req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
+    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
+
+    verified_content_type = file.content_type 
+    # If the guess type different with the file type sent from the user terminal, follow guess type
+    guessed_type, _ = mimetypes.guess_type(file.filename)
+    if guessed_type and guessed_type != verified_content_type:
+        logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
+                    extra={"request_id": req_id})
+        verified_content_type = guessed_type
+
+    # Security check for invalid or unsafe file source
+    if verified_content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
+
+    try:
+        ext = os.path.splitext(file.filename)[1]
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, f"{doc_id}{ext}")
+        
+        size = 0
+        with open(temp_path, "wb") as buffer:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
+                buffer.write(chunk)
+
+        final_record = await analyze_pipeline(
+            doc_id=doc_id,
+            req_id=req_id,
+            user_id=user_id,
+            file_name=file.filename,
+            original_mime_type=verified_content_type,
+            file_url=None,
+            local_path_override=temp_path
+        )
+        
+        # Cleaning
+        if os.path.exists(temp_path): os.remove(temp_path)
+        return final_record
+    
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=str(e))    
+
+
+
 
 # ====================== Register Routers =======================
 app.include_router(
