@@ -12,15 +12,17 @@ import Metadata from "../expert/expertDocumentAnalysis/analysisTab/Metadata";
 import ContentAnalysis from "../expert/expertDocumentAnalysis/analysisTab/ContentAnalysis";
 import LogicalConsistency from "../expert/expertDocumentAnalysis/analysisTab/KeyFindings";
 import { DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
+import DocumentFeedback from "./DocumentFeedback";
 
 interface AnalysisResultProps {
   setRequestReview: React.Dispatch<React.SetStateAction<boolean>> 
-  ai_analysis_format: DocumentAnalysisResult 
+  ai_analysis_format: DocumentAnalysisResult,
+  raw_analysis_id: string 
+  doc_type: string
 }
-export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisResultProps) {
+export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,raw_analysis_id}: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
   const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
   const [openFeedback, setOpenFeedback] = useState({
     metadata: false,
@@ -28,59 +30,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisR
     contentAnalysis: false,
     findings: false
   })
-  const [isLoading, setIsLoading] = useState(false)
-  const [userToken, setUserToken] = useState('')
-  const auth = getAuth();
-  const user = auth.currentUser;
   
-  const submitFeedback = async (type: string, event: React.FormEvent<HTMLFormElement>) => {
-    try {
-      event.preventDefault()
-      setIsLoading(true)
-      const formData = new FormData(event.currentTarget);
-      const feedbackText = formData.get("feedback")
-      
-      console.log("Submitting feedback: ", type, feedbackText)
-      
-      // get user id token from firebase auth
-      const token = user ? await user.getIdToken() : null ;
-      token && setUserToken(token)
-
-      const result = await axios.post(`${backendUrl}/feedback/submit_feedback`,{
-        "analysis_id": "test_123",
-        "analysis_type": type,
-        "feedback_text": feedbackText,
-        "document_class": "test_document",
-        "weight": 0.8,
-        "label": "incorrect",
-        "ai_lessons": "Dates must be validated against jurisdiction"
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          "Content-Type": "application/json"
-        }
-      })
-
-      if (result.status === 200) {
-        toast.success("Feedback submitted successfully!");
-        setOpenFeedback(prev => ({
-          ...prev,
-          metadata: false,
-          heatmap: false,
-          contentAnalysis: false,
-          findings: false
-        }))
-      } else {
-        toast.error("Error submitting feedback. Please try again later.");
-      }
-    } catch (error) {
-      console.error("Error submitting feedback: ", error)
-      toast.error("Error submitting feedback. Please try again later.");
-    } finally {
-      setIsLoading(false)
-    }
-  }
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -147,42 +97,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisR
             </div>
           }
           {openFeedback.metadata && (
-            <div className="relative"> {/* Added relative wrapper */}
-              <form
-                className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("layer1", e)}
-              >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Metadata & Source</b> analysis?</p>
-
-                <textarea
-                  name="feedback"
-                  id="feedback"
-                  disabled={isLoading}
-                  className="p-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white"
-                  placeholder="Your feedback..."
-                ></textarea>
-
-                <div className="flex gap-3 justify-end">
-                  <button
-                    disabled={isLoading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center gap-2"
-                  >
-                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isLoading ? 'Submitting...' : 'Submit'}
-                  </button>
-
-                  {!isLoading && (
-                    <button
-                      type="button"
-                      className="bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-                      onClick={() => setOpenFeedback(prev => ({ ...prev, metadata: false }))}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+            <DocumentFeedback layerType="layer1" setOpenFeedback={setOpenFeedback} section="Metadata & Source" analysis_id={raw_analysis_id} document_class={doc_type}/>
           )}
         </TabsContent>
 
@@ -200,42 +115,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisR
             </div>
           }
           {openFeedback.heatmap && (
-            <div className="relative"> {/* Added relative wrapper */}
-              <form
-                className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("layer2", e)}
-              >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Visual Manipulation</b> analysis?</p>
-
-                <textarea
-                  name="feedback"
-                  id="feedback"
-                  disabled={isLoading}
-                  className="p-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white"
-                  placeholder="Your feedback..."
-                ></textarea>
-
-                <div className="flex gap-3 justify-end">
-                  <button
-                    disabled={isLoading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center gap-2"
-                  >
-                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isLoading ? 'Submitting...' : 'Submit'}
-                  </button>
-
-                  {!isLoading && (
-                    <button
-                      type="button"
-                      className="bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-                      onClick={() => setOpenFeedback(prev => ({ ...prev, heatmap: false }))}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+            <DocumentFeedback layerType="layer2" setOpenFeedback={setOpenFeedback} section="Visual Manipulation" analysis_id={raw_analysis_id} document_class={doc_type}/>
           )}
         </TabsContent>
 
@@ -253,42 +133,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisR
             </div>
           }
           {openFeedback.contentAnalysis && (
-            <div className="relative"> {/* Added relative wrapper */}
-              <form
-                className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("layer3", e)}
-              >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Content Semantics</b> analysis?</p>
-
-                <textarea
-                  name="feedback"
-                  id="feedback"
-                  disabled={isLoading}
-                  className="p-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white"
-                  placeholder="Your feedback..."
-                ></textarea>
-
-                <div className="flex gap-3 justify-end">
-                  <button
-                    disabled={isLoading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center gap-2"
-                  >
-                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isLoading ? 'Submitting...' : 'Submit'}
-                  </button>
-
-                  {!isLoading && (
-                    <button
-                      type="button"
-                      className="bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-                      onClick={() => setOpenFeedback(prev => ({ ...prev, contentAnalysis: false }))}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+            <DocumentFeedback layerType="layer3" setOpenFeedback={setOpenFeedback} section="Content Semantics" analysis_id={raw_analysis_id} document_class={doc_type}/>
           )}
         </TabsContent>
 
@@ -306,42 +151,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format}: AnalysisR
             </div>
           }
           {openFeedback.findings && (
-            <div className="relative"> {/* Added relative wrapper */}
-              <form
-                className={`flex flex-col gap-5 mb-6 border rounded-2xl p-5 bg-white dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 transition-opacity ${isLoading ? 'opacity-80 pointer-events-none' : ''}`}
-                onSubmit={(e) => submitFeedback("layer4", e)}
-              >
-                <p className="text-gray-900 dark:text-white">What do you think about the <b>Logical Consistency</b> analysis?</p>
-
-                <textarea
-                  name="feedback"
-                  id="feedback"
-                  disabled={isLoading}
-                  className="p-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white"
-                  placeholder="Your feedback..."
-                ></textarea>
-
-                <div className="flex gap-3 justify-end">
-                  <button
-                    disabled={isLoading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition flex items-center gap-2"
-                  >
-                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isLoading ? 'Submitting...' : 'Submit'}
-                  </button>
-
-                  {!isLoading && (
-                    <button
-                      type="button"
-                      className="bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-                      onClick={() => setOpenFeedback(prev => ({ ...prev, findings: false }))}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+            <DocumentFeedback layerType="layer4 " setOpenFeedback={setOpenFeedback} section="Logical Consistency" analysis_id={raw_analysis_id} document_class={doc_type}/>
           )}
         </TabsContent>
       </Tabs>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form
 from app.models.feedback import FeedbackModel,FeedbackCreate, ExpertReview
 from app.core.auth import get_current_user
 feedback_router = APIRouter()
@@ -28,7 +28,6 @@ def submit_feedback(data: FeedbackCreate , user = Depends(get_current_user)):
 # expert review
 @feedback_router.post("/submit_document_review")
 def submit_document_review(data: ExpertReview):
-    print("----------- Received Document Review ----------------")
     
     review_id = FeedbackModel.create_expert_review(data)
     
@@ -38,9 +37,24 @@ def submit_document_review(data: ExpertReview):
             "message": "Failed to submit document review"
         }
     
-    print(f"Document Reviwe submitted with ID {review_id}")
     return {
         "success": True,
         "message":"Document Review submitted",
         "review_id": review_id
     }
+    
+@feedback_router.get("/get_document_review")
+def get_document_review(docId:str):
+    try:
+        doc_review = FeedbackModel.get_expert_review(docId)
+        
+        return {
+            "success":True,
+            "review":doc_review
+        }
+    except Exception as e:
+        print("Error fetching document review: ",e)
+        return {
+            "success": False,
+            "review":[]
+        }
