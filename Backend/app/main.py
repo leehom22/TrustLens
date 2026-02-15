@@ -114,8 +114,6 @@ async def analyze_document(
         if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))    
 
-        # ====================== Pipeline Execution (Parallelized) =======================
-
 
 
 
