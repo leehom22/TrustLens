@@ -11,6 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
 from app.models.files import FilesSchema
 from dotenv import load_dotenv
+from ..utils.utils import upload_evidence_to_storage
 
 # ------- Import internal modules ------
 from ..core.auth import get_current_user
@@ -102,6 +103,25 @@ async def analyze_pipeline(
 
         # 3. Wait for all layers to complete
         l1_res, l2_res, l3_data = await asyncio.gather(t1, t2, t3)
+
+        evidence_urls = {
+            "original_document": file_url 
+        }
+
+        ela_local_path = l2_res.details.get("generated_image_path") 
+        
+        if ela_local_path and os.path.exists(ela_local_path):
+            # Keep the same folder structure in storage for easy retrieval, but use req_id to avoid conflicts
+            ela_dest = f"evidence/{req_id}/visual_ela.jpg"
+            ela_url = upload_evidence_to_storage(ela_local_path, ela_dest, "image/jpeg")
+            
+            l2_res.details["visual_evidence_url"] = ela_url
+            evidence_urls["ela_heatmap"] = ela_url
+            logger.info(f"ELA Evidence persists at: {ela_url}")
+            
+            # Clean up local ELA file after upload
+            try: os.remove(ela_local_path)
+            except: pass
 
         evidence_chain = []
         

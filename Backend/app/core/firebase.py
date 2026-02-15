@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
 
 # Load .env file
 BASE_DIR = Path(__file__).resolve().parent.parent  # Backend/app/core -> Backend/
@@ -18,6 +18,7 @@ if not cred_path.exists():
 
 # Initialize Firebase
 cred = credentials.Certificate(str(cred_path))
-firebase_admin.initialize_app(cred)
+firebase_admin.initialize_app(cred, {'storageBucket': 'trustlens-632fa.firebasestorage.app'})
 
 db = firestore.client()
+bucket = storage.bucket()
