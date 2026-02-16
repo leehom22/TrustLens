@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
     FileText, 
     Clock, 
@@ -7,36 +7,85 @@ import {
     RotateCcw, 
     ChevronDown, 
     ChevronUp,
-    AlertTriangle
+    AlertTriangle,
+    Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import axios from 'axios';
+import { toast } from 'sonner';
 
-// --- MOCK DATA ---
-// Strictly using "Review Needed" and "Reviewed" for flagged items
-const documents = [
-    { id: 1, name: "Invoice_QTX_882.pdf", aiVerdict: "Metadata Erasure", riskLevel: "High", submissionDate: "2026-02-05", status: "Review Needed" },
-    { id: 2, name: "Uber_Receipt_992.png", aiVerdict: "Arithmetic Mismatch", riskLevel: "High", submissionDate: "2026-02-04", status: "Review Needed" },
-    { id: 3, name: "Salary_Slip_Jan.pdf", aiVerdict: "Font Inconsistency", riskLevel: "Medium", submissionDate: "2026-02-03", status: "Review Needed" },
-    { id: 4, name: "Contract_Vendor_V2.pdf", aiVerdict: "Invalid Signature", riskLevel: "Medium", submissionDate: "2026-02-02", status: "Reviewed" },
-    { id: 5, name: "Safe_Invoice_001.pdf", aiVerdict: "Clear", riskLevel: "Low", submissionDate: "2026-02-01", status: "Reviewed" }, // Low risk (will be hidden)
-    { id: 6, name: "Safe_Receipt_002.png", aiVerdict: "Clear", riskLevel: "Low", submissionDate: "2026-02-01", status: "Reviewed" }, // Low risk (will be hidden)
-    { id: 7, name: "ID_Card_Scan.jpg", aiVerdict: "Hologram Failed", riskLevel: "High", submissionDate: "2026-01-30", status: "Reviewed" }, 
-];
+// --- TYPE DEFINITIONS ---
+// Matching the interface from your ReviewDocumentList
+interface FileDoc {
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    created_at: string;
+    riskScore: number;
+    riskLevel: string;
+    analyzedBy: string;
+    expertReview?: boolean | null;
+}
 
 const UserDashboard = () => {
-    const [sortConfig, setSortConfig] = useState({ key: 'submissionDate', direction: 'desc' });
+    const [dbDocuments, setDbDocuments] = useState<FileDoc[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
     const [searchTerm, setSearchTerm] = useState("");
+    
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
-    // --- 1. FILTER & CALCULATE STATS ---
-    const { stats, flaggedDocuments } = useMemo(() => {
-        // Step A: STRICTLY filter for High/Medium risk only. 
-        // These are the only documents this dashboard cares about.
-        const flaggedDocs = documents.filter(d => d.riskLevel === 'High' || d.riskLevel === 'Medium');
+    // --- 1. FETCH DATA ---
+    const fetchDocuments = async () => {
+        try {
+            const res = await axios.get(`${backendUrl}/files/flagged_document`);
+            if (res.data.success) {
+                setDbDocuments(res.data.files);
+            }
+        } catch (error) {
+            console.error("Failed to fetch files:", error);
+            toast.error("Failed to load dashboard data");
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        // Step B: Calculate counts based ONLY on these flagged docs
-        const reviewNeededCount = flaggedDocs.filter(d => d.status === 'Review Needed').length;
-        const reviewedCount = flaggedDocs.filter(d => d.status === 'Reviewed').length;
-        const totalFlaggedCount = reviewNeededCount + reviewedCount;
+    useEffect(() => {
+        fetchDocuments();
+    }, []);
+
+    // --- 2. FILTER & CALCULATE STATS ---
+    const { stats, filteredDocuments } = useMemo(() => {
+        // A. Filter by Search Term
+        let filtered = dbDocuments.filter((doc) =>
+            doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            doc.riskLevel.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        // B. Calculate Stats (Based on ALL fetched documents, regardless of search)
+        // Logic: Review Needed = expertReview is false/null. Reviewed = expertReview is true.
+        const reviewNeededCount = dbDocuments.filter(d => !d.expertReview).length;
+        const reviewedCount = dbDocuments.filter(d => d.expertReview === true).length;
+        const totalFlaggedCount = dbDocuments.length;
+
+        // C. Sort
+        filtered.sort((a, b) => {
+            // @ts-ignore
+            let aValue = a[sortConfig.key];
+            // @ts-ignore
+            let bValue = b[sortConfig.key];
+
+            // Handle Date Sorting specifically
+            if (sortConfig.key === 'created_at') {
+                aValue = new Date(aValue).getTime();
+                bValue = new Date(bValue).getTime();
+            }
+
+            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
 
         return {
             stats: {
@@ -44,33 +93,14 @@ const UserDashboard = () => {
                 reviewed: reviewedCount,
                 total: totalFlaggedCount
             },
-            flaggedDocuments: flaggedDocs
+            filteredDocuments: filtered
         };
-    }, []);
+    }, [dbDocuments, searchTerm, sortConfig]);
 
-    // --- 2. TABLE DATA (Sort & Search on the filtered list) ---
-    const processedDocs = useMemo(() => {
-        // Filter the ALREADY filtered flagged list by search term
-        let filtered = flaggedDocuments.filter((doc) =>
-            doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            doc.aiVerdict.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-
-        // Sort
-        filtered.sort((a, b) => {
-            // @ts-ignore
-            if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-            // @ts-ignore
-            if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-
-        return filtered;
-    }, [flaggedDocuments, searchTerm, sortConfig]);
-
+    // --- UTILS ---
     const handleReset = () => {
         setSearchTerm("");
-        setSortConfig({ key: 'submissionDate', direction: 'desc' });
+        setSortConfig({ key: 'created_at', direction: 'desc' });
     };
 
     const toggleSort = (key: string) => {
@@ -80,11 +110,27 @@ const UserDashboard = () => {
         }));
     };
 
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
     // --- CHART DATA ---
     const chartData = [
-        { name: 'Reviewed', value: stats.reviewed, color: '#10B981' }, // Emerald (Green)
+        { name: 'Reviewed', value: stats.reviewed, color: '#10B981' }, // Emerald
         { name: 'Review Needed', value: stats.reviewNeeded, color: '#EF4444' }, // Red
     ];
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+                <Loader2 className="animate-spin text-blue-600" size={48} />
+            </div>
+        );
+    }
 
     return (
        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
@@ -98,10 +144,10 @@ const UserDashboard = () => {
 
             <div className="flex flex-col lg:flex-row gap-6 p-6">
                 
-                {/* Left Section: Stats Grid (2x2 Layout) */}
+                {/* Left Section: Stats Grid */}
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                     
-                    {/* Card 1: Review Needed (Red) */}
+                    {/* Card 1: Review Needed */}
                     <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
                             <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Review Needed</p>
@@ -113,7 +159,7 @@ const UserDashboard = () => {
                         <p className="text-xs text-gray-400 mt-2">Pending expert analysis.</p>
                     </div>
 
-                    {/* Card 2: Reviewed (Green) */}
+                    {/* Card 2: Reviewed */}
                     <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
                             <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Reviewed</p>
@@ -125,7 +171,7 @@ const UserDashboard = () => {
                         <p className="text-xs text-gray-400 mt-2">Analysis completed.</p>
                     </div>
 
-                    {/* Card 3: Total Flagged (Bottom - Merged/Full Width) */}
+                    {/* Card 3: Total Flagged */}
                     <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm md:col-span-2 flex items-center justify-between">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
@@ -133,13 +179,12 @@ const UserDashboard = () => {
                                 <span className="flex items-center justify-center bg-orange-100 text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">High Priority</span>
                             </div>
                             <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-                            <p className="text-xs text-gray-400 mt-1">Total Medium & High risk items.</p>
+                            <p className="text-xs text-gray-400 mt-1">Total items in flagged queue.</p>
                         </div>
                         <div className="p-3 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-full">
                             <AlertTriangle size={24} />
                         </div>
                     </div>
-
                 </div>
 
                 {/* Right Section: Chart */}
@@ -182,7 +227,7 @@ const UserDashboard = () => {
                             </div>
                             <input
                                 type="text"
-                                placeholder="Search by name or verdict..."
+                                placeholder="Search by name..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="block w-full pl-10 pr-10 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -199,12 +244,19 @@ const UserDashboard = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                    {processedDocs.length > 0 ? (
+                    {filteredDocuments.length > 0 ? (
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50 dark:bg-slate-900/50 border-b dark:border-slate-800">
-                                    {['#', 'Name', 'AI Verdict', 'Risk Level', 'Flag Date', 'Status'].map((header) => {
-                                        const keyMap: any = { 'Name': 'name', 'AI Verdict': 'aiVerdict', 'Risk Level': 'riskLevel', 'Flag Date': 'submissionDate', 'Status': 'status' };
+                                    {/* Mapped headers to data keys */}
+                                    {['#', 'Name', 'Risk Score', 'Risk Level', 'Flag Date', 'Status'].map((header) => {
+                                        const keyMap: any = { 
+                                            'Name': 'fileName', 
+                                            'Risk Score': 'riskScore', 
+                                            'Risk Level': 'riskLevel', 
+                                            'Flag Date': 'created_at', 
+                                            'Status': 'expertReview' 
+                                        };
                                         return (
                                             <th
                                                 key={header}
@@ -223,33 +275,62 @@ const UserDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y dark:divide-slate-800">
-                                {processedDocs.map((doc, index) => (
+                                {filteredDocuments.map((doc, index) => (
                                     <tr key={doc.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
                                         <td className="px-6 py-4 text-sm text-gray-500">{index + 1}</td>
+                                        
+                                        {/* File Name */}
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg">
                                                     <FileText size={18} />
                                                 </div>
-                                                <span className="font-medium text-gray-900 dark:text-slate-200">{doc.name}</span>
+                                                <span className="font-medium text-gray-900 dark:text-slate-200 truncate max-w-[200px]" title={doc.fileName}>
+                                                    {doc.fileName}
+                                                </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-400">{doc.aiVerdict}</td>
+
+                                        {/* Risk Score (Replaced AI Verdict) */}
+                                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-400">
+                                            <div className="flex items-center gap-2">
+                                                 <span className="font-bold">{doc.riskScore}</span>
+                                                 {/* Visual bar for score */}
+                                                 <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className={`h-full ${doc.riskScore > 70 ? 'bg-red-500' : doc.riskScore > 40 ? 'bg-amber-500' : 'bg-green-500'}`} 
+                                                        style={{ width: `${doc.riskScore}%`}} 
+                                                    />
+                                                 </div>
+                                            </div>
+                                        </td>
+
+                                        {/* Risk Level */}
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium border text-sm
                                                 ${doc.riskLevel === 'High' ? 'bg-red-50 border-red-100 text-red-700 dark:bg-red-900/20 dark:border-red-900/30' :
-                                                  'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900/30'}`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${doc.riskLevel === 'High' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                                                {doc.riskLevel}
+                                                  doc.riskLevel === 'Medium' ? 'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900/30' :
+                                                  'bg-green-50 border-green-100 text-green-700 dark:bg-green-900/20 dark:border-green-900/30'}`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full 
+                                                    ${doc.riskLevel === 'High' ? 'bg-red-500' : 
+                                                      doc.riskLevel === 'Medium' ? 'bg-amber-500' : 
+                                                      'bg-green-500'}`} />
+                                                {doc.riskLevel || 'Low'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">{doc.submissionDate}</td>
+
+                                        {/* Date */}
+                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">
+                                            {formatDate(doc.created_at)}
+                                        </td>
+
+                                        {/* Status (Expert Review Boolean) */}
                                         <td className="px-6 py-4">
                                             <span className={`px-3 py-1 rounded-md text-xs font-semibold text-sm
-                                                ${doc.status === 'Reviewed' 
+                                                ${doc.expertReview === true 
                                                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' 
                                                     : 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400'}`}>
-                                                {doc.status}
+                                                {doc.expertReview === true ? "Reviewed" : "Review Needed"}
                                             </span>
                                         </td>
                                     </tr>

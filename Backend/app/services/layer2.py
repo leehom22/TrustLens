@@ -155,20 +155,20 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "Alignment": align_mask
             }
             
-            # 转换 ELA 为 OpenCV 格式
+            # Convert PIL ELA image to OpenCV format for HUD generation
             ela_cv = pil_to_cv2(ela_img)
             
-            # [核心调用] 生成带 HUD 的战术图
+            # Generate HUD with fused signals (This is the key innovation of Layer 2, providing visual explainability for the AI's decision)
             try:
                 heatmap_cv = generate_hud(
-                    cv_img,          # 原图 (OpenCV)
-                    ela_cv,          # ELA图 (OpenCV)
-                    masks_collection, # 检测结果
-                    int(current_page_score) # 当前页分数
+                    cv_img,          # Original Image (OpenCV)
+                    ela_cv,          # ELA Image (OpenCV)
+                    masks_collection,   # All forensic masks for explainability
+                    int(current_page_score)   # Final fused score for this page
                 )
             except Exception as e:
                 logger.error(f"Visualizer Error: {e}")
-                # 如果可视化失败，回退到原图，避免系统崩溃
+                # Fallback to basic ELA if HUD generation fails
                 heatmap_cv = cv_img
             
 
@@ -181,6 +181,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "page": idx + 1,
                 "score": min(page_score, 100),
                 "url": f"/evidence/{heatmap_name}",
+                "local_path": os.path.abspath(heatmap_path),
                 "metrics": metrics,
                 "confidence": confidence,
                 "note": "Native Digital" if confidence == "HIGH" else "Scan/Noisy"
@@ -214,6 +215,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             risk_signals = l2_signals,
             details = {
                 "analyzed_pages": len(images), 
+                "all_pages": page_results,
                 "worst_page_details": worst,
                 "advanced_analysis": {
                      "fused_check": "Triggered" if max_visual_score > 0 else "Pass"

@@ -4,7 +4,7 @@ import re
 from PIL import Image
 from datetime import datetime
 from dateutil import parser as date_parser
-from fastapi import logger
+from ..core.config import logger
 from ..core.firebase import bucket
 
 def clean_and_repair_json(json_str: str) -> dict:
