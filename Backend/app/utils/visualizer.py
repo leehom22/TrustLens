@@ -2,29 +2,28 @@ import cv2
 import numpy as np
 import random
 
-def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.5, thickness=1, bg_intensity=0.3):
-    """绘制带半透明背景条的文字"""
+def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.6, thickness=2, bg_intensity=0.3):
+    """增加默认 size 和 thickness，提升文字存在感"""
     font = cv2.FONT_HERSHEY_SIMPLEX
     (w, h), _ = cv2.getTextSize(text, font, size, thickness)
     x, y = pos
     
-    h_bg = h + 8
+    h_bg = h + 10
     if y - h_bg < 0: y_adjusted = h_bg + 2
     else: y_adjusted = y
     
-    # 越界检查
-    if x + w > img.shape[1]: x = img.shape[1] - w - 2
+    if x + w > img.shape[1]: x = img.shape[1] - w - 5
     
-    roi = img[y_adjusted-h_bg:y_adjusted+4, x:x+w+4]
-    
-    # 绘制半透明黑色背景条 (Glass Effect)
+    roi = img[y_adjusted-h_bg:y_adjusted+5, x:x+w+5]
     if roi.size > 0:
         black_rect = np.zeros_like(roi, dtype=np.uint8)
         res = cv2.addWeighted(roi, 1.0 - bg_intensity, black_rect, bg_intensity, 0)
-        img[y_adjusted-h_bg:y_adjusted+4, x:x+w+4] = res
+        img[y_adjusted-h_bg:y_adjusted+5, x:x+w+5] = res
 
     cv2.putText(img, text, (x, y_adjusted), font, size, color, thickness, cv2.LINE_AA)
-    return y_adjusted + h + 15
+    return y_adjusted + h + 20
+
+
 
 def calculate_grid_stats(ela_img, grid_size=32):
     """实时计算网格 Z-Score 矩阵"""
@@ -113,10 +112,11 @@ def draw_hazard_zone(img, mask, color, label):
     cv2.addWeighted(overlay, 0.25, img, 0.75, 0, img)
 
 
-def generate_hud(original_cv, ela_cv, masks_dict, global_score):
+def generate_hud(original_cv, ela_cv, masks_dict, global_score, confidence_val=1.0):
     """
     Project GLASS HUD v2: 区域融合版
     """
+
     h, w = original_cv.shape[:2]
     
     # 1. 战术底图 (Blue Tint)
@@ -184,55 +184,108 @@ def generate_hud(original_cv, ela_cv, masks_dict, global_score):
             draw_hazard_zone(base_layer, mask, c, key.upper())
 
     # 4. 右侧半透明 HUD
-    panel_w = 240
-    panel_x = w - panel_w
+    card_w = 320  # 稍微加宽以容纳大字体
+    card_h = 450  # 足够放下指标和直方图
+    margin_top = 30
+    margin_right = 30
     
-    sidebar_roi = base_layer[0:h, panel_x:w]
-    black_layer = np.zeros_like(sidebar_roi)
-    glass_panel = cv2.addWeighted(sidebar_roi, 0.6, black_layer, 0.4, 0) # 调亮一点透明度
-    base_layer[0:h, panel_x:w] = glass_panel
-    cv2.line(base_layer, (panel_x, 0), (panel_x, h), (100, 255, 255), 1)
+    c_x1 = w - card_w - margin_right
+    c_y1 = margin_top
+    c_x2 = w - margin_right
+    c_y2 = margin_top + card_h
+    
+    # 越界保护
+    if c_x1 < 0: c_x1 = 0
+    if c_y2 > h: c_y2 = h
+    
+    # 绘制毛玻璃卡片背景
+    card_roi = base_layer[c_y1:c_y2, c_x1:c_x2]
+    if card_roi.size > 0:
+        black_layer = np.zeros_like(card_roi)
+        # alpha=0.3 原图 + 0.7 黑色 -> 深色半透明
+        glass_card = cv2.addWeighted(card_roi, 0.5, black_layer, 0.5, 0)
+        base_layer[c_y1:c_y2, c_x1:c_x2] = glass_card
+        
+        # 绘制卡片边框 (青色细线)
+        cv2.rectangle(base_layer, (c_x1, c_y1), (c_x2, c_y2), (100, 255, 255), 1)
+        
+        # 绘制四角加固装饰 (Tech Decoration)
+        corner_len = 15
+        corner_color = (100, 255, 255)
+        thick = 2
+        # 左上
+        cv2.line(base_layer, (c_x1, c_y1), (c_x1 + corner_len, c_y1), corner_color, thick)
+        cv2.line(base_layer, (c_x1, c_y1), (c_x1, c_y1 + corner_len), corner_color, thick)
+        # 右上
+        cv2.line(base_layer, (c_x2, c_y1), (c_x2 - corner_len, c_y1), corner_color, thick)
+        cv2.line(base_layer, (c_x2, c_y1), (c_x2, c_y1 + corner_len), corner_color, thick)
+        # 左下
+        cv2.line(base_layer, (c_x1, c_y2), (c_x1 + corner_len, c_y2), corner_color, thick)
+        cv2.line(base_layer, (c_x1, c_y2), (c_x1, c_y2 - corner_len), corner_color, thick)
+        # 右下
+        cv2.line(base_layer, (c_x2, c_y2), (c_x2 - corner_len, c_y2), corner_color, thick)
+        cv2.line(base_layer, (c_x2, c_y2), (c_x2, c_y2 - corner_len), corner_color, thick)
+
 
     # 5. 写入数据
     if global_score > 70:
-        theme_color = (0, 0, 255) 
+        theme_color = (0, 0, 255) # Red
         status_str = "CRITICAL"
-    elif global_score > 30:
-        theme_color = (0, 165, 255) 
+    elif global_score > 35:
+        theme_color = (0, 165, 255) # Orange
         status_str = "SUSPICIOUS"
     else:
-        theme_color = (0, 255, 0) 
+        theme_color = (0, 255, 0) # Green
         status_str = "VERIFIED"
 
-    x_pad = panel_x + 15
-    y_cursor = 50
+    # 文字起始坐标 (相对于卡片左上角)
+    text_x = c_x1 + 20
+    text_y = c_y1 + 50
     
-    draw_hud_text(base_layer, "ANALYSIS HUB", (x_pad, y_cursor), (255, 255, 255), 0.6, 2, 0.0)
-    y_cursor += 30
-    cv2.line(base_layer, (x_pad, y_cursor), (w-15, y_cursor), theme_color, 2)
-    y_cursor += 30
-    draw_hud_text(base_layer, status_str, (x_pad, y_cursor), theme_color, 1.0, 2, 0.0)
-    y_cursor += 40
+    # A. 顶部标题
+    draw_hud_text(base_layer, "FORENSIC HUD", (text_x, text_y), (200, 200, 200), 0.7, 2, 0.0)
+    text_y += 35
     
+    # 分割线
+    cv2.line(base_layer, (text_x, text_y), (c_x2 - 20, text_y), theme_color, 3)
+    text_y += 45
+    
+    # B. 状态大字 (EXTRA LARGE)
+    draw_hud_text(base_layer, status_str, (text_x, text_y), theme_color, 1.3, 3, 0.0)
+    text_y += 50
+    
+    # C. 核心指标 (Large Font, No Color Logic for Confidence)
     max_z = np.max(z_matrix)
-    metrics = [
+    conf_percent = int(confidence_val * 100)
+    anomaly_grids = np.sum(z_matrix > 3.0) # 重新计算异常网格数
+    
+    # 定义指标列表：(Label, Value)
+    metrics_data = [
         ("RISK SCORE", f"{global_score}"),
+        ("CONFIDENCE", f"{conf_percent}%"), # 纯白显示，无颜色逻辑
         ("MAX Z-SCORE", f"{max_z:.2f}"),
-        ("ELA MEAN", f"{g_mean:.2f}"),
-        ("INTEGRITY", f"{100-global_score}%"),
+        ("ANOMALY GRIDS", f"{anomaly_grids}")
     ]
     
-    for label, val in metrics:
-        cv2.putText(base_layer, label, (x_pad, y_cursor), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1, cv2.LINE_AA)
-        (tw, th), _ = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.putText(base_layer, val, (w - 15 - tw, y_cursor), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-        y_cursor += 30
+    for label, val in metrics_data:
+        # 绘制标签 (灰色)
+        cv2.putText(base_layer, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1, cv2.LINE_AA)
+        
+        # 绘制数值 (白色，右对齐)
+        # [修复] 使用稳健的解包方式
+        retval = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
+        (tw, th), _ = retval
+        
+        val_x = c_x2 - 20 - tw
+        cv2.putText(base_layer, val, (val_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
+        
+        text_y += 40 # 增加行距
 
     # 6. 底部直方图
-    hist_h = 60
-    hist_w = panel_w - 30
-    hist_x = x_pad
-    hist_y = h - 30
+    hist_h = 50
+    hist_w = (c_x2 - 20) - (c_x1 + 20)
+    hist_x = c_x1 + 20
+    hist_y = c_y2 - 20
     
     ela_gray = ela_cv if len(ela_cv.shape)==2 else cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY)
     hist = cv2.calcHist([ela_gray], [0], None, [256], [0, 256])

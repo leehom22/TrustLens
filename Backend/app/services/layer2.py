@@ -1,3 +1,4 @@
+import math
 import os
 import uuid
 import io
@@ -48,7 +49,11 @@ def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
 
 # ================================= Execution ====================================
 def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
+
     try:
+
+        # --------- 1. Load Images ---------
+
         images = []
         if file_type.startswith("image/"):
             with Image.open(file_path) as raw_img:
@@ -68,17 +73,27 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         
         max_visual_score = 0
         
+
         for idx, original in enumerate(images):
             cv_img = pil_to_cv2(original)
-            
-            # 1. Convert to grayscale
+
+            # ---------- 2. Noise Detection -----------
+
+            # Convert to grayscale
             gray_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
             
-            # 2. Noise detection (Determine if it is a photo/scan or digital screenshot)
+            # Noise detection (Determine if it is a photo/scan or digital screenshot)
             lap_var = cv2.Laplacian(gray_img, cv2.CV_64F).var()
-            is_noisy_source = lap_var > 80 # >80 is usually a photo or scan (high frequency noise)
-            
-            # 3. Unified text contour extraction (Only for clean screenshots, reducing repetitive overhead)
+
+            # lap_var < 50 (clean) -> alpha = 1.0
+            # lap_var > 300 (noisy) -> alpha = 0.4
+            noise_confidence = max(0.2, min(1.0, 1.0 - (lap_var - 50) / 400.0))
+            is_noisy_source = lap_var > 80    # >80 is usually a photo or scan (high frequency noise)
+            print(lap_var)
+
+            # ------- 3. Unified text contour extraction --------
+
+            # Unified text contour extraction (Only for clean screenshots, reducing repetitive overhead)
             shared_contours = None
             if not is_noisy_source:
                 # Simple brightness check to adapt to Dark Mode screenshots
@@ -86,48 +101,48 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 thresh_type = cv2.THRESH_BINARY if mean_brightness < 100 else cv2.THRESH_BINARY_INV
                 _, thresh = cv2.threshold(gray_img, 200, 255, thresh_type)
                 shared_contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+
+            # ----- 4. Call detection functions (Pass pre-computed parameters) -----
             
-            # --- Call detection functions (Pass pre-computed parameters) ---
-            
-            # 1. Black level detection (For digital screenshots)
+            # Black level detection (For digital screenshots)
             black_score, black_mask, black_sigs = analyze_fused_forensics(
                 cv_img, pre_contours=shared_contours
             )
             
-            # 2. Texture detection (For photos/scans)
+            # Texture detection (For photos/scans)
             tex_score, tex_mask, tex_sigs = analyze_texture_consistency(
                 cv_img, is_photo=is_noisy_source
             )
             
-            # 3. Alignment detection (For digital screenshots)
+            # Alignment detection (For digital screenshots)
             align_score, align_mask, align_sigs = analyze_alignment_consistency(
                 cv_img, pre_contours=shared_contours, is_photo=is_noisy_source
             )
             
-            current_detection_score = max(black_score, tex_score, align_score)
-            if current_detection_score > 0:
-                max_visual_score = max(max_visual_score, current_detection_score)
+            # Fusion of visual signals, take the highest score among the three detectors (Max Voting)
+            visual_base = max(black_score, tex_score, align_score)
+            visual_score = visual_base * noise_confidence
+            # Keep track of the highest visual score across pages for final fusion
+            if visual_score > 0:
+                max_visual_score = max(max_visual_score, visual_score)
 
-            # --- Score Fusion Logic ---
-            # Take the highest score among the three detectors (Max Voting)
-            current_max = max(black_score, tex_score, align_score)
-            
-            if current_max > 0:
-                max_visual_score = max(max_visual_score, current_max)
-                
             # Collect signals
             if black_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in black_sigs])
             if tex_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in tex_sigs])
             if align_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in align_sigs])
 
-            # --- 3. ELA Generation (Visual Base) ---
+
+            # ------ 5. ELA Calculation (Statistical Analysis) ------
+           
+            # ELA Generation (Visual Base)
             with io.BytesIO() as buffer:
                 original.save(buffer, "JPEG", quality=90)
                 buffer.seek(0)
                 resaved = Image.open(buffer)
                 ela_img = ImageChops.difference(original, resaved)
             
-            # --- 4. ELA Stats (Rigorous Z-Score) ---
+            # ELA Stats (Rigorous Z-Score)
             w, h = ela_img.size
             # Dynamically calculate grid size, usually 32 or smaller
             grid_size = max(32, min(w, h) // 25)
@@ -135,19 +150,42 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             metrics = calculate_ela_metrics(ela_img, grid_size)
             
             # Corrected judgment logic using data returned by metrics
-            is_noisy_source_ela = metrics["global_mean"] > 15
-            confidence = "LOW" if is_noisy_source_ela else "HIGH"
+            # is_noisy_source_ela = metrics["global_mean"] > 15
+            # confidence = "LOW" if is_noisy_source_ela else "HIGH"
 
-            # ELA Scoring Logic (Conservative)
-            page_score = 0
-            if confidence == "HIGH":
-                # Deduct points only if Z-Score is extremely high and there are multiple suspicious grids
-                if metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
-                    page_score = 40
+            ela_raw = 0
+            if metrics["max_z_score"] > 3.0:
+                ela_raw = min(100, (metrics["max_z_score"] - 3.0) * 25)
+            
+            # Scale ELA score based on the number of suspicious grids (An innovative approach to prevent false positives in clean documents, while still catching those with localized anomalies)
+            suspicious_count = metrics.get("suspicious_grids", 0)
+            scale_factor = 1.0
+            scale_factor = min(1.0, 1 - math.exp(-suspicious_count))
+            
+            ela_score = ela_raw * scale_factor * noise_confidence
 
-            current_page_score = max(current_detection_score, page_score)
-            current_page_score = min(current_page_score, 100)
 
+            # ------- 6. Smart Fusion & Scoring ---------
+            
+            # Combine
+            base_score = max(visual_score, ela_score)
+            
+            # Check for Multi-modal triggers (Visual > 35 AND ELA > 35)
+            is_visual_trigger = visual_score > 35
+            is_ela_trigger = ela_score > 35
+            
+            if is_visual_trigger and is_ela_trigger:
+                # Boost the score by 30% if both are triggered, indicating strong corroboration between statistical and visual signals
+                page_score = min(100, base_score * 1.3)
+                l2_signals.append(f"Page {idx+1}: Multi-modal anomaly detected (Boosted Confidence).")
+            else:
+                page_score = base_score
+
+            # Ensure integer
+            page_score = int(page_score)
+
+
+            # ------------------ 7. Visualization --------------------
 
             masks_collection = {
                 "Texture": tex_mask,
@@ -164,7 +202,8 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                     cv_img,          # Original Image (OpenCV)
                     ela_cv,          # ELA Image (OpenCV)
                     masks_collection,   # All forensic masks for explainability
-                    int(current_page_score)   # Final fused score for this page
+                    int(page_score),   # Final fused score for this page
+                    confidence_val=noise_confidence   # Confidence value to indicate noise level
                 )
             except Exception as e:
                 logger.error(f"Visualizer Error: {e}")
@@ -172,7 +211,8 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 heatmap_cv = cv_img
             
 
-            # --- 5. Save Heatmap ---
+        # -------- 8. Save Heatmap & Append Results ---------
+
             heatmap_name = f"heatmap_{uuid.uuid4().hex[:8]}_p{idx+1}.jpg"
             heatmap_path = os.path.join(EVIDENCE_DIR, heatmap_name)
             cv2.imwrite(heatmap_path, heatmap_cv)
@@ -183,14 +223,15 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "url": f"/evidence/{heatmap_name}",
                 "local_path": os.path.abspath(heatmap_path),
                 "metrics": metrics,
-                "confidence": confidence,
-                "note": "Native Digital" if confidence == "HIGH" else "Scan/Noisy"
+                "confidence": noise_confidence,
+                "note": "Native Digital" if not is_noisy_source else "Scanned / Noisy Photo"
             })
 
         if not page_results: 
             return LayerResult(layer_name="L2_Visual", status=LayerStatus.CLEAN, score=0, details={})
 
-        # ======================== Final Evaluation =======================
+
+    # --------------------- 9. Final Evaluation -----------------------------
         worst = max(page_results, key=lambda x: x["score"])
         
         # Final score takes the maximum of (ELA Score) and (Advanced Detection Score)
@@ -200,9 +241,9 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         status = LayerStatus.CLEAN
         l2_signals = list(set(l2_signals))
         
-        if final_score > 70:
+        if final_score > 75:
             status = LayerStatus.HIGH_RISK
-        elif final_score > 30:
+        elif final_score > 35:
             status = LayerStatus.SUSPICIOUS
             
         if worst["confidence"] == "LOW":
