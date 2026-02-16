@@ -94,28 +94,44 @@ async def analyze_pipeline(
 
         # 3. Wait for all layers to complete
         l1_res, l2_res, l3_data_raw = await asyncio.gather(t1, t2, t3)
-
-        # CRITICAL FIX: Prevent 'NoneType' error if extraction failed
         l3_data = l3_data_raw if l3_data_raw is not None else {}
 
         evidence_urls = {
-            "original_document": file_url 
+            "original_document": file_url,
+            "all_heatmaps": []    # For appending heatmap URLs
         }
-
-        ela_local_path = l2_res.details.get("generated_image_path") 
         
-        if ela_local_path and os.path.exists(ela_local_path):
-            # Keep the same folder structure in storage for easy retrieval, but use req_id to avoid conflicts
-            ela_dest = f"evidence/{req_id}/visual_ela.jpg"
-            ela_url = upload_evidence_to_storage(ela_local_path, ela_dest, "image/jpeg")
+        # Extract all heatmap pages info from L2 result
+        all_pages = l2_res.details.get("all_pages", [])
+        if not all_pages and l2_res.details.get("temp_path"):
+            all_pages = [{"local_path": l2_res.details.get("temp_path"), "page": 1}]
+
+        # Upload all heatmaps and collect URLs
+        for idx, page_info in enumerate(all_pages):
+            local_path = page_info.get("local_path")
             
-            l2_res.details["visual_evidence_url"] = ela_url
-            evidence_urls["ela_heatmap"] = ela_url
-            logger.info(f"ELA Evidence persists at: {ela_url}")
-            
-            # Clean up local ELA file after upload
-            try: os.remove(ela_local_path)
-            except: pass
+            if local_path and os.path.exists(local_path):
+                # Naming: visual_ela_p1.jpg, visual_ela_p2.jpg, etc.
+                page_num = page_info.get("page", idx + 1)
+                ela_dest = f"evidence/{req_id}/visual_ela_p{page_num}.jpg"
+                
+                cloud_url = upload_evidence_to_storage(local_path, ela_dest, "image/jpeg")
+                
+                if cloud_url:
+                    page_info["url"] = cloud_url
+                    evidence_urls["all_heatmaps"].append(cloud_url)
+                    
+                    # Keep the first heatmap URL at the top level
+                    if "ela_heatmap" not in evidence_urls:
+                        l2_res.visual_evidence_url = cloud_url
+                        l2_res.details["visual_evidence_url"] = cloud_url
+                        evidence_urls["ela_heatmap"] = cloud_url
+                    
+                    logger.info(f"Uploaded Page {page_num}: {cloud_url}")
+
+                # Clean up local heatmap file
+                try: os.remove(local_path)
+                except: pass
 
         evidence_chain = []
         
