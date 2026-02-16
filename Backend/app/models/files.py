@@ -114,3 +114,61 @@ class FilesSchema(BaseModel):
         except Exception as e:
             print("Error occur while deleting document")
             return {"success" : False}
+        
+    @staticmethod
+    def get_history_data(user_id: str):
+        """
+        Fetches files AND merges them with analysis results.
+        Returns a list of files with 'risk_level' and 'risk_score' attached.
+        """
+        try:
+            # 1. Fetch ALL uploaded files for this user
+            files_ref = db.collection(file_collection).where("user_id", "==", user_id)
+            files_docs = files_ref.stream()
+            
+            files_list = []
+            for d in files_docs:
+                data = d.to_dict()
+                data["id"] = d.id
+                files_list.append(data)
+
+            # 2. Fetch ALL analysis results for this user
+            # This is much faster than querying one by one inside the loop
+            analysis_ref = db.collection("analysis_results").where("user_id", "==", user_id)
+            analysis_docs = analysis_ref.stream()
+
+            # 3. Create a Lookup Dictionary (Map doc_id -> Analysis Data)
+            analysis_map = {}
+            for d in analysis_docs:
+                a_data = d.to_dict()
+                # Use the 'doc_id' field which links back to the uploaded file
+                target_id = a_data.get("doc_id")
+                if target_id:
+                    analysis_map[target_id] = {
+                        "risk_level": a_data.get("risk_level", "SAFE"),
+                        "risk_score": a_data.get("overall_risk_score", 0),
+                        "ai_summary": a_data.get("agent_summary", "")
+                    }
+
+            # 4. Merge Data
+            merged_results = []
+            for file_item in files_list:
+                f_id = file_item["id"]
+                
+                # Check if we have analysis data for this file
+                if f_id in analysis_map:
+                    file_item["risk_level"] = analysis_map[f_id]["risk_level"]
+                    file_item["risk_score"] = analysis_map[f_id]["risk_score"]
+                    file_item["ai_summary"] = analysis_map[f_id]["ai_summary"]
+                else:
+                    # Default values if analysis hasn't run yet
+                    file_item["risk_level"] = "SAFE"
+                    file_item["risk_score"] = 0
+                
+                merged_results.append(file_item)
+                
+            return merged_results
+            
+        except Exception as e:
+            print(f"Error in get_history_data: {e}")
+            return []

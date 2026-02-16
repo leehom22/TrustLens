@@ -2,6 +2,7 @@ from fastapi import APIRouter, status, HTTPException,Form
 from app.models.files import FilesSchema
 from app.core.firebase import db
 from google.cloud import firestore
+from google.cloud.firestore import FieldFilter
 files_router = APIRouter()
 
 # user upload files
@@ -103,3 +104,68 @@ def get_flagged_document():
             "success":"false",
             "data":str(e)
         }
+    
+@files_router.get("/get_history_files/{user_id}")
+def get_history_files(user_id: str):
+    try:
+        # Call our new smart merge function
+        res = FilesSchema.get_history_data(user_id=user_id)
+        return {
+            "success": True,
+            "data": res
+        }
+    except Exception as e:
+        print(f"Error fetching history files: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch history data: {str(e)}"
+        )
+
+@files_router.get("/dashboard_stats/{user_id}")
+def get_dashboard_stats(user_id: str):
+    try:
+        stats = {
+            "total_documents": 0,
+            "high_risk_count": 0,       # From analysis_results
+            "pending_review_count": 0,  # From upload_files
+            "risk_breakdown": {"SAFE": 0, "SUSPICIOUS": 0, "CRITICAL": 0, "CAUTION": 0}
+        }
+
+        # 1. Get Risk Data from 'analysis_results'
+        analysis_ref = db.collection("analysis_results").where(filter=FieldFilter("user_id", "==", user_id))
+        analysis_docs = analysis_ref.stream()
+
+        for doc in analysis_docs:
+            data = doc.to_dict()
+            risk = data.get("risk_level", "SAFE")
+            
+            # Pie Chart Data
+            if risk in stats["risk_breakdown"]:
+                stats["risk_breakdown"][risk] += 1
+            
+            # KPI: High/Med Risk
+            if risk in ["CRITICAL", "SUSPICIOUS"]:
+                stats["high_risk_count"] += 1
+
+        # 2. Get Workflow Data from 'upload_files'
+        files_ref = db.collection("upload_files").where(filter=FieldFilter("user_id", "==", user_id))
+        file_docs = files_ref.stream()
+
+        for doc in file_docs:
+            data = doc.to_dict()
+            stats["total_documents"] += 1
+
+            # KPI: Pending Review
+            is_flagged = data.get("flagged", False)
+            expert_review = data.get("expertReview", False)
+            # Handle string "true"/"false" or boolean
+            is_reviewed = str(expert_review).lower() == "true" or expert_review is True
+
+            if is_flagged and not is_reviewed:
+                stats["pending_review_count"] += 1
+
+        return {"success": True, "data": stats}
+
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return {"success": False, "error": str(e)}
