@@ -9,6 +9,7 @@ import json
 import google.generativeai as genai
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
+from fastapi.responses import FileResponse
 from app.models.files import FilesSchema
 from dotenv import load_dotenv
 
@@ -27,7 +28,7 @@ from ..services.layer0 import run_layer_0_judge
 from ..services.agent import run_agent_analysis
 from ..utils.schemas import FinalReport, AnalysisRecord
 from ..core.firebase import db
-
+from ..core.generatePdf import generate_analysis_pdf
 
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
@@ -493,8 +494,65 @@ async def get_document_analysis(docId: str = Form(...)):
         print(f"Error occurred while fetching document analysis: {e}")
         return {"success": False, "error": str(e)}
     
-        
-    
-        
-    
-    
+@analysis_router.post("/download-analysis-report")
+async def download_analysis_report(
+    doc_id: str = Form(...),
+    analysis_id: str = Form(...),
+    doc_name: str = Form(...),
+    role: str = Form(...)
+):
+    try:
+        # 1. Ensure the 'reports' directory exists
+        report_dir = "reports"
+        os.makedirs(report_dir, exist_ok=True)
+        file_path = os.path.join(report_dir, f"{doc_id}_analysis.pdf")
+
+        # 2. Initialize review_notes empty (safety)
+        review_notes = []
+        if role == 'expert': # Fixed 'is' to '=='
+            # Fixed .query to .where
+
+            review_query = db.collection("document_review").where("docId", "==", doc_id).stream()
+            
+            for review in review_query:
+                print("Looping through review_query...")  # Debugging line to check if loop is entered
+                review_data = review.to_dict()
+
+                note = review_data.get("review_notes")
+                if note:
+                    review_notes.append(note)
+
+        # 4. Fetch Analysis Document
+        doc_snap = db.collection(structure_analysis_collection).document(analysis_id).get()
+
+        if doc_snap.exists:
+            doc_data = doc_snap.to_dict()
+            analysis_content = doc_data.get("analysis_content", {})
+            
+            # 5. Inject Data
+            analysis_content["document_name"] = doc_name
+            
+            # Using len() instead of .__len__() is more Pythonic
+            if role == 'expert' and len(review_notes) > 0:
+                analysis_content["expert_review_notes"] = review_notes
+                
+            # 6. Generate PDF
+            generate_analysis_pdf(
+                data=analysis_content,
+                output_path=file_path
+            )
+
+            # 7. Return File
+            return FileResponse(
+                path=file_path,
+                media_type="application/pdf",
+                filename=f"{doc_name}_analysis.pdf"
+            )
+            
+        return {"success": False, "message": "Document not found"}
+
+    except Exception as e:
+        import traceback
+        print(f"PDF Generation Error: {e}") 
+        traceback.print_exc() # This gives you the line number of the error
+        return {"success": False, "error": str(e)}

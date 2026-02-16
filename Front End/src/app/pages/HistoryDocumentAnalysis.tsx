@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Loader2, Badge, FileText } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, Badge, FileText, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { useEffect, useState } from "react";
 import axios from 'axios'
@@ -11,7 +11,7 @@ import LogicalConsistency from "../components/expert/expertDocumentAnalysis/anal
 import AiAssistant from "../components/analysis/AiAssistant";
 import DocumentViewer from "../components/analysis/DocumentViewer";
 import { useNavigate, useParams } from "react-router-dom";
-import { setFileAsFlagged } from "@/api/document";
+import { handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import DocumentFeedback from "../components/analysis/DocumentFeedback";
 
@@ -39,13 +39,14 @@ export function HistoryDocumentAnalysis() {
     const [stage, setStage] = useState<AnalysisStage>("complete");
     const [raw_analysis_id, setRaw_analysis_id] = useState<string | null>(null)
     const [doc_type, setDoc_type] = useState<string | null>(null)
+    const [structure_analysis_id, setStructure_analysis_id] = useState<string>('')
     const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
     
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
             formData.append('docId', docId)
-            console.log("Fetching structure analysis data")
+            // console.log("Fetching structure analysis data")
             const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData)
             const result = res.data
 
@@ -53,7 +54,8 @@ export function HistoryDocumentAnalysis() {
                 setAi_analysis(result.data?.analysis_content)
                 setRaw_analysis_id(result.data?.raw_analysis_id)
                 setDoc_type(result.data?.doc_type)
-                console.log("The structure data is: ", result.data)
+                setStructure_analysis_id(result.data?.id)
+                // console.log("The structure data is: ", result.data)
             } else {
                 toast.error("Failed to fetch document analysis")
                 return
@@ -103,7 +105,7 @@ export function HistoryDocumentAnalysis() {
     }
 
     useEffect(() => {
-        console.log("the Document Id is :", docId)
+        // console.log("the Document Id is :", docId)
         // fetch document from backend
         fetchingFile()
     }, [docId])
@@ -115,7 +117,7 @@ export function HistoryDocumentAnalysis() {
                         <Loader2 className="relative animate-spin mx-auto" size={50} />
                     </div> :
                     <div className="flex flex-col w-385">
-                        <div className={` border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 left-0 right-0 z-10`}>
+                        <div className={` border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 left-0 right-0 z-60`}>
                             <div className="w-full mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
                                 <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                                     <Button variant="ghost"  className="text-gray-700 dark:text-slate-300" onClick={() => navigate('/history')}>← Back</Button>
@@ -204,6 +206,17 @@ export function HistoryDocumentAnalysis() {
 
                                 {/* Detailed Findings Tabs */}
                                 <Tabs defaultValue="metadata" className="w-full">
+                                    <div className="w-full flex justify-end my-1">
+                                        <button className={`py-2 px-3 border rounded-lg  max-w-2xl ${                                        selectedDocument?.flagged === false ? 'border-red-500 text-red-500 cursor-pointer' : 'border-gray-500 text-gray-500' }`} onClick={() => setRequestReview(true)}
+                                        disabled={selectedDocument?.flagged!}    
+                                        >
+                                            <p>Request for a review</p>
+                                        </button>
+                                        <button className="flex justify-around items-center py-2 px-3 border rounded-lg border-gray-500  max-w-2xl ml-2 space-x-1 cursor-pointer" onClick={()=>handlePdfDownload(selectedDocument?.id!,structure_analysis_id, selectedDocument?.fileName!,'user')} >
+                                            <Download size={20}/>
+                                            <p>Download Report</p>
+                                        </button>
+                                    </div>
                                     <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3 w-full">
                                         {['metadata', 'heatmap', 'content', 'findings'].map((tab) => (
                                             <TabsTrigger
@@ -214,16 +227,7 @@ export function HistoryDocumentAnalysis() {
                                                 {tab === 'metadata' ? 'Metadata' : tab === 'heatmap' ? 'Visuals' : tab === 'content' ? 'Semantics' : 'Consistency'}
                                             </TabsTrigger>
                                         ))}
-                                    </TabsList>
-                                    
-                                    <div className="w-full flex justify-end my-3">
-                                        <button className={`py-2 px-4 border rounded-lg  max-w-2xl ${                                        selectedDocument?.flagged === false ? 'border-red-500 text-red-500 cursor-pointer' : 'border-gray-500 text-gray-500' }`} onClick={() => setRequestReview(true)}
-                                        disabled={selectedDocument?.flagged!}    
-                                        >
-                                            <p>Request for a review</p>
-                                        </button>
-                                    </div>
-                                    
+                                    </TabsList>                
 
                                     <div >
                                         <TabsContent value="metadata" className="main-card-container">

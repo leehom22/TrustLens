@@ -87,7 +87,7 @@ const LoginPage = () => {
                 ...(role === "expert" && { "passkey": passkey })
             })
 
-            console.log("response registration: ", res)
+            // console.log("response registration: ", res)
 
             if (res.status === 201) {
                 toast.success("Registration successful! Logging you in...")
@@ -128,7 +128,7 @@ const LoginPage = () => {
             const formData = new FormData(e.currentTarget)
             const email = formData.get("email") as string
             const password = formData.get("password") as string
-            console.log("the password and email is, ", email, password)
+            // console.log("the password and email is, ", email, password)
             const res = await axios.post(`${backendUrl}/user/signIn_user`, {
                 "email": email,
                 "password": password

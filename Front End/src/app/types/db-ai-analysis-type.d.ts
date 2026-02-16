@@ -59,4 +59,3 @@ export interface DocumentAnalysisOverallResult {
   raw_analysis_id: string
   doc_type: string
 }
-

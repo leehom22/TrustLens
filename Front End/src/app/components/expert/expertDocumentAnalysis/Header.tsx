@@ -1,7 +1,12 @@
+import { handlePdfDownload } from "@/api/document";
 import { FileHeader } from "@/app/types/db-ai-analysis-type";
 import { Calendar, CheckCircle, Download, ExternalLink, FileText, FileType, HardDrive, Shield, User } from "lucide-react";
 
-const Header = ({ selectedDocument }: { selectedDocument: FileHeader | null }) => {
+interface HeaderProps {
+    selectedDocument: FileHeader | null;
+    structure_ai_analysis_id: string;
+}
+const Header = ({ selectedDocument, structure_ai_analysis_id }: HeaderProps ) => {
     const formatFileSize = (bytes: number) => {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
@@ -22,12 +27,6 @@ const Header = ({ selectedDocument }: { selectedDocument: FileHeader | null }) =
             minute: '2-digit',
             timeZoneName: 'short'
         }).format(date);
-    };
-
-    const handleDownload = () => {
-        if (selectedDocument?.fileUrl) {
-            window.open(selectedDocument.fileUrl, '_blank');
-        }
     };
 
     if (!selectedDocument) return null;
@@ -72,7 +71,7 @@ const Header = ({ selectedDocument }: { selectedDocument: FileHeader | null }) =
                     </div>
                 </div>
                 <button 
-                    onClick={handleDownload}
+                    onClick={() => handlePdfDownload(selectedDocument.id, structure_ai_analysis_id,selectedDocument.fileName,'expert')}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                 >
                     <Download className="w-4 h-4" />

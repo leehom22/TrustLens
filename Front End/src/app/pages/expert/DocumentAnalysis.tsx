@@ -36,6 +36,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
     })
     const [expertReviewNotes, setExpertReviewNotes] = useState<string[]>([])
     const [selectedTabs, setSelectedTabs] = useState<string>('metadata')
+    const [structure_ai_analysis_id, setStructure_ai_analysis_id] = useState<string>('')
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
@@ -52,6 +53,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                     doc_type: result.data?.doc_type,
                     structure_analysis_id: result.data?.id,
                 })
+                setStructure_ai_analysis_id(result.data?.id)
                 // console.log("The structure data is: ", result.data)
             } else {
                 toast.error("Failed to fetch document analysis")
@@ -147,7 +149,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                         <div className="p-6 max-w-5xl mx-auto ">
 
                             {/* Document Header */}
-                            <Header selectedDocument={selectedDocument} />
+                            <Header selectedDocument={selectedDocument} structure_ai_analysis_id={structure_ai_analysis_id}/>
 
                             {/* AI Analysis Summary */}
                             <AnalysisSummary selectedDocument={ai_analysis_format} />
