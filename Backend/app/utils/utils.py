@@ -1,8 +1,11 @@
 import json
+import mimetypes
 import re
 from PIL import Image
 from datetime import datetime
 from dateutil import parser as date_parser
+from fastapi import logger
+from ..core.firebase import bucket
 
 def clean_and_repair_json(json_str: str) -> dict:
     
@@ -43,3 +46,28 @@ def downsample_image(img: Image.Image, max_dim: int = 1500) -> Image.Image:
         new_size = (int(width * ratio), int(height * ratio))
         return img.resize(new_size, Image.Resampling.LANCZOS)
     return img
+
+# Upload file to Firebase Storage and return public URL
+def upload_evidence_to_storage(local_path: str, destination_path: str, content_type: str = None) -> str:
+    try:
+        # Guess Mime Type
+        guessed_type, _ = mimetypes.guess_type(local_path)
+        if guessed_type and guessed_type != content_type:
+            logger.info(f"MIME corrected: {content_type} -> {guessed_type}")
+            content_type = guessed_type
+        
+        final_content_type = content_type or "application/octet-stream"
+
+        # Upload to Firebase Storage
+        blob = bucket.blob(destination_path)
+        blob.upload_from_filename(local_path, content_type=final_content_type)
+        
+        # Make the file publicly accessible
+        blob.make_public() 
+        
+        logger.info(f"Successfully uploaded to {destination_path}")
+        return blob.public_url
+    
+    except Exception as e:
+        logger.error(f"Upload Failed: {e}")
+        return None
