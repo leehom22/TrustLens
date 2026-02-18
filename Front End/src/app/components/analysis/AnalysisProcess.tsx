@@ -13,45 +13,31 @@ interface AnalysisStep {
 export function AnalysisProcess() {
   const [steps, setSteps] = useState<AnalysisStep[]>([
     {
-      id: "metadata",
-      title: "Metadata Extraction",
-      description: "Extracting document properties, creation date, author information, and modification history",
-      aiModel: "MetaForge AI v2.1",
+      id: "ingestion",
+      title: "Secure File Ingestion",
+      description: "Verifying MIME types, correcting file extensions, and performing security sandbox checks.",
+      aiModel: "FastAPI Guard v4.0",
       status: "pending"
     },
     {
-      id: "signature",
-      title: "Digital Signature Analysis",
-      description: "Verifying digital signatures and analyzing edit patterns across document versions",
-      aiModel: "SignatureNet Deep Learning",
+      id: "forensics",
+      title: "Multi-Layer Forensic Pipeline",
+      description: "Executing deep analysis on Metadata, Visual layers, Content, and Logic consistency.",
+      aiModel: "ForensicEngine Pro",
       status: "pending"
     },
     {
-      id: "software",
-      title: "Software Detection",
-      description: "Identifying editing software used (Canva, MS Word, Photoshop, etc.) and detecting traces",
-      aiModel: "SoftwareTrace Neural Network",
+      id: "mapping",
+      title: "Data Restructuring",
+      description: "Mapping raw forensic findings into standardized dashboard schemas using Vision-Context.",
+      aiModel: "Gemini 1.5 Flash",
       status: "pending"
     },
     {
-      id: "visual",
-      title: "Visual Forensics",
-      description: "Analyzing pixel-level modifications and generating heatmap of altered regions",
-      aiModel: "VisionForensic CNN",
-      status: "pending"
-    },
-    {
-      id: "content",
-      title: "Content Analysis",
-      description: "Scanning document content for fraudulent clauses, suspicious terms, and scam indicators",
-      aiModel: "FraudDetect LLM",
-      status: "pending"
-    },
-    {
-      id: "network",
-      title: "Network Trace Analysis",
-      description: "Tracing document origin, IP addresses, and geographical information",
-      aiModel: "NetTrace AI",
+      id: "finalization",
+      title: "Insight Refactoring",
+      description: "Generating user-friendly summaries and actionable next steps without altering risk scores.",
+      aiModel: "Data Restructuring Engine",
       status: "pending"
     }
   ]);
@@ -60,22 +46,16 @@ export function AnalysisProcess() {
 
   useEffect(() => {
     if (currentStepIndex < steps.length) {
-      // Set current step to processing
       setSteps(prev => prev.map((step, idx) => 
-        idx === currentStepIndex 
-          ? { ...step, status: "processing" }
-          : step
+        idx === currentStepIndex ? { ...step, status: "processing" } : step
       ));
 
-      // Complete current step after delay
       const timer = setTimeout(() => {
         setSteps(prev => prev.map((step, idx) => 
-          idx === currentStepIndex 
-            ? { ...step, status: "complete" }
-            : step
+          idx === currentStepIndex ? { ...step, status: "complete" } : step
         ));
         setCurrentStepIndex(prev => prev + 1);
-      }, 1000); // Each step takes 1.2 seconds
+      }, 12000); // Simulate 12 seconds per step
 
       return () => clearTimeout(timer);
     }
@@ -165,12 +145,14 @@ export function AnalysisProcess() {
       </div>
 
       <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg p-6">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">What's Happening?</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Pipeline Logic</h3>
         <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed">
-          Our advanced AI system is performing a comprehensive forensic analysis of your document. 
-          We're using multiple specialized neural networks to examine metadata, detect alterations, 
-          identify editing software traces, and scan for fraudulent content. This multi-layered 
-          approach ensures maximum accuracy in detecting any potential document manipulation or fraud.
+          Your document is currently moving through two specialized AI stages. First, the 
+          <span className="font-semibold text-blue-500"> Forensic Pipeline</span> extracts raw 
+          metadata and analyzes visual tampering. Second, the 
+          <span className="font-semibold text-blue-500"> Gemini-powered Restructuring Engine </span> 
+          transforms technical data into the dashboard view you see, ensuring all findings are 
+          grounded in the original image context.
         </p>
       </div>
     </div>
