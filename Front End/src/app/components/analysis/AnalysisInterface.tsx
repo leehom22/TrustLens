@@ -42,10 +42,51 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
   const inputRef = useRef<HTMLInputElement>(null); // Ref for auto-scroll
   const backendUrl = import.meta.env.VITE_BACKEND_URL
   const navigate = useNavigate()
-  // Auto-start analysis
+
+  const setWithExpiry = (key: string, value: any) => {
+    const item = {
+      data: value,
+      timestamp: new Date().getTime(), // Current time in milliseconds
+    };
+    localStorage.setItem(key, JSON.stringify(item));
+  };
+
   useEffect(() => {
+    const savedAnalysisRaw = localStorage.getItem('latest_analysis');
+    const savedHeaderRaw = localStorage.getItem('latest_analysis_header');
+
+    if (savedAnalysisRaw && savedHeaderRaw) {
+      const analysisObj = JSON.parse(savedAnalysisRaw);
+      const headerObj = JSON.parse(savedHeaderRaw);
+
+      const now = new Date().getTime();
+      const twentyFourHours = 24 * 60 * 60 * 1000; // in milliseconds
+      // console.log("===========Timestamp of saved analysis: ", analysisObj.timestamp, "Current time: ", now, "Difference (ms): ", now - analysisObj.timestamp, "Twenty Four Hours (ms): ", twentyFourHours, "Is data fresh? ", now - analysisObj.timestamp < twentyFourHours,"=============");
+      // Check if the data is still fresh
+      if (now - analysisObj.timestamp < twentyFourHours) {
+        setAi_analysis(analysisObj.data);
+        setAi_analysis_header(headerObj.data);
+        setStage("complete");
+        setAllAnalysisComplete(true);
+
+        setChatMessages([{
+          role: "assistant",
+          content: "Restored recent forensic Results (Valid for 24h)."
+        }]);
+        return; // Exit here, don't trigger startAnalysis
+      } else {
+        // Data is too old, clear it
+        localStorage.removeItem('latest_analysis');
+        localStorage.removeItem('latest_analysis_header');
+      }
+    }
+    console.log("Starting new analysis, no valid cached data found.");
+    // If we reach here, either no data existed or it was expired
     const timer = setTimeout(() => startAnalysis(), 500);
-    return () => { clearTimeout(timer); if (liveConnectionRef.current) liveConnectionRef.current.finish(); };
+    return () => {
+      clearTimeout(timer);
+      if (liveConnectionRef.current) liveConnectionRef.current.finish();
+    };
   }, []);
 
   // Prevent accidental close
@@ -75,23 +116,19 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
 
     try {
       // 1. Initialize FormData correctly
-      const formData = new FormData(); 
-      formData.append('file',file)
-      formData.append('doc_id',documentId)
-      formData.append('user_id',userId)
-      console.log("The file is :",file)
+      const formData = new FormData();
+      formData.append('file', file)
+      formData.append('doc_id', documentId)
+      formData.append('user_id', userId)
+      console.log("The file is :", file)
 
       // 2. Initial Forensic Analysis
       const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, formData);
 
       if (aiAnalysis.status === 200) {
-        console.log("Rawdata: ", aiAnalysis);
-        console.log("Rawdata: ", aiAnalysis.data);
-
-        // 3. Prepare for Restructuring (Multi-modal)
         // We use a fresh FormData or append to the existing one to ensure visual grounding
         formData.append('document_raw_data', JSON.stringify(aiAnalysis.data));
-        console.log("The document Id is: ",documentId)
+        console.log("The document Id is: ", documentId)
         formData.append('documentId', documentId);
 
         // Fixed: Removed double slash //
@@ -103,11 +140,20 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
 
         if (res.status === 200) {
           console.log("Data from structure ai analysis: ", res.data);
+          const analysisContent = res.data.analysis_content;
+          const analysisHeader = res.data;
+
+          setWithExpiry('latest_analysis', analysisContent);
+          setWithExpiry('latest_analysis_header', analysisHeader);
+
           setRawAnalysisData(aiAnalysis.data)
           setAi_analysis(res.data.analysis_content)
+          // localStorage.setItem('latest_analysis', JSON.stringify(res.data.analysis_content))
           setAi_analysis_header(res.data)
+          // localStorage.setItem('latest_analysis_header', JSON.stringify(res.data))
           // 4. Success Logic - Move this INSIDE the successful result block
           setAllAnalysisComplete(true);
+          // Hello World
           setStage("complete");
           setChatMessages(prev => [
             ...prev,
@@ -123,7 +169,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       } else {
         toast.error("Failed to generate analysis")
         throw new Error("Initial analysis failed");
-        
+
       }
 
     } catch (error) {
@@ -131,7 +177,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       setStage("idle"); // Set a proper error stage
       toast.error("Analysis Failed. Please try again later");
       navigate("/dashboard")
-      return 
+      return
     }
   };
 
@@ -241,7 +287,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
           {/* Analysis Column */}
           <div className="lg:col-span-7 order-1 lg:order-2">
             {stage === "analyzing" && <AnalysisProcess />}
-            {stage === "complete" && <AnalysisResults setRequestReview={setRequestReview} ai_analysis_format={ai_analysis!} doc_type={ai_analysis_header?.doc_type!} raw_analysis_id={ai_analysis_header?.raw_analysis_id!}/>}
+            {stage === "complete" && <AnalysisResults setRequestReview={setRequestReview} ai_analysis_format={ai_analysis!} doc_type={ai_analysis_header?.doc_type!} raw_analysis_id={ai_analysis_header?.raw_analysis_id!} />}
           </div>
         </div>
       </div>

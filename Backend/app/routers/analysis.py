@@ -398,106 +398,266 @@ async def analyze_document(
 # =============== AI for Restructuring Data (Frontend Display Structure) ==============
 @analysis_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
-    documentId: str = Form(...), 
-    document_raw_data: str = Form(...),  # Received as a JSON string from FormData
-    file: UploadFile = File(...),         # The actual image file
+    documentId: str = Form(...),
+    document_raw_data: str = Form(...),
+    file: UploadFile = File(...),
 ):
     """
-    Combines the image and raw data to generate a visually-grounded forensic report.
+    Restructure an existing AI document analysis into a standardized dashboard format.
+    The AI must NOT change meaning, scores, or conclusions.
     """
-    model = genai.GenerativeModel('gemini-flash-latest')
-    
-    # Load the image for Gemini
+
+    model = genai.GenerativeModel("gemini-flash-latest")
+
+    # -----------------------------
+    # 1️⃣ Load Image (Context Only)
+    # -----------------------------
     image_bytes = await file.read()
-    image_parts = [{"mime_type": file.content_type, "data": image_bytes}]
-    
-    # Parse the raw data to include it in the prompt
-    raw_json = json.loads(document_raw_data)
-    print("=========================== Raw json is f{raw_json}===========================")
-    raw_analysis_id = raw_json.get('request_id', 'unknown')
+
+    image_parts = [{
+        "mime_type": file.content_type,
+        "data": image_bytes
+    }]
+
+    # -----------------------------
+    # 2️⃣ Parse Raw Analysis JSON
+    # -----------------------------
+    try:
+        raw_json = json.loads(document_raw_data)
+    except Exception:
+        return {
+            "success": False,
+            "error": "Invalid JSON in document_raw_data"
+        }
+
+    raw_analysis_id = raw_json.get("request_id", "unknown")
+
+    # -----------------------------
+    # 3️⃣ RESTRUCTURING PROMPT
+    # -----------------------------
     prompt = f"""
-    You are a forensic document expert. Analyze the attached IMAGE and the provided DATA.
-    
-    CRITICAL INSTRUCTION: If there is a mismatch between the Image and the Data, or if the Image 
-    contains impossible values (like Feb 32nd or 25:73), you MUST flag it as CRITICAL.
-    
-    EXTRACTED DATA REFERENCE:
+    You are a DATA RESTRUCTURING ENGINE.
+
+    Your task is to transform an EXISTING AI-GENERATED DOCUMENT ANALYSIS into a standardized dashboard JSON format.
+
+    You are NOT performing document analysis.
+    You are NOT verifying the image.
+    You are NOT generating new findings.
+
+    You are strictly restructuring and mapping data.
+
+    ────────────────────────────
+    🚨 STRICT RULES — MUST FOLLOW
+    ────────────────────────────
+
+    1. DO NOT re-analyze the document.
+    2. DO NOT verify or interpret the image.
+    3. DO NOT change risk scores, findings, or conclusions.
+    4. DO NOT add, remove, or invent risks.
+    5. DO NOT hallucinate missing evidence.
+    6. ONLY restructure existing analysis data.
+    7. Preserve severity, tone, and intent exactly.
+    8. If data is missing → infer structure, NOT meaning.
+    9. Use original terminology whenever possible.
+    10. Output must be valid JSON only.
+    11. USER-FRIENDLY REWROORDING: Translate technical findings into clear, accessible language for a non-technical user. Avoid dense jargon in the 'ai_executive_summary' and 'ai_analysis' fields. Do NOT change the meaning, severity, or verdict while doing so.
+
+    You are performing DATA REFACTORING, not analysis.
+
+    ────────────────────────────
+    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
+    ────────────────────────────
+
     {json.dumps(raw_json, indent=2)}
 
-    ANALYSIS TASKS:
-    1. Visual Verification: Cross-check every line item and total in the image.
-    2. Logic Check: Verify math (Items sum == Subtotal) and Temporal validity (Dates/Times).
-    3. Output the following JSON structure ONLY.
+    This input analysis is the ONLY source of truth.
+
+    All outputs must be derived from it.
+
+    ────────────────────────────
+    📤 OUTPUT FORMAT (STRICT SCHEMA)
+    ────────────────────────────
+    Return JSON ONLY.
+    No markdown.
+    No explanations.
+    No comments.
 
     {{
-      "ui_render_mode": "dashboard_v2",
-      "document_id": "{raw_json.get('request_id', 'unknown')}",
-      "processed_at": "{datetime.utcnow().isoformat()}",
-      "dashboard_header": {{
-          "overall_score": number,
-          "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
-          "risk_level_color": "hex_color",
-          "verdict_title": "string",
-          "ai_executive_summary": "string",
-          "grounding_search_reference": "string",
-          "next_step_recommendation": "string"
-      }},
-      "layer_results": [
-          {{
-            "layer_id": "L1..L4",
+    "ui_render_mode": "dashboard_v2",
+    "document_id": "{raw_json.get('request_id', 'unknown')}",
+    "processed_at": "{datetime.utcnow().isoformat()}",
+    "dashboard_header": {{
+        "overall_score": number,
+        "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
+        "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
+        "verdict_title": "string",
+        "ai_executive_summary": "string",
+        "grounding_search_reference": "string",
+        "doc_type": "string",
+        "next_step_recommendation": "string"
+    }},
+    "layer_results": [
+        {{
+            "layer_id": "L1" | "L2" | "L3" | "L4",
             "layer_title": "string",
-            "status": "PASS" | "FAIL",
-            "status_color": "hex_color",
+            "status": "PASS | FAIL | WARNING | SKIPPED",
+            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
             "icon": "lucide_icon_name",
             "score": number,
             "ai_analysis": "string",
             "technical_proofs": ["string"]
-          }}
-      ]
+        }}
+    ]
     }}
+    # come out with the user friendly wording based on the original analysis, do not change the meaning or severity of the findings.
+    ────────────────────────────
+    🧭 FIELD MAPPING INSTRUCTIONS
+    ────────────────────────────
+
+    Executive Summary Mapping:
+
+    • ai_executive_summary =
+    Condense "agent_summary" from the input analysis
+    into 2–3 sentences maximum.
+    • Preserve original meaning and conclusions.
+    • Do NOT introduce new interpretations.
+
+    Layer Analysis Mapping:
+
+    Extract analysis from:
+
+    • layer_summaries.L1_Metadata → layer_id = "L1"
+    • layer_summaries.L2_Visual → layer_id = "L2"
+    • layer_summaries.L3_Content → layer_id = "L3"
+    • layer_summaries.L4_Logic → layer_id = "L4"
+
+    For each layer:
+
+    • ai_analysis = summarized explanation of the layer findings
+    • technical_proofs = direct supporting evidence
+    • score = reflect severity from source analysis
+    • status = PASS if safe, FAIL if risk detected
+
+    Next Step Recommendation:
+
+    • Generate actionable guidance for the user
+    • Must be based strictly on existing findings
+    • Must NOT introduce new risks
+    • Example intent:
+    - Verification steps
+    - Manual review
+    - Contact issuer
+    - Request original document
+
+    Grounding Reference:
+
+    • grounding_search_reference =
+    Source validation references if present
+    (e.g., bank formats, receipt standards, document norms)
+
+    ────────────────────────────
+    ⚠️ DATA PRESERVATION RULE
+    ────────────────────────────
+
+    You must preserve:
+
+    • Risk severity
+    • Fraud indicators
+    • Numerical scores
+    • Analytical conclusions
+    • Evidence claims
+
+    You must NOT:
+
+    • Downgrade or upgrade risk
+    • Modify fraud verdicts
+    • Invent inconsistencies
+    • Add visual claims not stated
+
+    ────────────────────────────
+    ✅ OUTPUT REQUIREMENTS
+    ────────────────────────────
+
+    • Valid JSON only
+    • No trailing commas
+    • No markdown blocks
+    • No explanations
+    • Schema must match exactly
+    • All 4 layers must exist (L1 - L4)
+
+    Return the structured dashboard JSON now.
     """
 
-   
-    if raw_json is not None:
-        raw_analysis_id = raw_json.get('request_id', 'unknown')
-    else:
-        # Fallback if raw_json is missing
-        raw_analysis_id = 'unknown'
-        print("Warning: raw_json was None. Using 'unknown' as ID.")
 
-    # 2. Extract and clean the AI response
+    # -----------------------------
+    # 4️⃣ Generate Structured Output
+    # -----------------------------
     try:
-        response = model.generate_content([prompt, image_parts[0]])
+        response = model.generate_content(
+            [prompt, image_parts[0]]
+        )
 
-        clean_json = response.text.strip().replace('```json', '').replace('```', '')
+        clean_json = (
+            response.text
+            .strip()
+            .replace("```json", "")
+            .replace("```", "")
+        )
+
         analysis_map = json.loads(clean_json)
+
     except Exception as e:
-        # Fallback if JSON parsing fails
-        analysis_map = {"error": "Failed to parse AI response", "raw": response.text}
+        analysis_map = {
+            "error": "Failed to parse AI response",
+            "raw": response.text if "response" in locals() else str(e)
+        }
 
-    # 3. Initialize doc_type with a default value to avoid NameErrors
-    doc_type = "unknown" 
+    # -----------------------------
+    # 5️⃣ Fetch Doc Type
+    # -----------------------------
+    doc_type = "unknown"
 
-    # 4. Firestore Fetch
-    doc_ref = db.collection('analysis_results').document(raw_analysis_id)
+    doc_ref = db.collection("analysis_results").document(raw_analysis_id)
     doc_snap = doc_ref.get()
 
     if doc_snap.exists:
         doc_data = doc_snap.to_dict()
-        doc_type = doc_data.get('doc_type', 'unknown')
+        doc_type = doc_data.get("doc_type", "unknown")
 
-    # 5. Build Payload
+    # -----------------------------
+    # 6️⃣ Build Payload
+    # -----------------------------
     db_payload = {
         "documentId": documentId,
         "raw_analysis_id": raw_analysis_id,
         "doc_type": doc_type,
-        "analysis_content": analysis_map, 
-        "created_at": datetime.utcnow().isoformat()
+        "analysis_content": analysis_map,
+        "created_at": datetime.utcnow().isoformat(),
     }
 
-    # 6. Save and Return
+    # -----------------------------
+    # 7️⃣ Save Result
+    # -----------------------------
     db.collection("structure_analysis_result").add(db_payload)
-    return db_payload  # This is perfectly fine!
+    
+    # add risk level and risk score to 'upload_file' collection for history display and sorting
+    upload_document_db = db.collection('upload_files').document(documentId).get()
+    
+    if upload_document_db.exists:
+        risk_level = analysis_map.get("dashboard_header", {}).get("risk_level", "unknown")
+        overall_score = analysis_map.get("dashboard_header", {}).get("overall_score", 0)
+        risk_level_color = analysis_map.get("dashboard_header", {}).get("risk_level_color", "gray")
+
+        db.collection('upload_files').document(documentId).update({
+            "risk_level": risk_level,
+            "risk_level_color": risk_level_color,
+            "overall_score": overall_score
+        })
+    else:
+        print(f"Warning: Document with ID {documentId} not found in 'upload_files' collection for risk level update.")
+
+    return db_payload
+
 
     
 

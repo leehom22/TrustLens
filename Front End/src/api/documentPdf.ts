@@ -72,7 +72,7 @@ export const deleteNoteFromFirestore = async (firestoreId: string) => {
     }
 };
 
-export const downloadAnnotatedPDF = async (documentURL: string, documentName: string, notes: Note[]) => {
+export const generateAnnotatedPDF = async (documentURL: string, notes: Note[]) => {
     try {
         // Fetch the original PDF
         const existingPdfBytes = await fetch(documentURL).then(res => res.arrayBuffer());
@@ -138,6 +138,21 @@ export const downloadAnnotatedPDF = async (documentURL: string, documentName: st
         // Save the modified PDF
         const pdfBytes = await pdfDoc.save();
 
+        return pdfBytes;
+    } catch (error) {
+        console.error("Failed to download annotated PDF:", error);
+        alert("Failed to download annotated PDF. Please try again.");
+    }
+}
+
+export const downloadAnnotatedPDF = async (documentURL: string, documentName: string, notes: Note[]) => {
+    try {
+        
+        const pdfBytes = await generateAnnotatedPDF(documentURL, notes);
+
+        if(!pdfBytes) {
+            throw new Error("No PDF bytes generated");
+        }
         // Create download link
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);

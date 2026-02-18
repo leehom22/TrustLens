@@ -1,7 +1,10 @@
+import { Annotation, Note } from "@/app/types/document-highlight-type"
 import { db } from "@/lib/firebase"
 import axios from "axios"
 import { doc, setDoc, updateDoc } from "firebase/firestore"
-import { toast } from "sonner"
+import { generateAnnotatedPDF } from "./documentPdf"
+import { generateAnnotatedImage } from "./documentImages"
+import { toast } from "react-toastify"
 
 const db_collection = 'upload_files'
 const backendUrl = import.meta.env.VITE_BACKEND_URL
@@ -23,9 +26,8 @@ export const setFileAsFlagged = async (documentId: string, flaggedReason: string
   }
 }
 
-export const handlePdfDownload = async (docId: string, analysisId: string, docName: string, role: string) => {
+export const generatePdfReport = async (docId: string, analysisId: string, docName: string, role: string) => {
   try {
-
     //! role value only has two options: 'expert' or 'user'
     if (role !== 'expert' && role !== 'user') {
       toast.error("Invalid role for PDF download.");
@@ -40,7 +42,7 @@ export const handlePdfDownload = async (docId: string, analysisId: string, docNa
     const res = await axios.post(
       `${backendUrl}/analysis/download-analysis-report`,
       formData,
-      { responseType: "blob" }   
+      { responseType: "blob" }
     );
 
     // 1. Check if the backend actually sent JSON instead of a PDF
@@ -48,27 +50,118 @@ export const handlePdfDownload = async (docId: string, analysisId: string, docNa
       // Convert the Blob back to text, then parse the JSON
       const text = await res.data.text();
       const result = JSON.parse(text);
-      
+
       toast.error(result.message || "Error generating PDF");
       console.log("Error generating PDF:", result);
       return; // Stop here, do not download!
     }
-    
+    return res; // Return the blob response for PDF download
+  } catch (error) {
+    console.log("Error generating PDF:", error);
+    toast.error("Network error while generating PDF.");
+  }
+
+}
+
+export const handlePdfDownload = async (docId: string, analysisId: string, docName: string, role: string) => {
+  try {
+
+    const res = await generatePdfReport(docId, analysisId, docName, role);
+
     // 2. If it is a PDF, proceed with the download
-    const url = window.URL.createObjectURL(res.data);
+    const url = window.URL.createObjectURL(res?.data);
     const link = document.createElement("a");
     link.href = url;
     link.download = `${docName}_analysis.pdf`;
 
     document.body.appendChild(link);
     link.click();
-    
+
     // 3. Clean up the DOM and Memory
     link.remove();
-    window.URL.revokeObjectURL(url); 
+    window.URL.revokeObjectURL(url);
 
   } catch (error) {
     console.log("Error downloading PDF:", error);
     toast.error("Network error while downloading PDF.");
   }
 };
+
+// TODO: Seding email to user about the review: Document review pdf + annotated imgaes/document + Expert's comments 
+export const sendReviewEmailToUser = async (
+  userEmail: string,
+  docName: string,
+  docId: string,
+  analysisId: string,
+  role: string,
+  documentURL: string,
+  notesType: 'pdf' | 'image',
+  notes?: Note[],
+  annotations?: Annotation[],
+) => {
+  try {
+    console.log("checking parameters for sendReviewEmailToUser: ", {
+      userEmail,
+      docName,
+      docId,
+      analysisId,
+      role,
+      documentURL,
+      notesType,
+      notes,
+      annotations
+    })
+    const formData = new FormData();
+    const res = await generatePdfReport(docId, analysisId, docName, role);
+    let annotatedPdfBytes = null
+    let dataURL = null //Images
+    if (res) {
+      if (notesType === 'pdf' && notes) {
+        // Get the annotate images/document
+        annotatedPdfBytes = await generateAnnotatedPDF(documentURL, notes!);
+        if (!annotatedPdfBytes) {
+          throw new Error("No annotated PDF bytes generated");
+        }
+        formData.append("annotated_document", new Blob([annotatedPdfBytes], { type: "application/pdf" }), `annotated-${docName}.pdf`);
+
+      } else if (notesType === 'image' && annotations) {
+        dataURL = await generateAnnotatedImage(documentURL, annotations, { width: 800, height: 600 });
+        if (!dataURL) {
+          throw new Error("No annotated PDF bytes generated");
+        }
+        const resFetch = await fetch(dataURL);
+        const imageBlob = await resFetch.blob();
+
+        formData.append(
+          "annotated_document",
+          imageBlob,
+          `annotated-${docName}.png`
+        );
+      }
+
+      // Sending to email via backend API
+      formData.append("email", userEmail);
+      formData.append("doc_name", docName);
+      formData.append("pdf_report", new Blob([res.data], { type: "application/pdf" }), `${docName}_review.pdf`);
+
+      const emailRes = await axios.post(
+        `${backendUrl}/email/send-review-report-to-user`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      if (emailRes.data.success) {
+        // toast.success("Review email sent to user successfully.");
+        return { success: true };
+      } else {
+        // toast.error("Error sending review email to user.");
+        console.log("Error response from email API:", emailRes.data);
+        return { success: false };
+      }
+    }
+  } catch (error) {
+    console.log("Error sending review email:", error);
+    // toast.error("Error sending review email to user.");
+    return { success: false };
+  }
+}
