@@ -172,3 +172,8 @@ class FilesSchema(BaseModel):
         except Exception as e:
             print(f"Error in get_history_data: {e}")
             return []
+        
+        
+class FlagDocumentRequest(BaseModel):
+    documentId: str
+    flaggedReason: str

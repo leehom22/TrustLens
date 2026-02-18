@@ -20,6 +20,7 @@ from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
+from .routers.annotate import annotate_router
 
 # ------- Import internal modules ------
 from .core.config import Config
@@ -79,6 +80,12 @@ app.include_router(
     analysis_router,
     prefix="/analysis",
     tags=["Analysis"]
+)
+
+app.include_router(
+    annotate_router,
+    prefix="/annotate",
+    tags=["Annotate"]
 )
 
 # --- Register the Deepgram/Speech Router ---

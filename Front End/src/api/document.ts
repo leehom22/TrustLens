@@ -1,30 +1,31 @@
 import { Annotation, Note } from "@/app/types/document-highlight-type"
-import { db } from "@/lib/firebase"
 import axios from "axios"
-import { doc, setDoc, updateDoc } from "firebase/firestore"
 import { generateAnnotatedPDF } from "./documentPdf"
 import { generateAnnotatedImage } from "./documentImages"
 import { toast } from "react-toastify"
 
-const db_collection = 'upload_files'
 const backendUrl = import.meta.env.VITE_BACKEND_URL
-export const setFileAsFlagged = async (documentId: string, flaggedReason: string) => {
+
+export const setFileAsFlagged = async (
+  documentId: string,
+  flaggedReason: string
+) => {
   try {
-    const documentRef = doc(db, db_collection, documentId)
+    const res = await axios.post(
+      `${backendUrl}/files/set_flag_document`,
+      {
+        documentId,
+        flaggedReason,
+      }
+    );
 
-    await setDoc(documentRef, {
-      flagged: true, // Need to be processed by Python, need to use True/False
-      flaggedReason: flaggedReason,
-      expertReview: false,
-      updatedAt: new Date().toISOString()
-    }, { merge: true })
+    return res.data;
 
-    return { "success": true }
   } catch (error) {
-    console.log("Error flagging a document: ", error)
-    return { "success": false }
+    console.error("Error flagging document:", error);
+    return { success: false };
   }
-}
+};
 
 export const generatePdfReport = async (docId: string, analysisId: string, docName: string, role: string) => {
   try {

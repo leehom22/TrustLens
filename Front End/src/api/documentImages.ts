@@ -1,11 +1,13 @@
 import { Annotation } from "@/app/types/document-highlight-type";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, deleteDoc, doc, documentId, getDocs, query, where } from "firebase/firestore";
+import axios from "axios";
+import { addDoc, collection } from "firebase/firestore";
 import Konva from "konva";
 import { Stage } from "konva/lib/Stage";
 import { toast } from "sonner";
 
 const db_collection = 'image_annotations';
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
 // Load annotations from Firestore
 export const loadAnnotationsFromFirestore = async (
@@ -15,39 +17,31 @@ export const loadAnnotationsFromFirestore = async (
   annotationIdRef: React.RefObject<number>
 ) => {
   try {
-    const annotationsRef = collection(db, db_collection);
-    const q = query(
-      annotationsRef,
-      where('documentId', '==', documentId),
-      where('userId', '==', userId)
+    const res = await axios.post(
+      `${backendUrl}/annotate/load-image-annotation`,
+      {
+        documentId,
+        userId,
+      }
     );
 
-    const querySnapshot = await getDocs(q);
-    const loadedAnnotations: Annotation[] = [];
+    if (!res.data.success) {
+      throw new Error("Failed to load annotations");
+    }
 
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      loadedAnnotations.push({
-        id: data.id,
-        type: 'rectangle',
-        x: data.x,
-        y: data.y,
-        width: data.width,
-        height: data.height,
-        color: data.color,
-        comment: data.comment,
-        firestoreId: doc.id,
-      });
-    });
+    const loadedAnnotations: Annotation[] = res.data.annotations;
 
     setAnnotations(loadedAnnotations);
 
     if (loadedAnnotations.length > 0) {
-      const maxId = Math.max(...loadedAnnotations.map((a) => a.id));
+      const maxId = Math.max(
+        ...loadedAnnotations.map((a) => a.id)
+      );
       annotationIdRef.current = maxId + 1;
     }
+
   } catch (error) {
-    console.error('Error loading annotations:', error);
+    console.error("Error loading annotations:", error);
   }
 };
 
@@ -80,11 +74,17 @@ export const saveAnnotationToFirestore = async (
 };
 
 // Delete annotation from Firestore
-export const deleteAnnotationFromFirestore = async (firestoreId: string) => {
+export const deleteAnnotationFromFirestore = async (
+  firestoreId: string
+) => {
   try {
-    await deleteDoc(doc(db, db_collection, firestoreId));
+    await axios.post(
+      `${backendUrl}/annotate/delete-image-annotation`,
+      { firestoreId }
+    );
+
   } catch (error) {
-    console.error('Error deleting annotation:', error);
+    console.error("Error deleting annotation:", error);
     throw error;
   }
 };
