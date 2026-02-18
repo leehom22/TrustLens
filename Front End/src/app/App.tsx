@@ -94,6 +94,10 @@ export default function App() {
     // setUploadedFile(file);
     // setAppState("analysis");
     // return 
+      localStorage.removeItem('latest_analysis');
+      localStorage.removeItem('latest_analysis_header');
+    
+
     if (!file) return
     const storageRef = ref(storage, `documents/${file.name}`)
 
@@ -105,7 +109,7 @@ export default function App() {
       // 3. Get the public download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
       setUrl(downloadURL);
-      console.log(`=======Upload successful! - ${downloadURL}=======`);
+      // console.log(`=======Upload successful! - ${downloadURL}=======`);
       if (downloadURL) {
         const res = await axios.post(`${backendUrl}/files/upload_files`,{
           "user_id":currentUserId,
@@ -134,6 +138,8 @@ export default function App() {
   };
 
   const handleBack = () => {
+    localStorage.removeItem('latest_analysis')
+    localStorage.removeItem('latest_analysis_header')
     setAppState("upload");
     setUploadedFile(null);
   };

@@ -15,7 +15,7 @@ import "@react-pdf-viewer/highlight/lib/styles/index.css";
 import { Note } from "@/app/types/document-highlight-type";
 import { deleteNoteFromFirestore, downloadAnnotatedPDF, loadNotesFromFirestore, saveNotesToFirestore } from "@/api/documentPdf";
 
-export default function DocumentVercel(props: { userId: string, documentUrl: string, documentId: string, documentName: string  }) {
+export default function DocumentVercel(props: { userId: string, documentUrl: string, documentId: string, documentName: string, setDownloadNotes: React.Dispatch<React.SetStateAction<Note[]>>  }) {
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const noteIdRef = useRef(0);
@@ -234,6 +234,10 @@ export default function DocumentVercel(props: { userId: string, documentUrl: str
   useEffect(() => {
     loadNotesFromFirestore(documentId, userId, setNotes, noteIdRef);
   }, []);
+
+  useEffect(() => {
+      props.setDownloadNotes(notes);
+  },[notes])
 
   const highlightPluginInstance = highlightPlugin({ renderHighlightTarget, renderHighlightContent, renderHighlights });
 

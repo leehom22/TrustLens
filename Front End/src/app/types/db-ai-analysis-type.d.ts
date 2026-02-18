@@ -2,7 +2,7 @@
 
 export type RiskLevel = 'SAFE' | 'CAUTION' | 'SUSPICIOUS' | 'CRITICAL';
 export type LayerStatus = 'PASS' | 'WARNING' | 'CAUTION' | 'CRITICAL' | 'FAIL';
-
+export type RiskLevelColor = 'green' | 'yellow' | 'red' | 'blue' | 'gray';
 export interface User {
   username: string
   email: string
@@ -24,18 +24,19 @@ export interface FileHeader {
 export interface DashboardHeader {
   overall_score: number;
   risk_level: RiskLevel;
-  risk_level_color: string;
+  risk_level_color: RiskLevelColor;
   verdict_title: string;
   ai_executive_summary: string;
   grounding_search_reference: string;
   next_step_recommendation: string;
+  doc_type: string;
 }
 
 export interface LayerResult {
   layer_id: string;
   layer_title: string;
   status: LayerStatus;
-  status_color?: string; // Optional as seen in L3
+  status_color?: RiskLevelColor; // Optional as seen in L3
   icon?: string;         // Optional as seen in L3
   score: number;
   ai_analysis: string;

@@ -1,4 +1,5 @@
 import { LayerResult } from "@/app/types/db-ai-analysis-type";
+import { statusStyles } from "@/lib/utils";
 import { FileImage, Shield, ZoomIn } from "lucide-react";
 import { useState } from "react";
 
@@ -61,17 +62,16 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
               </div>
               
               {/* Status Badge */}
-              <span 
-                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                  layer?.status === 'CRITICAL' || layer?.status === 'FAIL'
-                    ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
-                    : layer.status === 'WARNING'
-                    ? 'bg-yellow-100 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800'
-                    : 'bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                }`}
-              >
-                {layer?.status} - Score: {layer?.score}
-              </span>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color] || statusStyles.gray}`}>
+                            {layer?.status} 
+                            {
+                                layer?.status !== "PASS" && (
+                                    <p>
+                                        - Score: {layer?.score}
+                                    </p>
+                                )
+                            }
+                        </span>
             </div>
 
             {/* Visual Evidence Image */}

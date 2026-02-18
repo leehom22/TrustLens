@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { formatDateTime, getRiskColor } from '@/lib/utils';
+import { formatDateTime, getRiskColor, statusStyles } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { FileHeader } from '@/app/types/db-ai-analysis-type';
+import { FileHeader, RiskLevel, RiskLevelColor } from '@/app/types/db-ai-analysis-type';
 
 interface Files {
   id: string,
@@ -25,8 +25,9 @@ interface Files {
   fileUrl: string
   fileSize: number
   created_at: string
-  riskScore: number
-  riskLevel: string
+  overall_score: number
+  risk_level: RiskLevel
+  risk_level_color: RiskLevelColor
   analyzedBy: string
   expertReview?: boolean | null
 }
@@ -344,9 +345,9 @@ const ReviewDocumentList = () => {
                             {/* Risk Level */}
                             <td className="p-4">
                               <span
-                                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${getRiskColor(doc.riskLevel)}`}
+                                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}}`}
                               >
-                                {doc.riskLevel || "Low"}
+                                {doc.risk_level || "Low"}
                               </span>
                             </td>
 
@@ -354,17 +355,17 @@ const ReviewDocumentList = () => {
                             <td className="p-4">
                               <div className="flex items-center gap-2">
                                 <span className="w-6 text-sm font-bold text-slate-700 dark:text-slate-300">
-                                  {doc.riskScore}
+                                  {doc.overall_score}
                                 </span>
                                 <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                   <div
-                                    className={`h-full transition-all duration-500 ${doc.riskScore > 70
+                                    className={`h-full transition-all duration-500 ${doc.overall_score > 70
                                       ? 'bg-red-500'
-                                      : doc.riskScore > 40
+                                      : doc.overall_score > 40
                                         ? 'bg-yellow-500'
                                         : 'bg-green-500'
                                       }`}
-                                    style={{ width: `${doc.riskScore}%` }}
+                                    style={{ width: `${doc.overall_score}%` }}
                                   />
                                 </div>
                               </div>

@@ -1,12 +1,48 @@
-import { handlePdfDownload } from "@/api/document";
+import { handlePdfDownload, sendReviewEmailToUser } from "@/api/document";
 import { FileHeader } from "@/app/types/db-ai-analysis-type";
-import { Calendar, CheckCircle, Download, ExternalLink, FileText, FileType, HardDrive, Shield, User } from "lucide-react";
+import { Annotation, Note } from "@/app/types/document-highlight-type";
+import { Calendar, CheckCircle, Download, ExternalLink, FileText, FileType, HardDrive, Loader2, SendIcon, Shield, User } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface HeaderProps {
     selectedDocument: FileHeader | null;
     structure_ai_analysis_id: string;
+    downloadNotes?: Note[]
+    downloadAnnotations?: Annotation[]
 }
-const Header = ({ selectedDocument, structure_ai_analysis_id }: HeaderProps ) => {
+const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotations, downloadNotes }: HeaderProps ) => {
+
+    const [sendingReportLoading, setSendingReportLoading] = useState<boolean>(false)
+
+    const handleSendReportRequest = async (userEmail: string, docName: string, docId: string, analysisId: string, role: string, documentURL: string, notesType: "image" | "pdf", notes?: Note[] | undefined, annotations?: Annotation[]) => {
+        try {
+            setSendingReportLoading(true)
+
+            const res = await sendReviewEmailToUser(
+                userEmail,
+                docName,
+                docId,
+                analysisId,
+                role,
+                documentURL,
+                notesType,
+                notes,
+                annotations
+            )
+
+            if (res!.success) {
+                toast.success("Review email sent to user successfully.");
+            } else {
+                toast.error("Error sending review email to user.");
+            }
+        } catch (error) {
+            console.log("Eror sending review email:", error);
+        } finally {
+            setSendingReportLoading(false)
+        }
+    }
+
     const formatFileSize = (bytes: number) => {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
@@ -70,13 +106,42 @@ const Header = ({ selectedDocument, structure_ai_analysis_id }: HeaderProps ) =>
                         </div>
                     </div>
                 </div>
-                <button 
-                    onClick={() => handlePdfDownload(selectedDocument.id, structure_ai_analysis_id,selectedDocument.fileName,'expert')}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                >
-                    <Download className="w-4 h-4" />
-                    Download
-                </button>
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => handleSendReportRequest(
+                            selectedDocument.user.email,
+                            selectedDocument.fileName,
+                            selectedDocument.id,structure_ai_analysis_id,
+                            'expert',
+                            selectedDocument.fileUrl,
+                            selectedDocument.mimeType === 'application/pdf' ? 'pdf' : 'image', 
+                            selectedDocument.mimeType === 'application/pdf'? downloadNotes : undefined, 
+                            selectedDocument.mimeType === 'application/pdf' ? undefined : downloadAnnotations
+                            )}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        {
+                            sendingReportLoading ? (
+                                <div className="flex items-center gap-2">
+                                    <Loader2 className="animate-spin" size={20}/> <p>Sending</p>
+                                </div>
+                            )
+                            :
+                            <div className="flex items-center gap-2">
+                                <SendIcon className="w-4 h-4" />
+                                Send PDF to user
+                            </div>
+                        }
+                    </button>
+                    <button 
+                        onClick={() => handlePdfDownload(selectedDocument.id, structure_ai_analysis_id,selectedDocument.fileName,'expert')}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        <Download className="w-4 h-4" />
+                        Download
+                    </button>
+                </div>
+                
             </div>
 
             {/* Document Metadata Grid */}

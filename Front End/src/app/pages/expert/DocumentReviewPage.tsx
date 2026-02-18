@@ -141,7 +141,7 @@ const UserDashboard = () => {
                     <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">Document Fraud Analysis System</p>
                 </div>
             </header>
-
+            
             <div className="flex flex-col lg:flex-row gap-6 p-6">
                 
                 {/* Left Section: Stats Grid */}

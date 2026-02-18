@@ -6,7 +6,7 @@ import Konva from 'konva';
 import { Annotation, ImageViewerProps } from '@/app/types/document-highlight-type';
 import { deleteAnnotationFromFirestore, downloadAnnotatedImage, loadAnnotationsFromFirestore, saveAnnotationToFirestore } from '@/api/documentImages';
 
-export default function ImageViewer({ userId, documentUrl, documentId, documentName }: ImageViewerProps) {
+export default function ImageViewer({ userId, documentUrl, documentId, documentName,setDownloadAnnotations }: ImageViewerProps) {
     const [annotations, setAnnotations] = useState<Annotation[]>([]);
     const [isDrawing, setIsDrawing] = useState(false);
     const [drawingMode, setDrawingMode] = useState(false); // New state for drawing mode toggle
@@ -87,6 +87,10 @@ export default function ImageViewer({ userId, documentUrl, documentId, documentN
             setImageLoaded(true);
         };
     }, [documentUrl]);
+
+    useEffect(()=>{
+        setDownloadAnnotations(annotations);
+    },[annotations])
 
     const handleDeleteAnnotation = async (annotation: Annotation) => {
         if (annotation.firestoreId) {

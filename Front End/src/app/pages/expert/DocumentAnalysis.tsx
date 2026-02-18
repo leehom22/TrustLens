@@ -16,6 +16,7 @@ import LogicalConsistency from '../../components/expert/expertDocumentAnalysis/a
 import { DocumentAnalysisResult, FileHeader } from '@/app/types/db-ai-analysis-type';
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
+import { Annotation, Note } from '@/app/types/document-highlight-type';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -34,9 +35,12 @@ const DocumentAnalysis = (props: { userId: string }) => {
         doc_type: '',
         structure_analysis_id: '',
     })
+    const [downloadNotes, setDownloadNotes] = useState<Note[]>([]);
+    const [downloadAnnotations, setDownloadAnnotations] = useState<Annotation[]>([]);
     const [expertReviewNotes, setExpertReviewNotes] = useState<string[]>([])
     const [selectedTabs, setSelectedTabs] = useState<string>('metadata')
     const [structure_ai_analysis_id, setStructure_ai_analysis_id] = useState<string>('')
+
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
@@ -132,13 +136,13 @@ const DocumentAnalysis = (props: { userId: string }) => {
                             <TabsContent value='document'>
                                 {
                                     // PDF
-                                    selectedDocument.mimeType === 'application/pdf' &&
-                                    <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName} />
+                                    selectedDocument.mimeType === 'application/pdf' && 
+                                    <DocumentVercel userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName} setDownloadNotes={setDownloadNotes} />
                                 }
                                 {
                                     // IMAGES
                                     selectedDocument.mimeType.startsWith('image/') &&
-                                    <DocumentImages userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName} />
+                                    <DocumentImages userId={props.userId} documentUrl={selectedDocument.fileUrl} documentId={selectedDocument.id} documentName={selectedDocument.fileName} setDownloadAnnotations={setDownloadAnnotations} />
                                 }
                             </TabsContent>
                             <TabsContent value='ai-assistant'>
@@ -149,7 +153,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                         <div className="p-6 max-w-5xl mx-auto ">
 
                             {/* Document Header */}
-                            <Header selectedDocument={selectedDocument} structure_ai_analysis_id={structure_ai_analysis_id}/>
+                            <Header selectedDocument={selectedDocument} structure_ai_analysis_id={structure_ai_analysis_id} downloadAnnotations={downloadAnnotations} downloadNotes={downloadNotes} />
 
                             {/* AI Analysis Summary */}
                             <AnalysisSummary selectedDocument={ai_analysis_format} />

@@ -1,28 +1,27 @@
-import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2, CircleAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2, CircleAlert, AlertCircle } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { motion } from "motion/react";
 import { useState } from "react";
-import axios from 'axios'
-import { toast } from "react-toastify";
-import { getAuth} from 'firebase/auth'
 import { VisualManipulation } from "./HeatmapVisualization";
 // import { ai_analysis_format } from "@/app/data/db-ai-analysis";
 import Metadata from "../expert/expertDocumentAnalysis/analysisTab/Metadata";
 import ContentAnalysis from "../expert/expertDocumentAnalysis/analysisTab/ContentAnalysis";
 import LogicalConsistency from "../expert/expertDocumentAnalysis/analysisTab/KeyFindings";
-import { DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
+import { DocumentAnalysisResult, RiskLevelColor } from "@/app/types/db-ai-analysis-type";
 import DocumentFeedback from "./DocumentFeedback";
+import { statusStyles } from "@/lib/utils";
 
 interface AnalysisResultProps {
-  setRequestReview: React.Dispatch<React.SetStateAction<boolean>> 
+  setRequestReview: React.Dispatch<React.SetStateAction<boolean>>
   ai_analysis_format: DocumentAnalysisResult,
-  raw_analysis_id: string 
+  raw_analysis_id: string
   doc_type: string
 }
-export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,raw_analysis_id}: AnalysisResultProps) {
+export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id }: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
   const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
+  const riskLevelColor: RiskLevelColor = ai_analysis_format?.dashboard_header?.risk_level_color || 'gray'
 
   const [openFeedback, setOpenFeedback] = useState({
     metadata: false,
@@ -30,7 +29,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
     contentAnalysis: false,
     findings: false
   })
-  
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -38,29 +37,44 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
       className="space-y-6"
     >
       {/* Risk Overview Card */}
-      <div className={`rounded-xl border-2 p-6 shadow-lg ${riskLevel === "CRITICAL"
-        ? "bg-red-50 dark:bg-red-600/10 border-red-500 dark:border-red-600/50"
-        : riskLevel === "SUSPICIOUS"
-          ? "bg-yellow-50 dark:bg-yellow-600/10 border-yellow-500 dark:border-yellow-600/50"
-          : "bg-green-50 dark:bg-green-600/10 border-green-500 dark:border-green-600/50"
-        }`}>
+      <div className={`rounded-xl border-2 p-6 shadow-lg ${statusStyles[riskLevelColor]}`}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
+            {/* Dynamic Icon Selection */}
             {riskLevel === "CRITICAL" ? (
               <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
             ) : riskLevel === "SUSPICIOUS" ? (
-              <AlertTriangle className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+              <AlertCircle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+            ) : riskLevel === "CAUTION" ? (
+              <AlertCircle className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
             ) : (
               <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
             )}
+
             <div>
+              {/* Dynamic Title based on all 4 levels */}
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {riskLevel === "CRITICAL" ? "High Risk Detected" : riskLevel === "SUSPICIOUS" ? "Medium Risk - Review Required" : "Low Risk"}
+                {/* {riskLevel === "CRITICAL" && "High Risk Detected"}
+                {riskLevel === "SUSPICIOUS" && "Significant Risk - Review Required"}
+                {riskLevel === "CAUTION" && "Minor Inconsistencies Detected"}
+                {riskLevel === "SAFE" && "Low Risk / Document Verified"} */}
+                 {ai_analysis_format?.dashboard_header?.verdict_title}
               </h2>
-              <p className="text-gray-700 dark:text-slate-300">{ai_analysis_format?.dashboard_header?.verdict_title}</p>
+              {/* <p className="text-gray-700 dark:text-slate-300">
+                {ai_analysis_format?.dashboard_header?.verdict_title}
+              </p> */}
             </div>
           </div>
-          <Badge variant={riskLevel === "CRITICAL" ? "destructive" : "default"} className="text-sm">
+
+          {/* Dynamic Badge with logic for colors */}
+          <Badge
+            variant="outline"
+            className={`text-sm font-semibold border-2 ${riskLevel === "CRITICAL" ? "border-red-600 text-red-600 bg-red-50" :
+                riskLevel === "SUSPICIOUS" ? "border-orange-500 text-orange-600 bg-orange-50" :
+                  riskLevel === "CAUTION" ? "border-yellow-500 text-yellow-700 bg-yellow-50" :
+                    "border-green-600 text-green-600 bg-green-50"
+              }`}
+          >
             Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}
           </Badge>
         </div>
@@ -73,13 +87,13 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
       <Tabs defaultValue="metadata" className="space-y-4">
         <div className="w-full flex justify-between">
           <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-12 py-4 px-3">
-              <TabsTrigger value="metadata" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Metadata & Source</TabsTrigger>
-              <TabsTrigger value="heatmap" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Visual Manipulation</TabsTrigger>
-              <TabsTrigger value="content" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Content Semantics</TabsTrigger>
-              <TabsTrigger value="findings" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Logical Consistency</TabsTrigger>
+            <TabsTrigger value="metadata" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Metadata & Source</TabsTrigger>
+            <TabsTrigger value="heatmap" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Visual Manipulation</TabsTrigger>
+            <TabsTrigger value="content" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Content Semantics</TabsTrigger>
+            <TabsTrigger value="findings" className="p-4 rounded-sm data-[state=active]:text-blue-600 data-[state=active]:font-bold dark:text-slate-400 dark:data-[state=active]:text-blue-400">Logical Consistency</TabsTrigger>
           </TabsList>
-          <button className="py-1 px-4 border rounded-lg border-red-500 text-red-500 cursor-pointer" onClick={()=> setRequestReview(true)}>
-            <p>Request for a review</p> 
+          <button className="py-1 px-4 border rounded-lg border-red-500 text-red-500 cursor-pointer" onClick={() => setRequestReview(true)}>
+            <p>Request for a review</p>
           </button>
         </div>
         {/* Metadata Tab */}
@@ -97,7 +111,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
             </div>
           }
           {openFeedback.metadata && (
-            <DocumentFeedback layerType="layer1" setOpenFeedback={setOpenFeedback} section="Metadata & Source" analysis_id={raw_analysis_id} document_class={doc_type}/>
+            <DocumentFeedback layerType="layer1" setOpenFeedback={setOpenFeedback} section="Metadata & Source" analysis_id={raw_analysis_id} document_class={doc_type} />
           )}
         </TabsContent>
 
@@ -115,7 +129,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
             </div>
           }
           {openFeedback.heatmap && (
-            <DocumentFeedback layerType="layer2" setOpenFeedback={setOpenFeedback} section="Visual Manipulation" analysis_id={raw_analysis_id} document_class={doc_type}/>
+            <DocumentFeedback layerType="layer2" setOpenFeedback={setOpenFeedback} section="Visual Manipulation" analysis_id={raw_analysis_id} document_class={doc_type} />
           )}
         </TabsContent>
 
@@ -133,7 +147,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
             </div>
           }
           {openFeedback.contentAnalysis && (
-            <DocumentFeedback layerType="layer3" setOpenFeedback={setOpenFeedback} section="Content Semantics" analysis_id={raw_analysis_id} document_class={doc_type}/>
+            <DocumentFeedback layerType="layer3" setOpenFeedback={setOpenFeedback} section="Content Semantics" analysis_id={raw_analysis_id} document_class={doc_type} />
           )}
         </TabsContent>
 
@@ -151,7 +165,7 @@ export function AnalysisResults({setRequestReview,ai_analysis_format,doc_type,ra
             </div>
           }
           {openFeedback.findings && (
-            <DocumentFeedback layerType="layer4 " setOpenFeedback={setOpenFeedback} section="Logical Consistency" analysis_id={raw_analysis_id} document_class={doc_type}/>
+            <DocumentFeedback layerType="layer4 " setOpenFeedback={setOpenFeedback} section="Logical Consistency" analysis_id={raw_analysis_id} document_class={doc_type} />
           )}
         </TabsContent>
       </Tabs>

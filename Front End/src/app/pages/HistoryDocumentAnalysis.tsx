@@ -1,9 +1,9 @@
-import { AlertTriangle, CheckCircle, Loader2, Badge, FileText, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, Badge, FileText, Download, AlertCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { useEffect, useState } from "react";
 import axios from 'axios'
 import { toast } from "react-toastify";
-import { DocumentAnalysisResult, FileHeader } from "@/app/types/db-ai-analysis-type";
+import { DocumentAnalysisResult, FileHeader, RiskLevel, RiskLevelColor } from "@/app/types/db-ai-analysis-type";
 import Metadata from "../components/expert/expertDocumentAnalysis/analysisTab/Metadata";
 import { VisualManipulation } from "../components/analysis/HeatmapVisualization";
 import ContentAnalysis from "../components/expert/expertDocumentAnalysis/analysisTab/ContentAnalysis";
@@ -14,13 +14,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import { handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import DocumentFeedback from "../components/analysis/DocumentFeedback";
+import { statusStyles } from "@/lib/utils";
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
 export function HistoryDocumentAnalysis() {
     //** User side - Document Analysis Result page */
     const [ai_analysis_format, setAi_analysis] = useState<DocumentAnalysisResult | null>(null)
-    const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     const [selectedDocument, setSelectedDocument] = useState<FileHeader | null>(null)
     const [requestReview, setRequestReview] = useState<boolean>(false)
@@ -41,7 +41,9 @@ export function HistoryDocumentAnalysis() {
     const [doc_type, setDoc_type] = useState<string | null>(null)
     const [structure_analysis_id, setStructure_analysis_id] = useState<string>('')
     const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
-    
+    const [riskLevelColor, setRiskLevelColor] = useState<RiskLevelColor>('gray')
+    const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
+
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
@@ -52,6 +54,9 @@ export function HistoryDocumentAnalysis() {
 
             if (result.success === true) {
                 setAi_analysis(result.data?.analysis_content)
+                console.log("The ai analysis format is: ", result.data?.analysis_content)
+                setRiskLevelColor(result.data?.analysis_content?.dashboard_header?.risk_level_color || 'gray')
+                setRiskLevel(result.data?.analysis_content?.dashboard_header?.risk_level || 'SAFE')
                 setRaw_analysis_id(result.data?.raw_analysis_id)
                 setDoc_type(result.data?.doc_type)
                 setStructure_analysis_id(result.data?.id)
@@ -120,7 +125,7 @@ export function HistoryDocumentAnalysis() {
                         <div className={` border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 left-0 right-0 z-60`}>
                             <div className="w-full mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
                                 <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-                                    <Button variant="ghost"  className="text-gray-700 dark:text-slate-300" onClick={() => navigate('/history')}>← Back</Button>
+                                    <Button variant="ghost" className="text-gray-700 dark:text-slate-300" onClick={() => navigate('/history')}>← Back</Button>
                                     <div className="flex items-center gap-2 md:gap-3 min-w-0">
                                         <FileText className="w-4 h-4 md:w-5 md:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                                         <div className="min-w-0">
@@ -176,26 +181,36 @@ export function HistoryDocumentAnalysis() {
                             <div className="lg:col-span-7 flex flex-col gap-6 overflow-y-auto w-full">
 
                                 {/* Executive Summary Header */}
-                                <div className={`rounded-2xl border-2 p-6 transition-colors shadow-sm ${riskLevel === "CRITICAL" ? "bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50" :
-                                    riskLevel === "SUSPICIOUS" ? "bg-yellow-50/50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900/50" :
-                                        "bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900/50"
-                                    }`}>
+                                <div className={`rounded-2xl border-2 p-6 transition-colors shadow-sm ${statusStyles[riskLevelColor]}`}>
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-4">
-                                            <div className={`p-2 rounded-full ${riskLevel === "CRITICAL" ? "bg-red-100 text-red-600" :
-                                                riskLevel === "SUSPICIOUS" ? "bg-yellow-100 text-yellow-600" :
-                                                    "bg-green-100 text-green-600"
-                                                }`}>
-                                                {riskLevel === "CRITICAL" || riskLevel === "SUSPICIOUS" ? <AlertTriangle className="w-7 h-7" /> : <CheckCircle className="w-7 h-7" />}
-                                            </div>
+                                            {riskLevel === "CRITICAL" ? (
+                                                <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
+                                            ) : riskLevel === "SUSPICIOUS" ? (
+                                                <AlertCircle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                                            ) : riskLevel === "CAUTION" ? (
+                                                <AlertCircle className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+                                            ) : (
+                                                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                                            )}
                                             <div>
                                                 <h2 className="text-xl font-bold dark:text-white">
-                                                    {riskLevel === "CRITICAL" ? "High Risk Detected" : riskLevel === "SUSPICIOUS" ? "Medium Risk Found" : "Legitimacy Verified"}
+                                                    {riskLevel === "CRITICAL" && "High Risk Detected"}
+                                                    {riskLevel === "SUSPICIOUS" && "Significant Risk - Review Required"}
+                                                    {riskLevel === "CAUTION" && "Minor Inconsistencies Detected"}
+                                                    {riskLevel === "SAFE" && "Low Risk / Document Verified"}
                                                 </h2>
                                                 <p className="text-sm font-medium opacity-70">{ai_analysis_format?.dashboard_header?.verdict_title}</p>
                                             </div>
                                         </div>
-                                        <Badge variant={riskLevel === "CRITICAL" ? "destructive" : "secondary"} className="uppercase tracking-wider">
+                                        <Badge
+                                            variant="outline"
+                                            className={`text-sm font-semibold  ${riskLevel === "CRITICAL" ? "text-red-600 bg-red-50" :
+                                                riskLevel === "SUSPICIOUS" ? " text-orange-600 bg-orange-50" :
+                                                    riskLevel === "CAUTION" ? " text-yellow-700 bg-yellow-50" :
+                                                        "text-green-600 bg-green-50"
+                                                }`}
+                                        >
                                             {ai_analysis_format?.dashboard_header?.risk_level}
                                         </Badge>
                                     </div>
@@ -207,13 +222,13 @@ export function HistoryDocumentAnalysis() {
                                 {/* Detailed Findings Tabs */}
                                 <Tabs defaultValue="metadata" className="w-full">
                                     <div className="w-full flex justify-end my-1">
-                                        <button className={`py-2 px-3 border rounded-lg  max-w-2xl ${                                        selectedDocument?.flagged === false ? 'border-red-500 text-red-500 cursor-pointer' : 'border-gray-500 text-gray-500' }`} onClick={() => setRequestReview(true)}
-                                        disabled={selectedDocument?.flagged!}    
+                                        <button className={`py-2 px-3 border rounded-lg  max-w-2xl ${selectedDocument?.flagged === false ? 'border-red-500 text-red-500 cursor-pointer' : 'border-gray-500 text-gray-500'}`} onClick={() => setRequestReview(true)}
+                                            disabled={selectedDocument?.flagged!}
                                         >
                                             <p>Request for a review</p>
                                         </button>
-                                        <button className="flex justify-around items-center py-2 px-3 border rounded-lg border-gray-500  max-w-2xl ml-2 space-x-1 cursor-pointer" onClick={()=>handlePdfDownload(selectedDocument?.id!,structure_analysis_id, selectedDocument?.fileName!,'user')} >
-                                            <Download size={20}/>
+                                        <button className="flex justify-around items-center py-2 px-3 border rounded-lg border-gray-500  max-w-2xl ml-2 space-x-1 cursor-pointer" onClick={() => handlePdfDownload(selectedDocument?.id!, structure_analysis_id, selectedDocument?.fileName!, 'user')} >
+                                            <Download size={20} />
                                             <p>Download Report</p>
                                         </button>
                                     </div>
@@ -227,7 +242,7 @@ export function HistoryDocumentAnalysis() {
                                                 {tab === 'metadata' ? 'Metadata' : tab === 'heatmap' ? 'Visuals' : tab === 'content' ? 'Semantics' : 'Consistency'}
                                             </TabsTrigger>
                                         ))}
-                                    </TabsList>                
+                                    </TabsList>
 
                                     <div >
                                         <TabsContent value="metadata" className="main-card-container">
@@ -242,7 +257,7 @@ export function HistoryDocumentAnalysis() {
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <DocumentFeedback layerType="layer1" setOpenFeedback={setOpenFeedback} section="Metadata & Source" analysis_id={raw_analysis_id!} document_class={doc_type}/>
+                                                <DocumentFeedback layerType="layer1" setOpenFeedback={setOpenFeedback} section="Metadata & Source" analysis_id={raw_analysis_id!} document_class={doc_type} />
                                             )}
                                         </TabsContent>
 
@@ -260,7 +275,7 @@ export function HistoryDocumentAnalysis() {
                                                 </div>
                                             }
                                             {openFeedback.heatmap && (
-                                                <DocumentFeedback layerType="layer2" setOpenFeedback={setOpenFeedback} section="Visual Manipulation" analysis_id={raw_analysis_id!} document_class={doc_type}/>
+                                                <DocumentFeedback layerType="layer2" setOpenFeedback={setOpenFeedback} section="Visual Manipulation" analysis_id={raw_analysis_id!} document_class={doc_type} />
                                             )}
                                         </TabsContent>
 
@@ -278,7 +293,7 @@ export function HistoryDocumentAnalysis() {
                                                 </div>
                                             }
                                             {openFeedback.contentAnalysis && (
-                                                <DocumentFeedback layerType="layer3" setOpenFeedback={setOpenFeedback} section="Content Semantics" analysis_id={raw_analysis_id!} document_class={doc_type}/>
+                                                <DocumentFeedback layerType="layer3" setOpenFeedback={setOpenFeedback} section="Content Semantics" analysis_id={raw_analysis_id!} document_class={doc_type} />
                                             )}
                                         </TabsContent>
 
@@ -296,7 +311,7 @@ export function HistoryDocumentAnalysis() {
                                                 </div>
                                             }
                                             {openFeedback.findings && (
-                                               <DocumentFeedback layerType="layer4 " setOpenFeedback={setOpenFeedback} section="Logical Consistency" analysis_id={raw_analysis_id!} document_class={doc_type}/>
+                                                <DocumentFeedback layerType="layer4 " setOpenFeedback={setOpenFeedback} section="Logical Consistency" analysis_id={raw_analysis_id!} document_class={doc_type} />
                                             )}
                                         </TabsContent>
                                     </div>
@@ -305,7 +320,7 @@ export function HistoryDocumentAnalysis() {
                             {/* Modal Content */}
                             {
                                 requestReview && (
-                                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
                                         {/* Backdrop */}
                                         <div
                                             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
