@@ -11,8 +11,11 @@ from ..utils.visualizer import generate_hud
 from ..utils.layer2_utils import (
     calculate_ela_metrics, 
     analyze_fused_forensics,     # Black level detection
-    analyze_texture_consistency, # Texture detection
+    analyze_texture_consistency, # Texture detection (Native/Mixed)
     analyze_alignment_consistency, # Alignment detection
+    analyze_ats_hacking,         # ATS Hacking (New)
+    analyze_statistical_islands, # Statistical Island (New)
+    calculate_image_coverage,
     pil_to_cv2
 )
 
@@ -50,11 +53,25 @@ def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
 def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
     try:
         images = []
+        is_pdf = False
+        pdf_is_scanned = False
+
         if file_type.startswith("image/"):
             with Image.open(file_path) as raw_img:
                 raw_img.load()
                 images = [downsample_image(raw_img.convert("RGB"))]
         elif file_type == "application/pdf":
+            is_pdf = True
+
+            coverage = calculate_image_coverage(file_path)
+            # Threshold: If > 80% of the page is image, it's a scan.
+            if coverage > 0.8:
+                pdf_is_scanned = True
+                logger.info(f"PDF Analysis: Detected SCANNED document (Image Coverage: {coverage:.2f})")
+            else:
+                pdf_is_scanned = False
+                logger.info(f"PDF Analysis: Detected NATIVE digital document (Image Coverage: {coverage:.2f})")
+
             images = pdf_to_ela_pages(file_path)
             if not images and not POPPLER_AVAILABLE:
                 return LayerResult(layer_name="L2_Visual", status=LayerStatus.SKIPPED, score=0, details={"reason": "Poppler missing"})
@@ -63,151 +80,176 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         else:
             return LayerResult(layer_name="L2_Visual", status=LayerStatus.SKIPPED, score=0, details={"reason": "Unsupported Type"})
 
+
         page_results = []
         l2_signals = [] 
-        
         max_visual_score = 0
         
         for idx, original in enumerate(images):
             cv_img = pil_to_cv2(original)
-            
-            # 1. Convert to grayscale
+            h, w = cv_img.shape[:2]
             gray_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
             
-            # 2. Noise detection (Determine if it is a photo/scan or digital screenshot)
-            lap_var = cv2.Laplacian(gray_img, cv2.CV_64F).var()
-            is_noisy_source = lap_var > 80 # >80 is usually a photo or scan (high frequency noise)
+            # ================= MODE DETERMINATION =================
+            if is_pdf:
+                # For PDF, stick to the global classification we calculated earlier
+                is_native_digital = not pdf_is_scanned
+            else:
+                # Calculate Laplacian Variance to classify Native vs Noisy
+                lap_var = cv2.Laplacian(gray_img, cv2.CV_64F).var()
+                
+                # Threshold: > 80-100 implies noise/scan. < 80 implies clean digital.
+                is_native_digital = lap_var < 100 
             
-            # 3. Unified text contour extraction (Only for clean screenshots, reducing repetitive overhead)
+            mode_str = "Native Digital" if is_native_digital else "Noisy/Scan"
+            
+            # ================= ALGORITHM WEIGHTS =================
+            # Define confidence weights based on mode
+            if is_native_digital:
+                w_black = 1.0
+                w_texture = 0.4  # Lower confidence for texture in clean images (false positives)
+                w_island = 0.0   # Disable statistical island for clean images
+                w_align = 1.0
+            else:
+                w_black = 0.2    # Black level unreliable in scans
+                w_texture = 1.0  # Texture useful for scans
+                w_island = 1.0   # Statistical island designed for scans
+                w_align = 0.0    # Alignment harder in scans due to skew
+            
+            # Initialize Masks Collection for HUD
+            meta_collection = {
+                "ATS":        {"mask": None, "color": (255, 0, 255),   "conf": 1.0 if (is_pdf and is_native_digital) else 0.0}, # Magenta
+                "BlackLevel": {"mask": None, "color": (255, 255, 0),   "conf": w_black},   # Cyan
+                "Texture":    {"mask": None, "color": (0, 255, 255),   "conf": w_texture}, # Yellow
+                "Island":     {"mask": None, "color": (0, 165, 255),   "conf": w_island},  # Orange
+                "Alignment":  {"mask": None, "color": (0, 255, 0),     "conf": w_align}    # Green
+            }
+            
+            # ================= DETECTORS =================
+            
+            # 1. ATS Hacking (Native PDF Only)
+            ats_score = 0
+            if is_pdf and is_native_digital:
+                ats_res = analyze_ats_hacking(file_path, idx, cv_img) # Note: cv_img modified in-place for visualization
+                if ats_res["score"] > 0:
+                    ats_score = ats_res["score"]
+                    meta_collection["ATS"]["mask"] = ats_res["mask"] 
+                    l2_signals.extend([f"Page {idx+1}: {s}" for s in ats_res["signals"]])
+            
+            # 2. Black Level Detection (Fused Forensics)
+            # Use pre-computed contours if native for speed
             shared_contours = None
-            if not is_noisy_source:
-                # Simple brightness check to adapt to Dark Mode screenshots
+            if is_native_digital:
                 mean_brightness = np.mean(gray_img)
                 thresh_type = cv2.THRESH_BINARY if mean_brightness < 100 else cv2.THRESH_BINARY_INV
                 _, thresh = cv2.threshold(gray_img, 200, 255, thresh_type)
                 shared_contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
-            # --- Call detection functions (Pass pre-computed parameters) ---
-            
-            # 1. Black level detection (For digital screenshots)
-            black_score, black_mask, black_sigs = analyze_fused_forensics(
-                cv_img, pre_contours=shared_contours
-            )
-            
-            # 2. Texture detection (For photos/scans)
-            tex_score, tex_mask, tex_sigs = analyze_texture_consistency(
-                cv_img, is_photo=is_noisy_source
-            )
-            
-            # 3. Alignment detection (For digital screenshots)
-            align_score, align_mask, align_sigs = analyze_alignment_consistency(
-                cv_img, pre_contours=shared_contours, is_photo=is_noisy_source
-            )
-            
-            current_detection_score = max(black_score, tex_score, align_score)
-            if current_detection_score > 0:
-                max_visual_score = max(max_visual_score, current_detection_score)
 
-            # --- Score Fusion Logic ---
-            # Take the highest score among the three detectors (Max Voting)
-            current_max = max(black_score, tex_score, align_score)
-            
-            if current_max > 0:
-                max_visual_score = max(max_visual_score, current_max)
-                
-            # Collect signals
-            if black_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in black_sigs])
-            if tex_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in tex_sigs])
-            if align_score > 0: l2_signals.extend([f"Page {idx+1}: {s}" for s in align_sigs])
+            raw_black_score, black_mask, black_sigs = analyze_fused_forensics(cv_img, pre_contours=shared_contours)
+            # Apply Confidence
+            final_black_score = raw_black_score * w_black
+            if raw_black_score > 0 and w_black > 0.3: # Only report if confidence is decent
+                 l2_signals.extend([f"Page {idx+1}: {s}" for s in black_sigs])
+            meta_collection["BlackLevel"]["mask"] = black_mask
 
-            # --- 3. ELA Generation (Visual Base) ---
+            # 3. Texture / Statistical Island
+            final_texture_score = 0
+            
+            if is_native_digital:
+                # Use Standard Texture Check with low weight
+                raw_tex_score, tex_mask, tex_sigs = analyze_texture_consistency(cv_img, is_photo=False)
+                final_texture_score = raw_tex_score * w_texture
+                if raw_tex_score > 0 and final_texture_score > 20:
+                    l2_signals.extend([f"Page {idx+1}: {s} (Low Conf)" for s in tex_sigs])
+                meta_collection["Texture"]["mask"] = tex_mask
+            else:
+                # Use Statistical Island for Noisy/Scans
+                # Also run standard texture as backup or complementary? 
+                # According to plan: "Statistical island: noisy only"
+                raw_island_score, island_mask, island_sigs = analyze_statistical_islands(cv_img)
+                final_texture_score = raw_island_score * w_island # Island replaces texture score
+                if raw_island_score > 0:
+                    l2_signals.extend([f"Page {idx+1}: {s}" for s in island_sigs])
+                meta_collection["Island"]["mask"] = island_mask
+
+            # 4. Alignment
+            raw_align_score, align_mask, align_sigs = analyze_alignment_consistency(
+                cv_img, pre_contours=shared_contours, is_photo=(not is_native_digital)
+            )
+            final_align_score = raw_align_score * w_align
+            if raw_align_score > 0 and w_align >= 0.5:
+                l2_signals.extend([f"Page {idx+1}: {s}" for s in align_sigs])
+            meta_collection["Alignment"]["mask"] = align_mask
+
+            # ================= SCORING AGGREGATION =================
+            # Max of all weighted scores
+            advanced_score = max(ats_score, final_black_score, final_texture_score, final_align_score)
+            max_visual_score = max(max_visual_score, advanced_score)
+
+            # ================= ELA (For Reference & HUD) =================
             with io.BytesIO() as buffer:
                 original.save(buffer, "JPEG", quality=90)
                 buffer.seek(0)
                 resaved = Image.open(buffer)
                 ela_img = ImageChops.difference(original, resaved)
             
-            # --- 4. ELA Stats (Rigorous Z-Score) ---
-            w, h = ela_img.size
-            # Dynamically calculate grid size, usually 32 or smaller
             grid_size = max(32, min(w, h) // 25)
-            # Calling the optimized vectorized version here
             metrics = calculate_ela_metrics(ela_img, grid_size)
             
-            # Corrected judgment logic using data returned by metrics
-            is_noisy_source_ela = metrics["global_mean"] > 15
-            confidence = "LOW" if is_noisy_source_ela else "HIGH"
-
-            # ELA Scoring Logic (Conservative)
-            page_score = 0
-            if confidence == "HIGH":
-                # Deduct points only if Z-Score is extremely high and there are multiple suspicious grids
-                if metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
-                    page_score = 40
-
-            current_page_score = max(current_detection_score, page_score)
+            # ELA Score (Conservative)
+            ela_page_score = 0
+            # Only trust ELA high score if it's Native Digital and metrics are extreme
+            if is_native_digital and metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
+                ela_page_score = 40
+            
+            # Combine Advanced + ELA
+            current_page_score = max(advanced_score, ela_page_score)
             current_page_score = min(current_page_score, 100)
 
-
-            masks_collection = {
-                "Texture": tex_mask,
-                "BlackLevel": black_mask,
-                "Alignment": align_mask
-            }
-            
-            # Convert PIL ELA image to OpenCV format for HUD generation
+            # ================= HUD GENERATION =================
             ela_cv = pil_to_cv2(ela_img)
-            
-            # Generate HUD with fused signals (This is the key innovation of Layer 2, providing visual explainability for the AI's decision)
             try:
+                # Filter None masks
+                active_masks = {k: v for k, v in meta_collection.items() if v is not None}
+                
                 heatmap_cv = generate_hud(
-                    cv_img,          # Original Image (OpenCV)
-                    ela_cv,          # ELA Image (OpenCV)
-                    masks_collection,   # All forensic masks for explainability
-                    int(current_page_score)   # Final fused score for this page
+                    cv_img,          # Original (with ATS red text drawn if any)
+                    ela_cv,          # ELA
+                    active_masks,    # All masks
+                    int(current_page_score)
                 )
             except Exception as e:
                 logger.error(f"Visualizer Error: {e}")
-                # Fallback to basic ELA if HUD generation fails
                 heatmap_cv = cv_img
-            
 
-            # --- 5. Save Heatmap ---
+            # Save
             heatmap_name = f"heatmap_{uuid.uuid4().hex[:8]}_p{idx+1}.jpg"
             heatmap_path = os.path.join(EVIDENCE_DIR, heatmap_name)
             cv2.imwrite(heatmap_path, heatmap_cv)
 
             page_results.append({
                 "page": idx + 1,
-                "score": min(page_score, 100),
+                "score": current_page_score,
                 "url": f"/evidence/{heatmap_name}",
                 "local_path": os.path.abspath(heatmap_path),
                 "metrics": metrics,
-                "confidence": confidence,
-                "note": "Native Digital" if confidence == "HIGH" else "Scan/Noisy"
+                "mode": mode_str,
+                "note": f"Mode: {mode_str}, MaxFeat: {advanced_score:.1f}"
             })
 
         if not page_results: 
             return LayerResult(layer_name="L2_Visual", status=LayerStatus.CLEAN, score=0, details={})
 
-        # ======================== Final Evaluation =======================
+        # ================= FINAL RESULT =================
         worst = max(page_results, key=lambda x: x["score"])
+        final_score = worst["score"]
         
-        # Final score takes the maximum of (ELA Score) and (Advanced Detection Score)
-        final_score = max(worst["score"], max_visual_score)
-        final_score = min(final_score, 100)
-
         status = LayerStatus.CLEAN
+        if final_score > 70: status = LayerStatus.HIGH_RISK
+        elif final_score > 30: status = LayerStatus.SUSPICIOUS
+        
         l2_signals = list(set(l2_signals))
         
-        if final_score > 70:
-            status = LayerStatus.HIGH_RISK
-        elif final_score > 30:
-            status = LayerStatus.SUSPICIOUS
-            
-        if worst["confidence"] == "LOW":
-            l2_signals.append("Note: Source image quality is low/noisy, visual analysis reliability is reduced.")
-
         return LayerResult(
             layer_name = "L2_Visual",
             status = status,
@@ -217,11 +259,8 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "analyzed_pages": len(images), 
                 "all_pages": page_results,
                 "worst_page_details": worst,
-                "advanced_analysis": {
-                     "fused_check": "Triggered" if max_visual_score > 0 else "Pass"
-                },
-                "forensic_note": "Fused Analysis: ELA + Texture (for Photos) + Intensity (for Screenshots).",
-                "visual_tampering": (final_score > 60 and worst["confidence"] == "HIGH")
+                "mode_detected": worst["mode"],
+                "forensic_note": "Hybrid Architecture: Native(ATS/BlackLevel) vs Noisy(Islands/Texture)."
             },
             visual_evidence_url = worst["url"]
         )

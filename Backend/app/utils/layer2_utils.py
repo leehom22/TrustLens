@@ -1,10 +1,19 @@
 import cv2
 import numpy as np
 from PIL import Image
+from ..core.config import logger
+
+try:
+    import pdfplumber
+    PDF_PLUMBER_AVAILABLE = True
+except ImportError:
+    PDF_PLUMBER_AVAILABLE = False
+
 
 # Turn the image into OpenCV format (BGR), for analysis and sketching/ labelling
 def pil_to_cv2(pil_image):
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+
 
 # ================= 1. ELA Core Calculation (Grid-based Z-Score Statistical Method) =================
 # [Optimization] Use Numpy vectorization instead of nested for loops, significantly improving performance
@@ -147,6 +156,7 @@ def analyze_texture_consistency(image_input, block_size=32, is_photo=None):
         return 65, anomaly_mask, ["Texture anomaly detected (Potential Smoothing/Cloning)"]
     else:
         return 0, None, []
+
 
 # ================= 3. Black Level Detection (For Screenshots - Conservative ROI Version) =================
 # Accept pre-computed contours, add Dark Mode detection
@@ -323,6 +333,234 @@ def analyze_alignment_consistency(image_input, pre_contours=None, is_photo=None)
         return 50, anomaly_mask, ["Text Alignment Anomaly (Potential Insertion)"]
     else:
         return 0, None, []
+
+
+# ================= 5. NEW: ATS Hacking (Native PDF Only) =================
+def analyze_ats_hacking(pdf_path: str, page_idx: int, cv_img: np.ndarray):
+    """
+    [Native PDF only] ATS Keyword Injection Detection.
+    """
+    if not PDF_PLUMBER_AVAILABLE:
+        return {"score": 0, "mask": None, "signals": [], "details": {}}
+
+    result = {
+        "score": 0,
+        "mask": None,
+        "signals": [],
+        "details": {"hidden_count": 0, "tiny_count": 0}
+    }
+    
+    h, w = cv_img.shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+    
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_idx >= len(pdf.pages):
+                return result
+            page = pdf.pages[page_idx]
+            
+            # Coordinate scaling
+            scale_x = w / page.width
+            scale_y = h / page.height
+            
+            hidden_chars = []
+            
+            for char in page.chars:
+                is_suspicious = False
+                reason = ""
+                
+                # Check 1: White on White (Color Analysis)
+                c = char.get('non_stroking_color')
+                if c is not None:
+                    # CMYK or RGB white
+                    if c == (1,) or c == [1] or c == (1,1,1) or c == [1,1,1] or c == (0,0,0,0):
+                        is_suspicious = True
+                        reason = "White"
+                    # Sometimes white is represented as 1 in Grayscale
+                    elif isinstance(c, (float, int)) and c == 1:
+                        is_suspicious = True
+                        reason = "White"
+
+                # Check 2: Micro Fonts
+                size = char.get('size', 10)
+                if size < 2.0:
+                    is_suspicious = True
+                    reason = "Tiny"
+                    result["details"]["tiny_count"] += 1
+
+                if is_suspicious:
+                    text_char = char.get('text', '')
+                    if not text_char or text_char.isspace():
+                        continue
+                    
+                    hidden_chars.append(char)
+                    if reason == "White":
+                        result["details"]["hidden_count"] += 1
+                    
+                    # Draw on Mask
+                    x0 = int(char.get('x0', 0) * scale_x)
+                    top = int(char.get('top', 0) * scale_y)
+                    x1 = int(char.get('x1', 0) * scale_x)
+                    bottom = int(char.get('bottom', 0) * scale_y)
+                    
+                    cv2.rectangle(mask, (x0-2, top-2), (x1+2, bottom+2), 255, -1)
+                    
+                    # Reveal on Original Image (Visualizer Helper)
+                    # Create a reddish/white highlight box
+                    if x1 > x0 and bottom > top:
+                        sub_img = cv_img[top:bottom, x0:x1]
+                        if sub_img.size > 0:
+                            white_rect = np.full_like(sub_img, (200,200,255))
+                            cv2.addWeighted(sub_img, 0.5, white_rect, 0.5, 0, sub_img)
+                            cv_img[top:bottom, x0:x1] = sub_img
+                        
+                        # Draw text in red
+                        font_scale = max(0.4, (bottom - top) / 30.0)
+                        cv2.putText(cv_img, text_char, (x0, bottom-2),
+                                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0,0,255), 1)
+
+            total_suspicious = len(hidden_chars)
+            if total_suspicious > 5:
+                # High certainty
+                result["score"] = min(100, 50 + total_suspicious * 2)
+                result["mask"] = mask
+                
+                if result["details"]["hidden_count"] > 0:
+                    result["signals"].append(f"ATS Hacking: {result['details']['hidden_count']} invisible white chars")
+                if result["details"]["tiny_count"] > 0:
+                    result["signals"].append(f"ATS Hacking: {result['details']['tiny_count']} micro-font chars (<2pt)")
+                    
+    except Exception as e:
+        # pdfplumber sometimes fails on malformed PDFs
+        print(f"ATS Analysis Warning: {e}")
+        
+    return result
+
+
+# ================= 6. NEW: Statistical Island (Noisy/Scan Only) =================
+def analyze_statistical_islands(image_input, block_size=16):
+    """
+    [Noisy/Scan Only] Detects "Statistical Islands" - areas of abnormally low variance 
+    in a noisy image (indicating potential digital patching/erasing).
+    """
+    if isinstance(image_input, str):
+        img = cv2.imread(image_input, cv2.IMREAD_GRAYSCALE)
+    else:
+        if len(image_input.shape) == 3:
+            img = cv2.cvtColor(image_input, cv2.COLOR_BGR2GRAY)
+        else:
+            img = image_input
+            
+    if img is None: return 0, None, []
+
+    h, w = img.shape
+    
+    # 1. Median Blur to estimate base content
+    # Use larger kernel for noisy images
+    median_blur = cv2.medianBlur(img, 5)
+    
+    # 2. Residual (Noise Map)
+    residual = cv2.absdiff(img, median_blur)
+    
+    # 3. Block Statistics
+    # We want to find blocks where the residual variance is significantly LOWER than global median
+    std_map = np.zeros((h // block_size, w // block_size))
+    
+    for r in range(0, h // block_size):
+        for c in range(0, w // block_size):
+            y, x = r * block_size, c * block_size
+            block = residual[y:y+block_size, x:x+block_size]
+            if block.size == 0: continue
+            std_map[r, c] = np.std(block)
+            
+    # 4. Global Baseline (Robust)
+    global_median_std = np.median(std_map)
+    if global_median_std < 1.0: return 0, None, [] # Image is too clean/flat
+    
+    # 5. Thresholding (Islands)
+    # Anomaly if local noise is < 30% of global median noise (unusually smooth)
+    anomaly_indices = np.where(std_map < (global_median_std * 0.3))
+    
+    if len(anomaly_indices[0]) == 0: return 0, None, []
+    
+    # 6. Build Mask & Cluster
+    mask = np.zeros((h, w), dtype=np.uint8)
+    for r, c in zip(anomaly_indices[0], anomaly_indices[1]):
+        y, x = r * block_size, c * block_size
+        # Additional check: Local contrast with neighbors (Spatial Isolation)
+        # If neighbors are also smooth, it might just be a blank page area.
+        # We want smooth areas SURROUNDED by noise, or just very distinct.
+        # Simple implementation: just mark it first.
+        
+        # Avoid pure white/black blocks (margins)
+        roi_orig = img[y:y+block_size, x:x+block_size]
+        if np.mean(roi_orig) > 250 or np.mean(roi_orig) < 5: continue
+        
+        cv2.rectangle(mask, (x, y), (x+block_size, y+block_size), 255, -1)
+        
+    # 7. Cluster-based Score (Connected Components)
+    # Filter out tiny isolated blocks (noise), keep larger islands
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    
+    suspicious_blobs = 0
+    final_mask = np.zeros_like(mask)
+    
+    for i in range(1, num_labels): # Skip background 0
+        area = stats[i, cv2.CC_STAT_AREA]
+        # Filter: Area must be significant (e.g., > 2 blocks)
+        if area > (block_size * block_size * 2):
+            suspicious_blobs += 1
+            # Copy this component to final mask
+            final_mask[labels == i] = 255
+            
+    if suspicious_blobs > 0:
+        # Score based on number of islands, maxing at 80
+        score = min(80, 40 + suspicious_blobs * 10)
+        return score, final_mask, ["Statistical Island (Smooth Patch in Noisy Background)"]
+    
+    return 0, None, []
+
+
+def calculate_image_coverage(pdf_path: str) -> float:
+    """
+    计算 PDF 全文的平均图片覆盖率，用于区分扫描件和原生PDF
+    Return: 0.0 - 1.0 (1.0 means 100% covered by images)
+    """
+    if not PDF_PLUMBER_AVAILABLE:
+        return 0.0
+
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if not pdf.pages:
+                return 0.0
+            
+            total_ratio = 0.0
+            pages_checked = 0
+            
+            # Check up to first 5 pages to determine document type
+            for page in pdf.pages[:5]:
+                page_area = float(page.width * page.height)
+                if page_area == 0:
+                    continue
+                
+                # Sum area of all images on the page
+                img_area = sum([float(img['width'] * img['height']) for img in page.images])
+                
+                # Calculation ratio
+                total_ratio += (img_area / page_area)
+                pages_checked += 1
+            
+            if pages_checked == 0:
+                return 0.0
+            
+            # Average ratio
+            return min(total_ratio / pages_checked, 1.0)
+            
+    except Exception as e:
+        logger.warning(f"Image coverage calc failed: {e}")
+        return 0.0
+
+
 
 
 # ================= ** Other Methodology =================
