@@ -35,12 +35,16 @@ async def send_report(
 ):
     print(f"📩 Processing email request for: {email}") # Log to terminal
     
+    # --- CLEAN UP THE FILENAME ---
+    # This removes '_Report.pdf' so it just shows the original file name
+    display_name = file.filename.replace("_Report.pdf", "")
+    
+    # --- UPDATED MESSAGE SCHEMA ---
     message = MessageSchema(
         subject="TrustLens Analysis Report",
         recipients=[email],
-        body=f"<h3>Analysis Complete</h3><p>Attached is the forensic report for <strong>{file.filename}</strong>.</p>",
-        subtype=MessageType.html,
-        attachments=[file]
+        body=f"<p>Analysis for <strong>{display_name}</strong> is ready.</p>",
+        subtype=MessageType.html
     )
 
     fm = FastMail(conf)
