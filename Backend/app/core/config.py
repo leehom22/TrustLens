@@ -78,7 +78,7 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": True,
         "allow_screenshot": False,
         "weights": {"L1": 0.05, "L2": 0.05, "L3": 0.9, "L4": 0.0},
-        "hard_fail_checks": ["hidden_data_found", "hidden_text_found"]
+        "hard_fail_checks": ["hidden_data_found", "ATS_Hacking"]
     },
     "certificate": {
         "description": "Official award/verification.",

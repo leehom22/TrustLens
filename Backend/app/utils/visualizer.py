@@ -2,22 +2,20 @@ import cv2
 import numpy as np
 import random
 
+# =============== Draw HUD Text with Semi-Transparent Background =============
 def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.5, thickness=1, bg_intensity=0.3):
-    """绘制带半透明背景条的文字"""
+    
     font = cv2.FONT_HERSHEY_SIMPLEX
     (w, h), _ = cv2.getTextSize(text, font, size, thickness)
     x, y = pos
     
     h_bg = h + 8
+    # Add boundary checks to prevent out-of-bounds errors
     if y - h_bg < 0: y_adjusted = h_bg + 2
     else: y_adjusted = y
-    
-    # 越界检查
     if x + w > img.shape[1]: x = img.shape[1] - w - 2
     
     roi = img[y_adjusted-h_bg:y_adjusted+4, x:x+w+4]
-    
-    # 绘制半透明黑色背景条 (Glass Effect)
     if roi.size > 0:
         black_rect = np.zeros_like(roi, dtype=np.uint8)
         res = cv2.addWeighted(roi, 1.0 - bg_intensity, black_rect, bg_intensity, 0)
@@ -26,8 +24,10 @@ def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.5, thickness=1, bg_i
     cv2.putText(img, text, (x, y_adjusted), font, size, color, thickness, cv2.LINE_AA)
     return y_adjusted + h + 15
 
+
+# ============= Calculate Z-Score Matrix for ELA Image to Identify Anomalous Regions ==============
 def calculate_grid_stats(ela_img, grid_size=32):
-    """实时计算网格 Z-Score 矩阵"""
+
     h, w = ela_img.shape
     if grid_size < 1: grid_size = 32
     rows = h // grid_size
@@ -48,152 +48,159 @@ def calculate_grid_stats(ela_img, grid_size=32):
             
     return z_matrix, global_mean, global_std
 
-def draw_hazard_zone(img, mask, color, label):
-    """
-    [核心升级] 区域融合绘制函数
-    1. 膨胀融合碎块
-    2. 绘制战术框
-    3. 填充斜线警示纹理
-    """
+
+# ================= Draw Hazard Zones with Custom Colors and Confidence Labels =================
+def draw_hazard_zone(img, mask, color, label, confidence):
+    
     if mask is None: return
     
-    # 1. 膨胀融合：使用横向长方形核，把同一行的字连起来
-    # (15, 5) 表示横向膨胀 15px，纵向 5px -> 适合文本行融合
+    # Dilate the mask to merge nearby regions and create a more cohesive hazard zone
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 8))
     merged_mask = cv2.dilate(mask, kernel, iterations=2)
-    
     contours, _ = cv2.findContours(merged_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     overlay = img.copy()
     
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
+        if w < 10 or h < 10: continue 
         
-        # 忽略太小的噪点框
-        if w < 10 or h < 10: continue
-        
-        # A. 绘制斜线填充 (Hazard Stripes) - 极具警示感
-        # 只在框内画斜线
-        roi = overlay[y:y+h, x:x+w]
-        line_step = 10
-        for i in range(0, w + h, line_step):
-            # 在 ROI 内画斜线
-            pt1 = (i, 0)
-            pt2 = (0, i)
-            # 需要截断坐标以防画出界，但 cv2.line 会自动处理 ROI 裁剪吗？不会，需手动计算，
-            # 简单方法：画在全图再 mask，或者直接画
-            # 这里为了性能，只画简单的半透明填充
-            pass
-        
-        # 用半透明色块填充代替复杂的斜线计算 (性能更好，效果也棒)
+        # Fill the bounding box with a semi-transparent color
         cv2.rectangle(overlay, (x, y), (x+w, y+h), color, -1)
         
-        # B. 绘制战术四角框 (实心高亮)
+        # Draw a border
         l = min(w, h) // 3
         if l > 20: l = 20
         t = 2
-        
-        # 画在原图 img 上 (不透明)
+        # Corner lines
         cv2.line(img, (x, y), (x + l, y), color, t)
         cv2.line(img, (x, y), (x, y + l), color, t)
-        
         cv2.line(img, (x+w, y), (x+w-l, y), color, t)
         cv2.line(img, (x+w, y), (x+w, y+l), color, t)
-        
         cv2.line(img, (x, y+h), (x+l, y+h), color, t)
         cv2.line(img, (x, y+h), (x, y+h-l), color, t)
-        
         cv2.line(img, (x+w, y+h), (x+w-l, y+h), color, t)
         cv2.line(img, (x+w, y+h), (x+w, y+h-l), color, t)
         
-        # C. 标签
-        cv2.putText(img, label, (x, y-5), cv2.FONT_HERSHEY_PLAIN, 0.8, color, 1)
+        # Label with confidence
+        conf_str = f"{int(confidence*100)}%"
+        label_text = f"{label} [{conf_str}]"
+        # Label background
+        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_PLAIN, 0.9, 1)
+        cv2.rectangle(img, (x, y-th-5), (x+tw, y-2), (0,0,0), -1)
+        cv2.putText(img, label_text, (x, y-5), cv2.FONT_HERSHEY_PLAIN, 0.9, color, 1)
 
-    # 混合半透明填充层 (透明度 0.2 -> 隐约可见的封锁区)
+    # Blend the overlay with the original image to create a glow effect
     cv2.addWeighted(overlay, 0.25, img, 0.75, 0, img)
 
 
-def generate_hud(original_cv, ela_cv, masks_dict, global_score):
-    """
-    Project GLASS HUD v2: 区域融合版
-    """
+# ================= Main HUD Generation Function Integrating All Elements =================
+def generate_hud(original_cv, ela_cv, detection_meta, global_score):
+
     h, w = original_cv.shape[:2]
     
-    # 1. 战术底图 (Blue Tint)
+    # ------------- Blue Tint -------------
     gray_bg = cv2.cvtColor(original_cv, cv2.COLOR_BGR2GRAY)
     gray_bg = cv2.cvtColor(gray_bg, cv2.COLOR_GRAY2BGR)
+    
     blue_tint = np.zeros_like(gray_bg)
-    blue_tint[:, :, 0] = 60 
-    base_layer = cv2.addWeighted(gray_bg, 0.6, blue_tint, 1.0, 0)
+    blue_tint[:, :, 0] = 50 # Add some blue
+    
+    # Blend the gray background with the blue tint to create a cool base layer
+    base_layer = cv2.addWeighted(gray_bg, 0.5, blue_tint, 1.0, 0)
 
-    # 2. 全屏网格 (The Grid)
+    # ------------ Grid Overlay with Z-Scores ------------
     grid_size = 40 
     z_matrix, g_mean, g_std = calculate_grid_stats(ela_cv if len(ela_cv.shape)==2 else cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY), grid_size)
     
     for r in range(z_matrix.shape[0]):
         for c in range(z_matrix.shape[1]):
             y, x = r * grid_size, c * grid_size
-            # 随机闪烁青色网格
+            
+            val = z_matrix[r, c]
+            
+            # Generate a random alpha for the grid lines
             if random.random() > 0.7:
-                alpha = random.uniform(0.05, 0.2)
+                alpha = random.uniform(0.1, 0.3)
                 color = (255, 255, 0) 
                 overlay_color = tuple([int(cc * alpha) for cc in color])
                 
-                l = 3
+                l = 4
                 cv2.line(base_layer, (x, y-l), (x, y+l), overlay_color, 1)
                 cv2.line(base_layer, (x-l, y), (x+l, y), overlay_color, 1)
-                
-            if (r + c) % 4 == 0: 
-                val = z_matrix[r, c]
-                font_color = (100, 100, 255) if val > 2.5 else (70, 70, 70)
-                cv2.putText(base_layer, f"{val:.1f}", (x+5, y+20), 
-                           cv2.FONT_HERSHEY_PLAIN, 0.6, font_color, 1)
+            
+            # According to the Z-Score, decide whether to show the value and in what color
+            show_text = False
+            font_color = (80, 80, 80) # 默认：极淡的灰色
+            
+            if val > 3.0:
+                show_text = True
+                font_color = (0, 255, 255) # Yellow
+            elif val > 1.5:
+                if random.random() > 0.2: show_text = True
+                font_color = (50, 200, 255) # Orange
+            else:
+                # values below 1.5 are mostly normal, but randomly show some to create a "data stream" effect
+                if (r + c) % 3 == 0 or random.random() > 0.8:
+                    show_text = True
+                    font_color = (80, 120, 120) # Faint Cyan (青灰)
 
-    # 3. 风险渲染 (Risk Overlay)
-    # [A] 等高线 (保持原样)
+            if show_text:
+                # one decimal place
+                text_val = f"{val:.1f}"
+                # avoid placing text too close to the edges
+                cv2.putText(base_layer, text_val, (x+8, y+22), 
+                           cv2.FONT_HERSHEY_PLAIN, 0.7, font_color, 1)
+
+    # ---------- Risk Overlay -----------
+    
+    # ELA Z-Map Contours - Level 2 Warning (Orange) and Level 3 Critical (Red)
+    # Resize Z-Map to Full Image Size to ensure coverage
     z_map_resized = cv2.resize(z_matrix, (w, h), interpolation=cv2.INTER_CUBIC)
-    mask_l2 = (z_map_resized > 3.0).astype(np.uint8) * 255
-    contours_l2, _ = cv2.findContours(mask_l2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(base_layer, contours_l2, -1, (0, 165, 255), 1)
+    
+    if global_score > 40:
+        mask_l2 = (z_map_resized > 3.5).astype(np.uint8) * 255
+        contours_l2, _ = cv2.findContours(mask_l2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(base_layer, contours_l2, -1, (0, 0, 255), 1)
 
-    # [B] 具体的检测框 (Masks) - 核心修改处
-    # 定义颜色
-    colors = {
-        "Texture": (0, 255, 255),    # yellow
-        "BlackLevel": (0, 0, 255),   # red
-        "Alignment": (0, 165, 255)   # orange
-    }
-
-    # 1. Draw glow area by using mask
     glow_layer = np.zeros_like(base_layer)
-    for key, mask in masks_dict.items():
-        if mask is not None:
-            c = colors.get(key, (0, 0, 255))
-            glow_layer[mask > 0] = c # 原始像素发光
     
-    # 高斯模糊做辉光
+    for key, data in detection_meta.items():
+        # Ensure data is a dict (Fix for logic bug protection)
+        if isinstance(data, dict):
+            mask = data.get("mask")
+            if mask is not None and np.sum(mask) > 0:
+                color = data.get("color", (0, 0, 255))
+                conf = data.get("conf", 1.0)
+                
+                # glow layer
+                glow_layer[mask > 0] = color
+                
+                draw_hazard_zone(base_layer, mask, color, key.upper(), conf)
+    
+    # Apply a strong blur to the glow layer to create a halo effect around detected regions, but only if there are detections
     if np.max(glow_layer) > 0:
-        glow_blur = cv2.GaussianBlur(glow_layer, (31, 31), 0)
-        base_layer = cv2.addWeighted(base_layer, 1.0, glow_blur, 0.8, 0)
+        glow_blur = cv2.GaussianBlur(glow_layer, (45, 45), 0)
+        base_layer = cv2.addWeighted(base_layer, 1.0, glow_blur, 0.6, 0)
 
-    # 2. 再画战术框 (Zones) - 用融合后的 mask，画大框
-    for key, mask in masks_dict.items():
-        if mask is not None:
-            c = colors.get(key, (0, 0, 255))
-            # 调用新的融合绘制函数
-            draw_hazard_zone(base_layer, mask, c, key.upper())
-
-    # 4. 右侧半透明 HUD
-    panel_w = 240
+    # ------------- Sidebar HUD -------------
+    panel_w = 260
     panel_x = w - panel_w
-    
-    sidebar_roi = base_layer[0:h, panel_x:w]
-    black_layer = np.zeros_like(sidebar_roi)
-    glass_panel = cv2.addWeighted(sidebar_roi, 0.6, black_layer, 0.4, 0) # 调亮一点透明度
-    base_layer[0:h, panel_x:w] = glass_panel
-    cv2.line(base_layer, (panel_x, 0), (panel_x, h), (100, 255, 255), 1)
 
-    # 5. 写入数据
+    num_modules = len([k for k, v in detection_meta.items() if isinstance(v, dict)])
+    panel_h = min(h, 320 + num_modules * 20)
+
+    sidebar_roi = base_layer[0:panel_h, panel_x:w]
+    black_layer = np.zeros_like(sidebar_roi)
+    # Glass effect: blend the sidebar with a semi-transparent black layer to create a frosted glass panel
+    glass_panel = cv2.addWeighted(sidebar_roi, 0.4, black_layer, 0.6, 0) 
+    base_layer[0:panel_h, panel_x:w] = glass_panel
+    
+    cv2.line(base_layer, (panel_x, 0), (panel_x, panel_h), (100, 255, 255), 1)
+    if panel_h < h:
+        cv2.line(base_layer, (panel_x, panel_h), (w, panel_h), (100, 255, 255), 1)
+
+    # Determine overall status based on global score
     if global_score > 70:
         theme_color = (0, 0, 255) 
         status_str = "CRITICAL"
@@ -205,7 +212,7 @@ def generate_hud(original_cv, ela_cv, masks_dict, global_score):
         status_str = "VERIFIED"
 
     x_pad = panel_x + 15
-    y_cursor = 50
+    y_cursor = 40
     
     draw_hud_text(base_layer, "ANALYSIS HUB", (x_pad, y_cursor), (255, 255, 255), 0.6, 2, 0.0)
     y_cursor += 30
@@ -214,12 +221,40 @@ def generate_hud(original_cv, ela_cv, masks_dict, global_score):
     draw_hud_text(base_layer, status_str, (x_pad, y_cursor), theme_color, 1.0, 2, 0.0)
     y_cursor += 40
     
+    # [New] Module Confidence Panel
+    draw_hud_text(base_layer, "MODULES", (x_pad, y_cursor), (200, 200, 200), 0.5, 1, 0.0)
+    y_cursor += 25
+    
+    for key, data in detection_meta.items():
+        if isinstance(data, dict):
+            conf = data.get("conf", 0.0)
+            color = data.get("color", (100, 100, 100))
+            
+            display_color = color if conf > 0.1 else (80, 80, 80)
+            label = f"{key[:10]}"
+            
+            # Bar Background
+            bar_w = 80
+            bar_x = w - 15 - bar_w
+            cv2.rectangle(base_layer, (bar_x, y_cursor-8), (bar_x + bar_w, y_cursor-2), (50,50,50), -1)
+            # Bar Fill
+            fill_w = int(bar_w * conf)
+            if fill_w > 0:
+                cv2.rectangle(base_layer, (bar_x, y_cursor-8), (bar_x + fill_w, y_cursor-2), display_color, -1)
+                
+            cv2.putText(base_layer, label, (x_pad, y_cursor), cv2.FONT_HERSHEY_SIMPLEX, 0.4, display_color, 1, cv2.LINE_AA)
+            y_cursor += 20
+            
+    y_cursor += 15
+    cv2.line(base_layer, (x_pad, y_cursor), (w-15, y_cursor), (100, 100, 100), 1)
+    y_cursor += 25
+
+    # Key Metrics
     max_z = np.max(z_matrix)
     metrics = [
         ("RISK SCORE", f"{global_score}"),
         ("MAX Z-SCORE", f"{max_z:.2f}"),
         ("ELA MEAN", f"{g_mean:.2f}"),
-        ("INTEGRITY", f"{100-global_score}%"),
     ]
     
     for label, val in metrics:
@@ -228,11 +263,11 @@ def generate_hud(original_cv, ela_cv, masks_dict, global_score):
         cv2.putText(base_layer, val, (w - 15 - tw, y_cursor), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
         y_cursor += 30
 
-    # 6. 底部直方图
-    hist_h = 60
+    """ 6. 底部微型直方图 - [Restored]
+    hist_h = 50
     hist_w = panel_w - 30
     hist_x = x_pad
-    hist_y = h - 30
+    hist_y = h - 20
     
     ela_gray = ela_cv if len(ela_cv.shape)==2 else cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY)
     hist = cv2.calcHist([ela_gray], [0], None, [256], [0, 256])
@@ -245,7 +280,7 @@ def generate_hud(original_cv, ela_cv, masks_dict, global_score):
         px = int(hist_x + (i / 256) * hist_w)
         py = int(hist_y - bin_val)
         pts.append((px, py))
-    cv2.polylines(base_layer, [np.array(pts)], False, (0, 200, 200), 1, cv2.LINE_AA)
+    cv2.polylines(base_layer, [np.array(pts)], False, (0, 200, 200), 1, cv2.LINE_AA)"""
     
     return base_layer
 
