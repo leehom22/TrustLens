@@ -12,12 +12,15 @@ from ..utils.layer2_utils import (
     calculate_ela_metrics, 
     analyze_fused_forensics,     # Black level detection
     analyze_texture_consistency, # Texture detection (Native/Mixed)
-    analyze_alignment_consistency, # Alignment detection
+    # analyze_alignment_consistency, # Alignment detection
     analyze_ats_hacking,         # ATS Hacking (New)
     analyze_statistical_islands, # Statistical Island (New)
     calculate_image_coverage,
     pil_to_cv2
 )
+
+import logging
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 # ================ Poppler Check ====================
 try:
@@ -84,7 +87,11 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         page_results = []
         l2_signals = [] 
         max_visual_score = 0
-        
+
+        ats_total_hidden = 0
+        ats_total_tiny = 0
+        ats_score = 0
+
         for idx, original in enumerate(images):
             cv_img = pil_to_cv2(original)
             h, w = cv_img.shape[:2]
@@ -107,14 +114,12 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             # Define confidence weights based on mode
             if is_native_digital:
                 w_black = 1.0
-                w_texture = 0.4  # Lower confidence for texture in clean images (false positives)
+                w_texture = max(0, (0.4 - coverage))  # Weak Signal: Texture less reliable as image coverage increases
                 w_island = 0.0   # Disable statistical island for clean images
-                w_align = 1.0
             else:
                 w_black = 0.2    # Black level unreliable in scans
-                w_texture = 1.0  # Texture useful for scans
+                w_texture = 0.0  # Texture less effective in noisy scans
                 w_island = 1.0   # Statistical island designed for scans
-                w_align = 0.0    # Alignment harder in scans due to skew
             
             # Initialize Masks Collection for HUD
             meta_collection = {
@@ -122,7 +127,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "BlackLevel": {"mask": None, "color": (255, 255, 0),   "conf": w_black},   # Cyan
                 "Texture":    {"mask": None, "color": (0, 255, 255),   "conf": w_texture}, # Yellow
                 "Island":     {"mask": None, "color": (0, 165, 255),   "conf": w_island},  # Orange
-                "Alignment":  {"mask": None, "color": (0, 255, 0),     "conf": w_align}    # Green
+                # "Alignment":  {"mask": None, "color": (0, 255, 0),     "conf": w_align}    # Green
             }
             
             # ================= DETECTORS =================
@@ -135,7 +140,10 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                     ats_score = ats_res["score"]
                     meta_collection["ATS"]["mask"] = ats_res["mask"] 
                     l2_signals.extend([f"Page {idx+1}: {s}" for s in ats_res["signals"]])
-            
+
+                    ats_total_hidden += ats_res["details"].get("hidden_count", 0)
+                    ats_total_tiny += ats_res["details"].get("tiny_count", 0)
+
             # 2. Black Level Detection (Fused Forensics)
             # Use pre-computed contours if native for speed
             shared_contours = None
@@ -156,12 +164,13 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             final_texture_score = 0
             
             if is_native_digital:
-                # Use Standard Texture Check with low weight
-                raw_tex_score, tex_mask, tex_sigs = analyze_texture_consistency(cv_img, is_photo=False)
-                final_texture_score = raw_tex_score * w_texture
-                if raw_tex_score > 0 and final_texture_score > 20:
-                    l2_signals.extend([f"Page {idx+1}: {s} (Low Conf)" for s in tex_sigs])
-                meta_collection["Texture"]["mask"] = tex_mask
+                if w_texture > 0:
+                    # Use Standard Texture Check with low weight
+                    raw_tex_score, tex_mask, tex_sigs = analyze_texture_consistency(cv_img, is_photo=False)
+                    final_texture_score = int(raw_tex_score * w_texture)
+                    if raw_tex_score > 0 and final_texture_score > 20:
+                        l2_signals.extend([f"Page {idx+1}: {s} (Low Conf)" for s in tex_sigs])
+                    meta_collection["Texture"]["mask"] = tex_mask
             else:
                 # Use Statistical Island for Noisy/Scans
                 # Also run standard texture as backup or complementary? 
@@ -173,6 +182,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 meta_collection["Island"]["mask"] = island_mask
 
             # 4. Alignment
+            """
             raw_align_score, align_mask, align_sigs = analyze_alignment_consistency(
                 cv_img, pre_contours=shared_contours, is_photo=(not is_native_digital)
             )
@@ -180,10 +190,11 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             if raw_align_score > 0 and w_align >= 0.5:
                 l2_signals.extend([f"Page {idx+1}: {s}" for s in align_sigs])
             meta_collection["Alignment"]["mask"] = align_mask
+            """
 
             # ================= SCORING AGGREGATION =================
             # Max of all weighted scores
-            advanced_score = max(ats_score, final_black_score, final_texture_score, final_align_score)
+            advanced_score = max(ats_score, final_black_score, final_texture_score)   # final_align_score
             max_visual_score = max(max_visual_score, advanced_score)
 
             # ================= ELA (For Reference & HUD) =================
@@ -232,9 +243,9 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "score": current_page_score,
                 "url": f"/evidence/{heatmap_name}",
                 "local_path": os.path.abspath(heatmap_path),
-                "metrics": metrics,
-                "mode": mode_str,
-                "note": f"Mode: {mode_str}, MaxFeat: {advanced_score:.1f}"
+                "metrics": metrics
+                # "mode": mode_str,
+                # "note": f"Mode: {mode_str}, Image Coverage: {coverage:.2f}%, Laplacian Variance: {lap_var:.2f}"
             })
 
         if not page_results: 
@@ -242,7 +253,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
 
         # ================= FINAL RESULT =================
         worst = max(page_results, key=lambda x: x["score"])
-        final_score = worst["score"]
+        final_score = int(worst["score"])
         
         status = LayerStatus.CLEAN
         if final_score > 70: status = LayerStatus.HIGH_RISK
@@ -259,9 +270,20 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "analyzed_pages": len(images), 
                 "all_pages": page_results,
                 "worst_page_details": worst,
-                "mode_detected": worst["mode"],
-                "forensic_note": "Hybrid Architecture: Native(ATS/BlackLevel) vs Noisy(Islands/Texture)."
+                "advanced_score_breakdown": {
+                    "ATS_Hacking": ats_score,
+                    "Black_Level": final_black_score,
+                    "Texture/Statistical_Island": final_texture_score,
+                },
+                "ats_hacking_details": {
+                    "hidden_white_chars": ats_total_hidden,
+                    "micro_font_chars": ats_total_tiny
+                } if (ats_total_hidden > 0 or ats_total_tiny > 0) else None,
+                "mode": mode_str,
+                "forensic_note": "Hybrid Architecture: Native(ATS/BlackLevel/ELA) vs Noisy(Islands/Texture/ELA).",
+                "visual_tempering": final_score > 60
             },
+            ATS_hacking = "Detected" if any("ATS_Hacking" in s for s in l2_signals) else "None",
             visual_evidence_url = worst["url"]
         )
         

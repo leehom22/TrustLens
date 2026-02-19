@@ -245,10 +245,12 @@ def get_mode_config(mode: str, req_id: str):
     - **Software Traces**: We look for 'Photoshop', 'GIMP', 'Meitu'.
     - **Time Paradox**: If 'Creation Date' is *after* 'Modification Date', or 'Document Date' is before 'ID Generation Date', it implies logic failure.
     
-    **Layer 2: Visual Forensics (Pixel Analysis)**
-    - **ELA (Error Level Analysis)**: Detects compression artifacts. High Z-Score (>4.5) means manipulation.
-    - **Texture/Luminance**: Detects 'Smoothing' (Smudging text) or 'Digital Insertion' (Pure black text on scanned gray bg).
-    - **Alignment**: Checks if text rows 'jitter' (Bad cut-and-paste jobs).
+    **Layer 2: Visual Forensics (Hybrid Pixel Analysis)**
+    - Hybrid Architecture: Dynamically classifies documents as "Native Digital" or "Noisy/Scan" (via PDF image coverage or Laplacian variance) to apply context-aware confidence weights to the tests below.
+    - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A High Max Z-Score (>4.5) strongly indicates manipulation.
+    - ATS Hacking: Native PDFs only. Detects hidden prompt injections and keyword stuffing (e.g., invisible white-on-white characters or micro-fonts <2pt).
+    - Black Level: Detects 'Digital Insertion'. Finds artificially pure black text or elements pasted onto lighter, natural document backgrounds.
+    - Texture / Statistical Islands: Detects 'Smoothing' or 'Erasing'. Identifies abnormally smooth patches that lack the expected background noise or variance (indicating smudging, patching, or cloning).
     
     **Layer 3: Content & Semantics**
     - **Hidden Text**: White-on-white text used to trick AI Resume readers (ATS).
