@@ -8,11 +8,14 @@ def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.6, thickness=2, bg_i
     (w, h), _ = cv2.getTextSize(text, font, size, thickness)
     x, y = pos
     
-    h_bg = h + 12 # 增加一点高度
-    if y - h_bg < 0: y_adjusted = h_bg + 2
-    else: y_adjusted = y
+    h_bg = h + 12
+    if y - h_bg < 0:
+        y_adjusted = h_bg + 2
+    else:
+        y_adjusted = y
     
-    if x + w > img.shape[1]: x = img.shape[1] - w - 5
+    if x + w > img.shape[1]:
+        x = img.shape[1] - w - 5
     
     roi = img[y_adjusted-h_bg:y_adjusted+5, x:x+w+10]
     if roi.size > 0:
@@ -21,11 +24,12 @@ def draw_hud_text(img, text, pos, color=(0, 255, 0), size=0.6, thickness=2, bg_i
         img[y_adjusted-h_bg:y_adjusted+5, x:x+w+10] = res
 
     cv2.putText(img, text, (x+5, y_adjusted), font, size, color, thickness, cv2.LINE_AA)
-    return y_adjusted + h + 25 # 增加行距
+    return y_adjusted + h + 25
 
 # ================= 核心工具: 战术危险区绘制 =================
 def draw_hazard_zone(img, mask, color, label):
-    if mask is None: return
+    if mask is None:
+        return
     
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 8))
     merged_mask = cv2.dilate(mask, kernel, iterations=2)
@@ -35,15 +39,17 @@ def draw_hazard_zone(img, mask, color, label):
     
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        if w < 10 or h < 10: continue
+        if w < 10 or h < 10:
+            continue
         
         # 半透明填充
         cv2.rectangle(overlay, (x, y), (x+w, y+h), color, -1)
         
         # 四角战术框
         l = min(w, h) // 3
-        if l > 25: l = 25
-        t = 3 # 加粗线条
+        if l > 25:
+            l = 25
+        t = 3
         
         cv2.line(img, (x, y), (x + l, y), color, t)
         cv2.line(img, (x, y), (x, y + l), color, t)
@@ -54,7 +60,7 @@ def draw_hazard_zone(img, mask, color, label):
         cv2.line(img, (x+w, y+h), (x+w-l, y+h), color, t)
         cv2.line(img, (x+w, y+h), (x+w, y+h-l), color, t)
         
-        # 标签 (加大字号)
+        # 标签（统一显示为 "SUSPECT" 或保持原标签）
         cv2.putText(img, label, (x, y-8), cv2.FONT_HERSHEY_PLAIN, 1.2, color, 1)
 
     cv2.addWeighted(overlay, 0.25, img, 0.75, 0, img)
@@ -67,10 +73,12 @@ def calculate_grid_stats(diff_map, grid_size=32):
         gray = diff_map
 
     h, w = gray.shape
-    if grid_size < 1: grid_size = 32
+    if grid_size < 1:
+        grid_size = 32
     rows = h // grid_size
     cols = w // grid_size
-    if rows == 0 or cols == 0: return np.zeros((1,1)), 0.0, 0.0
+    if rows == 0 or cols == 0:
+        return np.zeros((1,1)), 0.0, 0.0
 
     z_matrix = np.zeros((rows, cols))
     global_mean = np.mean(gray)
@@ -86,14 +94,13 @@ def calculate_grid_stats(diff_map, grid_size=32):
             
     return z_matrix, global_mean, global_std
 
-# ================= 通用 HUD 生成器 =================
+# ================= 通用 HUD 生成器（简化版） =================
 def generate_hud(original_cv, diff_map, masks_dict, global_score, confidence_val=1.0, variant="NOISE"):
     """
-    Project GLASS HUD v3
-    Args:
-        variant (str): "NOISE" (for PDFs) | "ELA" (for Images)
+    统一 HUD 生成器
+    - 所有视觉检测使用相同的风格
+    - 检测框统一为红色
     """
-
     h, w = original_cv.shape[:2]
     
     # 1. 战术底图
@@ -114,48 +121,42 @@ def generate_hud(original_cv, diff_map, masks_dict, global_score, confidence_val
             # 随机闪烁
             if random.random() > 0.8:
                 alpha = random.uniform(0.1, 0.3)
-                color = (255, 255, 0) # Cyan
+                color = (255, 255, 0)
                 overlay_color = tuple([int(cc * alpha) for cc in color])
                 l = 4
                 cv2.line(base_layer, (x, y-l), (x, y+l), overlay_color, 1)
                 cv2.line(base_layer, (x-l, y), (x+l, y), overlay_color, 1)
             
             # 数值流
-            if (r + c) % 4 == 0 or z_matrix[r, c] > 2.0: 
+            if (r + c) % 4 == 0 or z_matrix[r, c] > 2.0:
                 val = z_matrix[r, c]
                 font_color = (100, 100, 255) if val > 2.5 else (80, 80, 80)
                 if val > 0:
-                    cv2.putText(base_layer, f"{val:.1f}", (x+5, y+20), 
+                    cv2.putText(base_layer, f"{val:.1f}", (x+5, y+20),
                                cv2.FONT_HERSHEY_PLAIN, 0.6, font_color, 1)
 
-    # 3. 风险渲染
-    # 等高线
+    # 3. 风险渲染（等高线）
     z_map_resized = cv2.resize(z_matrix, (w, h), interpolation=cv2.INTER_CUBIC)
     mask_l2 = (z_map_resized > 3.0).astype(np.uint8) * 255
     contours_l2, _ = cv2.findContours(mask_l2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(base_layer, contours_l2, -1, (0, 165, 255), 1)
 
-    # 检测框
+    # 检测框颜色映射（统一红色）
     colors = {
-        "Noise_Anomaly": (0, 0, 255),
-        "ATS_HACK": (0, 0, 255),
-        "BlackLevel": (0, 0, 255),
-        "Alignment": (0, 165, 255),
-        "Structure": (255, 0, 255),
-        "text_image": (0, 255, 255),
-        "ELA_Anomaly": (255, 0, 255)   # 洋红色
+        "Statistical_Island": (0, 0, 255),   # 红色
+        "ATS_HACK": (0, 0, 255),             # 红色
     }
+    # 默认颜色也设为红色，避免遗漏
+    default_color = (0, 0, 255)
 
     for key, mask in masks_dict.items():
         if mask is not None:
-            c = (0, 255, 255)
-            for k, v in colors.items():
-                if k in key: c = v
+            c = colors.get(key, default_color)
             draw_hazard_zone(base_layer, mask, c, key.upper())
 
-    # 4. 右侧 HUD 面板 (加大尺寸)
-    card_w = 320  # [修改] 加宽面板
-    card_h = 480  # [修改] 加高面板
+    # 4. 右侧 HUD 面板
+    card_w = 320
+    card_h = 480
     margin_top = 30
     margin_right = 30
     
@@ -164,8 +165,10 @@ def generate_hud(original_cv, diff_map, masks_dict, global_score, confidence_val
     c_x2 = w - margin_right
     c_y2 = margin_top + card_h
     
-    if c_x1 < 0: c_x1 = 0
-    if c_y2 > h: c_y2 = h
+    if c_x1 < 0:
+        c_x1 = 0
+    if c_y2 > h:
+        c_y2 = h
     
     card_roi = base_layer[c_y1:c_y2, c_x1:c_x2]
     if card_roi.size > 0:
@@ -208,33 +211,24 @@ def generate_hud(original_cv, diff_map, masks_dict, global_score, confidence_val
     draw_hud_text(base_layer, status_str, (text_x, text_y), theme_color, 1.4, 3, 0.0)
     text_y += 50
     
-    # [修改] 动态指标名称
+    # 指标名称通用化
     max_z = np.max(z_matrix)
     anomaly_grids = np.sum(z_matrix > 3.0)
     
-    # 区分 Noise 和 ELA 的显示逻辑
-    if variant == "NOISE":
-        metric_label_1 = "NOISE Z-SCR"
-        metric_label_2 = "NOISE DEV"
-    else:
-        metric_label_1 = "ELA Z-SCORE"
-        metric_label_2 = "CMPRS ARTIFACT"
-
     metrics_data = [
         ("RISK SCORE", f"{global_score}"),
         ("CONFIDENCE", f"{int(confidence_val * 100)}%"),
-        (metric_label_1, f"{max_z:.2f}"),
-        (metric_label_2, f"{g_std:.2f}"),
+        ("ANOMALY Z-SCR", f"{max_z:.2f}"),
+        ("LOCAL DEV", f"{g_std:.2f}"),
         ("ANOMALY BLKS", f"{anomaly_grids}")
     ]
     
     for label, val in metrics_data:
         cv2.putText(base_layer, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1, cv2.LINE_AA)
-        retval = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
-        (tw, th), _ = retval
+        (tw, th), _ = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
         val_x = c_x2 - 25 - tw
         cv2.putText(base_layer, val, (val_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2, cv2.LINE_AA)
-        text_y += 45 # 增加行距
+        text_y += 45
 
     # 6. 底部直方图
     hist_h = 60
@@ -259,27 +253,10 @@ def generate_hud(original_cv, diff_map, masks_dict, global_score, confidence_val
         pts.append((px, py))
     cv2.polylines(base_layer, [np.array(pts)], False, (0, 200, 200), 1, cv2.LINE_AA)
     
-    label_text = f"{variant} DISTRIBUTION"
+    label_text = "DISCONTINUITY DISTRIBUTION"
     cv2.putText(base_layer, label_text, (hist_x, hist_y - hist_h - 5), cv2.FONT_HERSHEY_PLAIN, 0.8, (150, 150, 150), 1)
     
     return base_layer
-
-# Native PDF 专用 HUD (现在直接封装调用)
-def generate_pdf_hud(original_cv, pdf_results_dict, global_score, diff_map_override=None):
-    """
-    Native PDF 也使用 Noise 数据流。
-    如果提供了 diff_map_override (Noise Map)，就用它；否则生成随机噪声流。
-    """
-    h, w = original_cv.shape[:2]
-    
-    if diff_map_override is not None:
-        noise_map = diff_map_override
-    else:
-        # Fallback: 生成随机噪声流
-        noise_map = np.random.normal(0, 5, (h, w)).astype(np.uint8)
-    
-    # 强制 variant="NOISE"
-    return generate_hud(original_cv, noise_map, pdf_results_dict, global_score, confidence_val=1.0, variant="NOISE")
 
 
 
