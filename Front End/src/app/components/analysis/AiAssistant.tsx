@@ -175,12 +175,16 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
         handleSendMessage(action.query, action.mode);
     };
 
-    // --- AUDIO LOGIC (RESTORED TO ORIGINAL) ---
+    // --- AUDIO LOGIC (UPDATED WITH FIX) ---
     const startRecording = async () => {
         try {
             console.log("🎤 Requesting Microphone...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mimeType = 'audio/webm';
+            
+            // Added cross-browser support for Safari
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+                ? 'audio/webm' 
+                : 'audio/mp4'; 
             
             console.log("🔑 Connecting to Backend...");
             const response = await fetch(`${backendURL}/api/deepgram`);
@@ -196,17 +200,28 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                 punctuate: true,
             });
 
+            // Set up recorder before Open event so it can be used inside
+            const mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && connection.getReadyState() === 1) {
+                    connection.send(event.data);
+                }
+            };
+
             // 1. Connection Open Listener
             connection.on(LiveTranscriptionEvents.Open, () => {
                 console.log("🟢 Deepgram Connection OPEN");
+                // ✅ Start recording ONLY when the connection is fully open
+                mediaRecorder.start(1000); 
             });
 
-            // 2. Transcript Listener (THE IMPORTANT PART)
+            // 2. Transcript Listener
             connection.on(LiveTranscriptionEvents.Transcript, (data) => {
                 const transcript = data.channel.alternatives[0]?.transcript;
                 if (transcript && transcript.trim().length > 0) {
                     console.log("📝 TEXT RECEIVED:", transcript);
-                    setMessage((prev) => prev + " " + transcript);
+                    setMessage((prev) => prev + (prev.length > 0 ? " " : "") + transcript);
                 }
             });
 
@@ -216,17 +231,6 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
             });
 
             liveConnectionRef.current = connection;
-
-            // 4. Recorder Setup
-            const mediaRecorder = new MediaRecorder(stream, { mimeType });
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && connection.getReadyState() === 1) {
-                    connection.send(event.data);
-                }
-            };
-
-            mediaRecorder.start(1000);
             mediaRecorderRef.current = mediaRecorder;
             setIsRecording(true);
             toast.info("Listening...");
@@ -245,7 +249,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
 
         toast.info("Finalizing speech...");
 
-        // Wait 3 seconds (Original Logic) to catch final words
+        // Wait 3 seconds to catch final words
         setTimeout(() => {
             if (liveConnectionRef.current) {
                 liveConnectionRef.current.finish();

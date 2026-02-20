@@ -19,6 +19,7 @@ class LayerResult(BaseModel):
     score: int = Field(..., description="0-100 Risk Score")
     details: Dict[str, Any]
     risk_signals: List[str] = Field(default_factory=list)
+    ATS_Hacking: Optional[str] = None
     visual_evidence_url: Optional[str] = None
 
 class FinalReport(BaseModel):
