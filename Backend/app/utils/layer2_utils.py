@@ -77,17 +77,10 @@ def calculate_ela_metrics(diff_img: Image.Image, grid_size: int):
     }
 
 
-# ================= 2. Intelligent Texture Detection (For Photos/Scanned Documents) =================
+# ================= 2. Intelligent Texture Detection =================
 # Accept is_photo pre-judgment parameter to avoid recalculating Laplacian variance
 def analyze_texture_consistency(image_input, block_size=32, is_photo=None):
-    """
-    Detection Principle:
-    Photos/Scans usually have background noise (ISO Noise).
-    Manipulated areas (smudging or new text) are usually "abnormally smooth" (Low Variance).
     
-    Intelligent Switch:
-    If the whole image is already very smooth (digital screenshot), skip automatically to avoid false positives.
-    """
     if isinstance(image_input, str):
         img = cv2.imread(image_input, cv2.IMREAD_GRAYSCALE)
     else:
