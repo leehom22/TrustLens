@@ -2,6 +2,7 @@ import { LayerResult } from "@/app/types/db-ai-analysis-type";
 import { statusStyles } from "@/lib/utils";
 import { FileImage, Shield, ZoomIn } from "lucide-react";
 import { useState } from "react";
+import DocumentViewer from "./DocumentViewer";
 
 export function VisualManipulation({ layer }: { layer: LayerResult }) {
   const [imageLoaded, setImageLoaded] = useState<Record<string, boolean>>({});
@@ -88,16 +89,17 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
                 </div>
 
                 {/* Zoom button */}
-                <button
+                {/* <button
                   onClick={() => toggleZoom(layer?.layer_id)}
                   className="absolute top-3 right-3 z-10 p-2 bg-black/70 text-white rounded-lg hover:bg-black/80 transition-colors backdrop-blur-sm"
                   aria-label={isZoomed[layer?.layer_id] ? "Reset zoom" : "Zoom in"}
                 >
                   <ZoomIn className="w-4 h-4" />
-                </button>
+                </button> */}
                 
-                <div className={`relative transition-all duration-300 ${isZoomed[layer?.layer_id] ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}>
-                  <img
+                <div className={`relative transition-all duration-300 ${isZoomed[layer?.layer_id] ? 'cursor-zoom-out' : 'cursor-zoom-in top-10'}`}>
+                  <DocumentViewer fileType="image" fileUrl={layer?.evidence_image_url}/>
+                  {/* <img
                     src={layer?.evidence_image_url}
                     alt={`Visual evidence for ${layer?.layer_title}`}
                     className={`w-full transition-all duration-300 ${
@@ -105,7 +107,7 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
                     } ${!imageLoaded[layer?.layer_id] ? 'opacity-0' : 'opacity-100'}`}
                     onLoad={() => handleImageLoad(layer?.layer_id)}
                     onClick={() => toggleZoom(layer?.layer_id)}
-                  />
+                  /> */}
                   {!imageLoaded[layer?.layer_id] && (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -119,7 +121,7 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
                 </div>
 
                 {/* Visual Legend */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-3 text-xs">
+                {/* <div className="absolute bottom-3 left-3 flex items-center gap-3 text-xs">
                   <div className="px-2 py-1 bg-black/70 text-white rounded backdrop-blur-sm flex items-center gap-1">
                     <div className="w-2 h-2 bg-red-500 rounded"></div>
                     <span>High</span>
@@ -132,7 +134,7 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
                     <div className="w-2 h-2 bg-gray-300 rounded"></div>
                     <span>Original</span>
                   </div>
-                </div>
+                </div> */}
               </div>
             )}
 

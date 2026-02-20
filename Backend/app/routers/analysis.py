@@ -505,7 +505,9 @@ async def generate_document_dashboard(
             "icon": "lucide_icon_name",
             "score": number,
             "ai_analysis": "string",
-            "technical_proofs": ["string"]
+            "technical_proofs": ["string"],
+            "has_visual_evidence": boolean, # Only need to insert true if there is visual evidence link in that layer, otherwise false or omit
+            "evidence_image_url": "string", # Only include if there is visual evidence for that layer, otherwise omit
         }}
     ]
     }}

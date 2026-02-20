@@ -53,7 +53,7 @@ const Metadata = ({ layer }: { layer: LayerResult }) => {
                             Technical Evidence
                         </p>
                         <div className="space-y-2">
-                            {layer?.technical_proofs.map((proof, idx) => (
+                            {layer?.technical_proofs?.map((proof, idx) => (
                                 <div
                                     key={idx}
                                     className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600"

@@ -4,6 +4,8 @@ from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr, BaseModel
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Optional
+import tempfile
 
 class ReportRequest(BaseModel):
     user_email: EmailStr
@@ -54,13 +56,6 @@ async def send_report(
     
     return {"message": "Email queued successfully"}
 
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks
-from fastapi_mail import FastMail, MessageSchema
-from typing import Optional
-import tempfile
-import os
-
-router = APIRouter()
 
 @router.post("/send-review-report-to-user")
 async def send_report(
@@ -105,7 +100,7 @@ async def send_report(
             <p>Your expert review report for <b>{doc_name}</b> is attached.</p>
             <p>Please check the attachments.</p>
             <br>
-            <p>Best regards,<br>AI Document Review Team</p>
+            <p>Best regards,<br>TrustLens Forensic Expert Team </p>
             """,
             subtype="html",
             attachments=attachments  # ✅ Attach files

@@ -16,6 +16,8 @@ from ..core.firebase import db
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+PORT = int(os.getenv("PORT", 8080))
+
 logger = logging.getLogger("TrustLens-Chat")
 chat_router = APIRouter()
 
@@ -136,7 +138,7 @@ def get_document_raw_text(req_id: str) -> Dict[str, Any]:
         if not raw_text:
             raw_text = str(data.get("grounding_info", {}))
             
-        return {"raw_text_content": raw_text[:8000]} # Limit to 8000 chars
+        return {"raw_text_content": raw_text[:PORT]} # Limit to 8000 chars
     except Exception as e:
         logger.error(f"Tool Error (get_document_raw_text): {e}")
         return {"error": str(e)}

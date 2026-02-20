@@ -9,3 +9,10 @@
 
   Run `npm run dev` to start the development server.
   
+
+  To update the deployment 
+
+  1. npm run build
+  2. firebase deploy --only hosting
+
+  https://trustlens-632fa.web.app/

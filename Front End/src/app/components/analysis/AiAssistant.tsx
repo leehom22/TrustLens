@@ -62,6 +62,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
     const liveConnectionRef = useRef<LiveClient | null>(null);
     const modeMenuRef = useRef<HTMLDivElement>(null);
 
+    const backendURL = import.meta.env.VITE_BACKEND_URL
     // --- EFFECT: Close mode menu on click outside ---
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -128,7 +129,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
             const token = localStorage.getItem("token") || localStorage.getItem("access_token");
 
             // 2. Call Backend
-            const response = await fetch("http://127.0.0.1:8000/chat/message", { 
+            const response = await fetch(`${backendURL}/chat/message`, { 
                 method: "POST",
                 headers: { 
                     "Content-Type": "application/json",
@@ -182,7 +183,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
             const mimeType = 'audio/webm';
             
             console.log("🔑 Connecting to Backend...");
-            const response = await fetch("http://127.0.0.1:8000/api/deepgram");
+            const response = await fetch(`${backendURL}/api/deepgram`);
             const data = await response.json();
             
             if (!data.key) throw new Error("No key from backend");

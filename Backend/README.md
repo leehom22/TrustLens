@@ -24,3 +24,6 @@ http://127.0.0.1:8000/
 python Backend/run.py
 # - Endpoint Test
 http://127.0.0.1:8000/docs
+
+# Deploy Issues
+Error occur with opencv-python 

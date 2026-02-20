@@ -146,13 +146,16 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <div className="w-screen">
+      <div className="flex min-h-screen w-full overflow-x-hidden">
         {/* Sidebar only appears if user is authenticated */}
-        {user && <Sidebar user={user} />}
+        {user && (
+          <div className="md:sticky md:inset-y-0 md:left-0 z-50 md:flex md:w-72 flex-col">
+            <Sidebar user={user} />
+          </div>
+          )}
 
-        <main className={`${user ? "flex-1" : "w-full"}`}>
-          <div className={user ? "p-7 max-w-7xl mx-auto" : ""}>
-
+        <main className={`flex-1 w-full min-w-0 ${user ? "bg-gray-50" : ""}`}>
+          <div className={user ? "p-4 md:p-7 w-full max-w-7xl mx-auto" : "w-full"}>
             <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<LoginPage />} />
@@ -171,7 +174,7 @@ export default function App() {
                   <Route
                     path="/upload-document"
                     element={
-                      <div className="size-full  ">
+                      <div className="w-full h-full min-h-[calc(100vh-4rem)]">
                         {
                           fileUploadLoading && (
                             <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
