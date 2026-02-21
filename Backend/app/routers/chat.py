@@ -166,7 +166,7 @@ def grounding_search_agent(query: str) -> Dict[str, Any]:
     try:
         # ! Remove await to avoid error
         response = search_client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.0-flash-preview",
             contents=sub_agent_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
