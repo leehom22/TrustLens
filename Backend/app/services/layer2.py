@@ -139,7 +139,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 if ats_res["score"] > 0:
                     ats_score = ats_res["score"]
                     meta_collection["ATS"]["mask"] = ats_res["mask"] 
-                    l2_signals.extend([f"Page {idx+1}: {s}" for s in ats_res["signals"]])
+                    l2_signals.extend([f"{s}" for s in ats_res["signals"]])
 
                     ats_total_hidden += ats_res["details"].get("hidden_count", 0)
                     ats_total_tiny += ats_res["details"].get("tiny_count", 0)
@@ -212,6 +212,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             # Only trust ELA high score if it's Native Digital and metrics are extreme
             if is_native_digital and metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
                 ela_page_score = 40
+                l2_signals.append(f"Page {idx+1}: ELA compression anomalies detected.")
             
             # Combine Advanced + ELA
             current_page_score = max(advanced_score, ela_page_score)
@@ -244,8 +245,6 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "url": f"/evidence/{heatmap_name}",
                 "local_path": os.path.abspath(heatmap_path),
                 "metrics": metrics
-                # "mode": mode_str,
-                # "note": f"Mode: {mode_str}, Image Coverage: {coverage:.2f}%, Laplacian Variance: {lap_var:.2f}"
             })
 
         if not page_results: 
@@ -261,6 +260,13 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         
         l2_signals = list(set(l2_signals))
         
+        if final_score > 60:
+            l2_signals.append("VISUAL_TAMPERING_DETECTED")
+        if any("ATS_Hacking" in s for s in l2_signals):
+            l2_signals = [s.replace("ATS_Hacking", "ATS_HACKING_DETECTED") if "ATS_Hacking" in s else s for s in l2_signals]
+            if "ATS_HACKING_DETECTED" not in l2_signals:
+                l2_signals.append("ATS_HACKING_DETECTED")
+
         return LayerResult(
             layer_name = "L2_Visual",
             status = status,
@@ -281,9 +287,8 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 } if (ats_total_hidden > 0 or ats_total_tiny > 0) else None,
                 "mode": mode_str,
                 "forensic_note": "Hybrid Architecture: Native(ATS/BlackLevel/ELA) vs Noisy(Islands/Texture/ELA).",
-                "visual_tempering": final_score > 60
             },
-            ATS_hacking = "Detected" if any("ATS_Hacking" in s for s in l2_signals) else "None",
+            ATS_Hacking = "Detected" if any("ATS_HACKING_DETECTED" in s for s in l2_signals) else "None",
             visual_evidence_url = worst["url"]
         )
         

@@ -84,12 +84,16 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             # Checking 1 : Structural Check
             struct = analyze_pdf_structure(file_path)
             details["structure"] = struct
+            details["hidden_data_found"] = struct.get("hidden_data_found", False)
             
             # Evaluation 1: Structural Check Result
             if struct.get("risk_signal") == "high":
                 score += 40
                 status = LayerStatus.SUSPICIOUS
-                risk_factors.append(struct.get("structure_note"))
+                if struct.get("hidden_data_found"):
+                    risk_factors.append("STRUCTURE_HIDDEN_DATA")
+                else:
+                    risk_factors.append("STRUCTURE_CORRUPTED_EOF")
             
             # Checking 2: MetaData Check
             reader = PdfReader(file_path)
@@ -111,12 +115,12 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                 if found_high:
                     score += 35
                     status = LayerStatus.SUSPICIOUS
-                    risk_factors.append(f"Edited with high-risk image software: {found_high[0]}")
-                    details["software_risk"] = "High"
+                    risk_factors.append("HIGH_METADATA_SOFTWARE_RISK")
+                    details["software_risk"] = f"Edited with high-risk image software: {found_high[0]}"
                 elif found_medium:
                     score += 15
-                    risk_factors.append(f"Processed by consumer tool: {found_medium[0]}")
-                    details["software_risk"] = "Medium"
+                    risk_factors.append("MEDIUM_METADATA_SOFTWARE_RISK")
+                    details["software_risk"] = f"Processed by consumer tool: {found_medium[0]}"
             
             # Evaluation 1 + 2: Contextualize (Risk Increases when both incremental updates and tools exist)
             if struct.get("has_incremental_updates") and (found_high or found_medium):
@@ -134,7 +138,7 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                     status = LayerStatus.HIGH_RISK 
                     score = 95
                     msg = f"CRITICAL: Logical Time Paradox. Created {int(delta)}s AFTER Modified."
-                    risk_factors.append(msg)
+                    risk_factors.append("TIME_PARADOX_METADATA")
                     details["time_paradox"] = msg
 
 

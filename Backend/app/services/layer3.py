@@ -1,5 +1,6 @@
 import asyncio
 from google import genai
+from google.genai import types
 from typing import Dict, Any
 from ..core.config import logger, GEMINI_API_KEY
 from ..utils.utils import clean_and_repair_json
@@ -73,8 +74,11 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             file_ref = await client.aio.files.upload(file=file_path, config={'mime_type': mime_type})
             
             res = await client.aio.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[file_ref, extraction_prompt]
+                model='gemini-3.0-flash-preview',
+                contents=[file_ref, extraction_prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
 
             raw_text = res.text
