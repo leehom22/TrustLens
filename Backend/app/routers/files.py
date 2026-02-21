@@ -1,9 +1,12 @@
 from fastapi import APIRouter, status, HTTPException,Form
 from app.models.files import FilesSchema
+from app.models.files import FlagDocumentRequest
 from app.core.firebase import db
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
+from datetime import datetime
 files_router = APIRouter()
+
 
 # user upload files
 @files_router.post("/upload_files",status_code=status.HTTP_201_CREATED)
@@ -169,3 +172,31 @@ def get_dashboard_stats(user_id: str):
     except Exception as e:
         print(f"Error fetching stats: {e}")
         return {"success": False, "error": str(e)}
+    
+    
+@files_router.post("/set_flag_document")
+def set_file_as_flagged(request: FlagDocumentRequest):
+
+    try:
+        document_ref = db.collection("upload_files").document(request.documentId)
+
+        document_ref.set(
+            {
+                "flagged": True,
+                "flaggedReason": request.flaggedReason,
+                "expertReview": False,
+                "updatedAt": datetime.utcnow().isoformat(),
+            },
+            merge=True
+        )
+
+        return {
+            "success": True,
+            "message": "Document flagged successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error flagging document: {str(e)}"
+        )

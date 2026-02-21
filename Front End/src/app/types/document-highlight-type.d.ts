@@ -32,7 +32,12 @@ export interface ImageViewerProps {
     userId: string;
     documentUrl: string;
     documentId: string;
-    documentName: string
+    documentName: string;
+    setDownloadAnnotations:  React.Dispatch<React.SetStateAction<Annotation[]>>
+    setParentImageSize:React.Dispatch<React.SetStateAction<{
+    height: number;
+    width: number;
+}>>
 }
 
 interface Note {

@@ -18,11 +18,17 @@ from ..utils.layer2_utils import (
     calculate_image_coverage,
     pil_to_cv2
 )
-
+import platform
 import logging
+import shutil
+
+
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
-import shutil
+if platform.system() == "Windows":
+    POPPLER_PATH = r"C:\poppler-25.12.0\Library\bin"
+else:
+    POPPLER_PATH = None  # Linux uses system PATH
 def check_poppler():
     return shutil.which("pdftoppm") is not None
 
@@ -49,7 +55,21 @@ def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
         for i in range(1, max_pages + 1):
             try:
                 # Request only one page at a time
-                page_batch = convert_from_path(pdf_path, dpi=150, first_page=i, last_page=i)
+                if POPPLER_PATH:
+                    page_batch = convert_from_path(
+                        pdf_path,
+                        dpi=150,
+                        first_page=i,
+                        last_page=i,
+                        poppler_path=POPPLER_PATH
+                    )
+                else:
+                    page_batch = convert_from_path(
+                        pdf_path,
+                        dpi=150,
+                        first_page=i,
+                        last_page=i
+                    )
                 if not page_batch: break
                 pages_list.append(downsample_image(page_batch[0]))
             except Exception:

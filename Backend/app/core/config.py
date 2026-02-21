@@ -37,7 +37,7 @@ ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
 PDF_ELA_MAX_PAGES = 3
 
 # Manage the Static Evidence of heatmaps storage
-EVIDENCE_DIR = "Backend/static_evidence"
+EVIDENCE_DIR = "/tmp/Backend/static_evidence"
 if os.path.exists(EVIDENCE_DIR):
     shutil.rmtree(EVIDENCE_DIR)   # delete the old directory
 os.makedirs(EVIDENCE_DIR, exist_ok=True)   # create a new directory

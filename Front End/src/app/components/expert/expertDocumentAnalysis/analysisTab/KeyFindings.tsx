@@ -1,8 +1,15 @@
 import { AlertTriangle, Calculator, CheckCircle, Info, Shield } from 'lucide-react'
 import { Badge } from "@/app/components/ui/badge";
 import { LayerResult } from '@/app/types/db-ai-analysis-type';
+import { statusStyles } from '@/lib/utils';
 
-const LogicalConsistency = ({ layer }: { layer: LayerResult }) => {
+interface LogicalConsistencyProps {
+    layer: LayerResult
+    nextStepRecommendation: string | null
+}
+
+const LogicalConsistency = ({ layer, nextStepRecommendation }: LogicalConsistencyProps) => {
+
     return (
         <div className='space-y-4'>
             <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 p-6">
@@ -16,16 +23,16 @@ const LogicalConsistency = ({ layer }: { layer: LayerResult }) => {
                     </div>
 
                     {/* Status Badge */}
-                    <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${layer?.status === 'CRITICAL' || layer?.status === 'FAIL'
-                                ? 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
-                                : layer?.status === 'WARNING'
-                                    ? 'bg-yellow-100 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800'
-                                    : 'bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                            }`}
-                    >
-                        {layer?.status} - Score: {layer?.score}
-                    </span>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color] || statusStyles.gray}`}>
+                            {layer?.status} 
+                            {
+                                layer?.status !== "PASS" && (
+                                    <p>
+                                        - Score: {layer?.score}
+                                    </p>
+                                )
+                            }
+              </span>
                 </div>
 
                 {/* AI Analysis */}
@@ -118,9 +125,11 @@ const LogicalConsistency = ({ layer }: { layer: LayerResult }) => {
             {/* Recommended Actions - Dynamic based on status */}
             <div className={`rounded-xl border p-6 ${layer?.status === 'CRITICAL' || layer?.status === 'FAIL'
                     ? 'bg-red-50 dark:bg-red-950/50 border-red-400 dark:border-red-600/50'
-                    : layer?.status === 'WARNING'
+                    : layer?.status === 'WARNING' || layer?.status === 'CAUTION'
                         ? 'bg-yellow-50 dark:bg-yellow-950/50 border-yellow-400 dark:border-yellow-600/50'
-                        : 'bg-green-50 dark:bg-green-950/50 border-green-400 dark:border-green-600/50'
+                        : layer?.status === 'PASS' ?
+                        'bg-green-50 dark:bg-green-950/50 border-green-400 dark:border-green-600/50'
+                        : 'bg-gray-50 dark:bg-gray-950/50 border-gray-400 dark:border-gray-600/50'
                 }`}>
                 <h3 className={`text-lg font-semibold mb-3 flex items-center gap-2 ${layer?.status === 'CRITICAL' || layer?.status === 'FAIL'
                         ? 'text-red-900 dark:text-red-200'
@@ -133,22 +142,32 @@ const LogicalConsistency = ({ layer }: { layer: LayerResult }) => {
                             <AlertTriangle className="w-5 h-5" />
                             ⚠️ Critical Recommendation
                         </>
-                    ) : layer?.status === 'WARNING' ? (
+                    ) : layer?.status === 'WARNING' || layer?.status === 'CAUTION' ? (
                         <>
                             <AlertTriangle className="w-5 h-5" />
                             ⚠️ Recommended Actions
                         </>
+                    ) : layer?.status === 'PASS' ? (
+                        <>
+                            <CheckCircle className="w-5 h-5" />
+                            ✓ Recommendations
+                        </>                
                     ) : (
                         <>
                             <CheckCircle className="w-5 h-5" />
                             ✓ Recommendations
                         </>
-                    )}
+                    )
+                    }
                 </h3>
 
-                {layer?.status === 'CRITICAL' || layer?.status === 'FAIL' ? (
                     <>
-                        <p className="text-gray-800 dark:text-white mb-3">
+                        <p className='text-gray-700 dark:text-slate-200 mb-3'>
+                            {
+                                nextStepRecommendation || "No specific recommendations provided. However, it is advisable to review the document thoroughly and ensure all calculations are accurate before proceeding."
+                            }
+                        </p>
+                        {/* <p className="text-gray-800 dark:text-white mb-3">
                             <strong>DO NOT PROCEED</strong> with this document until critical issues are resolved:
                         </p>
                         <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-slate-300">
@@ -157,32 +176,8 @@ const LogicalConsistency = ({ layer }: { layer: LayerResult }) => {
                             <li>Verify all numerical data independently before making any payments</li>
                             <li>Document all discrepancies and communicate them to the sender</li>
                             <li>Do not sign or approve until all mathematical errors are corrected</li>
-                        </ol>
+                        </ol> */}
                     </>
-                ) : layer?.status === 'WARNING' ? (
-                    <>
-                        <p className="text-gray-800 dark:text-white mb-3">
-                            Exercise caution and verify the following before proceeding:
-                        </p>
-                        <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-slate-300">
-                            <li>Cross-check all calculations independently</li>
-                            <li>Request clarification on any unclear or inconsistent values</li>
-                            <li>Verify the document with the original sender through a trusted channel</li>
-                            <li>Consider having a second party review the numbers</li>
-                        </ol>
-                    </>
-                ) : (
-                    <>
-                        <p className="text-gray-800 dark:text-white mb-3">
-                            This layer passed verification. Standard best practices apply:
-                        </p>
-                        <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-slate-300">
-                            <li>Review all terms and conditions carefully</li>
-                            <li>Keep records of the document for future reference</li>
-                            <li>Ensure all parties have signed copies if applicable</li>
-                        </ol>
-                    </>
-                )}
             </div>
         </div>
     )

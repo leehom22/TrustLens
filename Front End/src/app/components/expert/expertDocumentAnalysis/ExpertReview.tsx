@@ -45,7 +45,7 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
             }
             
             setIsLoading(true)
-            console.log("Layer: ",selectedTabs, analysis_id, structure_analysis_id, doc_type, documentId, userId, )
+            // console.log("Layer: ",selectedTabs, analysis_id, structure_analysis_id, doc_type, documentId, userId, )
             const res = await axios.post(`${backendUrl}/feedback/submit_document_review`,  {
                 target_layer: selectedTabs,
                 analysis_id: analysis_id, // raw analysis id 
@@ -60,11 +60,11 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
             const result = res.data
 
             if(result.success){
-                console.log("SelectedTabs: ",selectedTabs)
+                // console.log("SelectedTabs: ",selectedTabs)
                 toast.success("Review submitted")
                 setReviewDecision(null);
                 setReviewNotes('');
-                setAgreeAnalysis(null)
+                setAgreeAnalysis(true)
             } 
         } catch (error) {
             console.log(`Error occur while submiting review: ${error}`)
