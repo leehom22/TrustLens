@@ -1,45 +1,48 @@
 import { Note } from "@/app/types/document-highlight-type"
-import { db } from "@/lib/firebase"
-import { addDoc, collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore"
 import { toast } from "react-toastify"
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import axios from "axios";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
+const backendUrl = import.meta.env.VITE_BACKEND_URL
 const db_collection = 'pdf_highlights'
 
-export const loadNotesFromFirestore = async (documentId: string, userId: string, setNotes: React.Dispatch<React.SetStateAction<Note[]>>, noteIdRef: React.RefObject<number>) => {
-    try {
-        const notesRef = collection(db, db_collection)
-        const q = query(
-            notesRef,
-            where('documentId', '==', documentId),
-            where('userId', '==', userId)
-        )
+export const loadNotesFromFirestore = async (
+  documentId: string,
+  userId: string,
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>,
+  noteIdRef: React.RefObject<number>
+) => {
+  try {
+    const res = await axios.post(
+      `${backendUrl}/annotate/load-pdf-notes`,
+      {
+        documentId,
+        userId,
+      }
+    );
 
-        const querySnapshot = await getDocs(q)
-        const loadNotes: Note[] = []
-
-        querySnapshot.forEach((doc) => {
-            const data = doc.data()
-            loadNotes.push({
-                id: data.id,
-                content: data.content,
-                highlightAreas: data.highlightAreas,
-                quote: data.quote,
-                firestoreId: doc.id
-            })
-
-            setNotes(loadNotes)
-
-            if (loadNotes.length > 0) {
-                const maxId = Math.max(...loadNotes.map(n => n.id))
-                noteIdRef.current = maxId + 1
-            }
-        })
-    } catch (error) {
-        console.error("Error loading notes: ", error)
-        toast.error("Error loading notes")
+    if (!res.data.success) {
+      throw new Error("Failed to load notes");
     }
-}
+
+    const loadedNotes: Note[] = res.data.notes;
+
+    setNotes(loadedNotes);
+   
+    if (loadedNotes.length > 0) {
+      const maxId = Math.max(
+        ...loadedNotes.map((n) => n.id)
+      );
+      noteIdRef.current = maxId + 1;
+    }
+
+  } catch (error) {
+    console.error("Error loading notes:", error);
+    toast.error("Error loading notes");
+  }
+};
 
 export const saveNotesToFirestore = async (note: Note, documentId: string, userId: string) => {
     try {
@@ -64,15 +67,16 @@ export const saveNotesToFirestore = async (note: Note, documentId: string, userI
 
 
 export const deleteNoteFromFirestore = async (firestoreId: string) => {
-    try {
-        await deleteDoc(doc(db, 'pdf_highlights', firestoreId));
-    } catch (error) {
-        console.error("Error deleting note:", error);
-        throw error;
-    }
+  try {
+    await axios.delete(
+      `${backendUrl}/annotate/delete-pdf-note/${firestoreId}`
+    );
+  } catch (error) {
+    console.error("Error deleting note:", error);
+    throw error;
+  }
 };
-
-export const downloadAnnotatedPDF = async (documentURL: string, documentName: string, notes: Note[]) => {
+export const generateAnnotatedPDF = async (documentURL: string, notes: Note[]) => {
     try {
         // Fetch the original PDF
         const existingPdfBytes = await fetch(documentURL).then(res => res.arrayBuffer());
@@ -138,6 +142,21 @@ export const downloadAnnotatedPDF = async (documentURL: string, documentName: st
         // Save the modified PDF
         const pdfBytes = await pdfDoc.save();
 
+        return pdfBytes;
+    } catch (error) {
+        console.error("Failed to download annotated PDF:", error);
+        alert("Failed to download annotated PDF. Please try again.");
+    }
+}
+
+export const downloadAnnotatedPDF = async (documentURL: string, documentName: string, notes: Note[]) => {
+    try {
+        
+        const pdfBytes = await generateAnnotatedPDF(documentURL, notes);
+
+        if(!pdfBytes) {
+            throw new Error("No PDF bytes generated");
+        }
         // Create download link
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);

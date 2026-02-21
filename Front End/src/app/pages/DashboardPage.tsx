@@ -27,12 +27,12 @@ const formatDateTime = (dateString: string) => {
 };
 
 const getDisplayRisk = (risk?: string) => {
-  if (!risk) return 'Low'; 
+  if (!risk) return 'Low';
   switch (risk.toUpperCase()) {
     case 'CRITICAL': return 'High';
     case 'SUSPICIOUS': return 'Medium';
     case 'SAFE': return 'Low';
-    case 'CAUTION': return 'Low'; 
+    case 'CAUTION': return 'Low';
     default: return 'Low';
   }
 };
@@ -42,7 +42,7 @@ const getRiskColor = (risk?: string) => {
   switch (risk.toUpperCase()) {
     case 'CRITICAL': return 'bg-red-100 text-red-700 border-red-200';
     case 'SUSPICIOUS': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    case 'SAFE': 
+    case 'SAFE':
     case 'CAUTION': return 'bg-green-100 text-green-700 border-green-200';
     default: return 'bg-slate-100 text-slate-700 border-slate-200';
   }
@@ -52,7 +52,7 @@ const getRiskColor = (risk?: string) => {
 interface FileData {
   id: string;
   fileName: string;
-  created_at: any; 
+  created_at: any;
   fileSize: number;
   risk_level?: string; // snake_case from backend
   risk_score?: number; // snake_case from backend
@@ -71,10 +71,10 @@ interface DashboardStats {
 }
 
 const COLORS = {
-  SAFE: '#10B981',      
-  SUSPICIOUS: '#F59E0B', 
-  CRITICAL: '#EF4444',   
-  UNKNOWN: '#94a3b8'     
+  SAFE: '#10B981',
+  SUSPICIOUS: '#F59E0B',
+  CRITICAL: '#EF4444',
+  UNKNOWN: '#94a3b8'
 };
 
 const DashboardPage: React.FC = () => {
@@ -109,14 +109,14 @@ const DashboardPage: React.FC = () => {
       if (!userId) return;
 
       try {
-        const API_BASE_URL = "http://localhost:8000"; 
-        
+        const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
         // Fetch BOTH file list (with merged risk data) AND stats
         const [filesRes, statsRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/files/get_history_files/${userId}`),
           axios.get(`${API_BASE_URL}/files/dashboard_stats/${userId}`)
         ]);
-        
+
         if (filesRes.data.success) {
           setDocuments(filesRes.data.data);
         }
@@ -144,7 +144,7 @@ const DashboardPage: React.FC = () => {
     { name: 'Low Risk', value: stats.risk_breakdown.SAFE, color: COLORS.SAFE },
     { name: 'Medium Risk', value: stats.risk_breakdown.SUSPICIOUS, color: COLORS.SUSPICIOUS },
     { name: 'High Risk', value: stats.risk_breakdown.CRITICAL, color: COLORS.CRITICAL },
-  ].filter(item => item.value > 0); 
+  ].filter(item => item.value > 0);
 
   const handleViewReport = (docId: string) => {
     navigate(`/review-document-analysis/${docId}`);
@@ -174,7 +174,7 @@ const DashboardPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Left Column: KPI Cards */}
           <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
+
             {/* Box 1: Total */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
               <div className="flex justify-between items-start">
@@ -234,11 +234,12 @@ const DashboardPage: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Flagged Documents</h3>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
-              <input type="text" placeholder="Search alerts..." className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"/>
+              <input type="text" placeholder="Search alerts..." className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+            {/* Desktop Mode only */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 dark:bg-slate-800/50">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -252,7 +253,7 @@ const DashboardPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                 {flaggedDocs.length > 0 ? (
                   flaggedDocs.map((doc) => {
-                    const score = doc.risk_score || 0; 
+                    const score = doc.risk_score || 0;
                     const level = doc.risk_level || 'SAFE';
 
                     return (
@@ -285,9 +286,8 @@ const DashboardPage: React.FC = () => {
                             </span>
                             <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                               <div
-                                className={`h-full transition-all duration-500 ${
-                                  score > 70 ? 'bg-red-500' : score > 40 ? 'bg-yellow-500' : 'bg-green-500'
-                                }`}
+                                className={`h-full transition-all duration-500 ${score > 70 ? 'bg-red-500' : score > 40 ? 'bg-yellow-500' : 'bg-green-500'
+                                  }`}
                                 style={{ width: `${score}%` }}
                               />
                             </div>
@@ -317,6 +317,50 @@ const DashboardPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile View Only  */}
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {flaggedDocs.length > 0 ? (
+              flaggedDocs.map((doc) => (
+                <div key={doc.id} className=" p-4 space-y-6">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg">
+                        <FileText size={18} />
+                      </div>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{doc.fileName}</span>
+                    </div>
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${getRiskColor(doc.risk_level)}`}>
+                      {getDisplayRisk(doc.risk_level)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>{formatDateTime(doc.created_at)}</span>
+                    <span className="font-bold">Score: {doc.risk_score}</span>
+                  </div>
+
+                  <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${doc.risk_score > 70 ? 'bg-red-500' : 'bg-green-500'}`}
+                      style={{ width: `${doc.risk_score}%` }}
+                    />
+                  </div>
+
+                  <div className='w-full flex justify-center'>
+                    <button
+                      onClick={() => handleViewReport(doc.id)}
+                      className="w-1/2 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-sm font-semibold rounded-lg"
+                    >
+                      View Full Report
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-10 text-center text-slate-500">No documents found.</div>
+            )}
           </div>
         </div>
       </div>

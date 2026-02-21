@@ -87,7 +87,7 @@ const LoginPage = () => {
                 ...(role === "expert" && { "passkey": passkey })
             })
 
-            console.log("response registration: ", res)
+            // console.log("response registration: ", res)
 
             if (res.status === 201) {
                 toast.success("Registration successful! Logging you in...")
@@ -128,7 +128,7 @@ const LoginPage = () => {
             const formData = new FormData(e.currentTarget)
             const email = formData.get("email") as string
             const password = formData.get("password") as string
-            console.log("the password and email is, ", email, password)
+            // console.log("the password and email is, ", email, password)
             const res = await axios.post(`${backendUrl}/user/signIn_user`, {
                 "email": email,
                 "password": password
@@ -152,9 +152,7 @@ const LoginPage = () => {
             setLoading(false)
         }
     }
-    interface AuthGateProps {
-        children: ReactNode;
-    }
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 bg-gradient-to-br dark:bg-gradient-to-br from-gray-50 dark:from-slate-900 via-gray-100 dark:via-slate-800 to-gray-50 dark:to-slate-900">

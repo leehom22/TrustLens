@@ -74,7 +74,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             file_ref = await client.aio.files.upload(file=file_path, config={'mime_type': mime_type})
             
             res = await client.aio.models.generate_content(
-                model='gemini-3.0-flash-preview',
+                model='gemini-2.0-flash',
                 contents=[file_ref, extraction_prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
@@ -86,7 +86,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             
             # Metadata injection
             parsed["_meta"] = {
-                "model": "gemini-3.0-flash-preview",
+                "model": "gemini-2.0-flash",
                 "attempt": attempt + 1,
                 "json_repaired": True if raw_text.strip() != str(parsed) else False
             }

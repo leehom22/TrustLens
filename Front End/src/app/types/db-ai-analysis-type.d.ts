@@ -2,7 +2,11 @@
 
 export type RiskLevel = 'SAFE' | 'CAUTION' | 'SUSPICIOUS' | 'CRITICAL';
 export type LayerStatus = 'PASS' | 'WARNING' | 'CAUTION' | 'CRITICAL' | 'FAIL';
-
+export type RiskLevelColor = 'green' | 'yellow' | 'red' | 'blue' | 'gray';
+export interface ATS_HACKING_DETAILS {
+  hidden_white_chars?: number;
+  micro_font_chars?: number;
+} 
 export interface User {
   username: string
   email: string
@@ -24,24 +28,27 @@ export interface FileHeader {
 export interface DashboardHeader {
   overall_score: number;
   risk_level: RiskLevel;
-  risk_level_color: string;
+  risk_level_color: RiskLevelColor;
   verdict_title: string;
   ai_executive_summary: string;
   grounding_search_reference: string;
   next_step_recommendation: string;
+  doc_type: string;
 }
 
 export interface LayerResult {
   layer_id: string;
   layer_title: string;
   status: LayerStatus;
-  status_color?: string; // Optional as seen in L3
+  status_color?: RiskLevelColor; // Optional as seen in L3
   icon?: string;         // Optional as seen in L3
   score: number;
   ai_analysis: string;
   technical_proofs: string[];
   has_visual_evidence?: boolean;
   evidence_image_url?: string;
+  ATS_hacking?:string;
+  ats_hacking_details?: ATS_HACKING_DETAILS;
 }
 
 export interface DocumentAnalysisResult {
@@ -59,4 +66,3 @@ export interface DocumentAnalysisOverallResult {
   raw_analysis_id: string
   doc_type: string
 }
-
