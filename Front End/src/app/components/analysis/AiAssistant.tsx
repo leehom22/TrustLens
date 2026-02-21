@@ -136,11 +136,11 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
             const token = user ? await user.getIdToken() : null;
             if (!token) throw new Error("Unauthorized: Please log in to continue.");
             // 2. Call Backend
-            console.log("JSON send to backend: ", {
-                req_id: reqId,
-                user_query: queryText,
-                mode: activeMode
-            });
+            // console.log("JSON send to backend: ", {
+            //     req_id: reqId,
+            //     user_query: queryText,
+            //     mode: activeMode
+            // });
             const response = await fetch(`${backendURL}/chat/message`, {
                 method: "POST",
                 headers: {

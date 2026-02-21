@@ -18,7 +18,7 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
 
     # Load rules from profile
     weights = profile.get("weights", {})
-    hard_fail_list = profile.get("hard_fail_checks", [])
+    hard_fail_list = set(profile.get("hard_fail_checks", []))
     layer_map_keys = {"L1_Metadata": "L1", "L2_Visual": "L2", "L3_Content": "L3", "L4_Logic": "L4"}
     
     for e in evidence:

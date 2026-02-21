@@ -80,7 +80,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
             const result = res.data
 
             if (result.success) {
-                console.log("Expert review data: ", result)
+                // console.log("Expert review data: ", result)
                 setExpertReviewNotes(result.review)
             }
         } catch (error) {
@@ -113,7 +113,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
         }
     }
     useEffect(() => {
-        console.log("the Document Id is :", docId)
+        // console.log("the Document Id is :", docId)
         // fetch document from backend
         fetchingFile()
     }, [docId])

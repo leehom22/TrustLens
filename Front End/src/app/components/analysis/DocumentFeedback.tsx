@@ -32,7 +32,7 @@ const DocumentFeedback = ({ section, layerType, analysis_id, document_class, set
             const formData = new FormData(event.currentTarget);
             const feedbackText = formData.get("feedback")
 
-            console.log("Submitting feedback: ", type, feedbackText)
+            // console.log("Submitting feedback: ", type, feedbackText)
 
             // get user id token from firebase auth
             const token = user ? await user.getIdToken() : null;

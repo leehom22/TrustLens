@@ -147,7 +147,8 @@ def get_document_raw_text(req_id: str) -> Dict[str, Any]:
         logger.error(f"Tool Error (get_document_raw_text): {e}")
         return {"error": str(e)}
 
-async def grounding_search_agent(query: str) -> Dict[str, Any]:
+# ! Change from async to sync (To avoid error)
+def grounding_search_agent(query: str) -> Dict[str, Any]:
     """
     Delegates a search query to a specialized Search Sub-Agent.
     Use this when you need to verify external entities, laws, or company backgrounds on the internet.
@@ -163,8 +164,9 @@ async def grounding_search_agent(query: str) -> Dict[str, Any]:
     """
     
     try:
-        response = await search_client.aio.models.generate_content(
-            model="gemini-3.0-flash-preview",
+        # ! Remove await to avoid error
+        response = search_client.aio.models.generate_content(
+            model="gemini-2.0-flash",
             contents=sub_agent_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],

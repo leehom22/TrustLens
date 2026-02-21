@@ -152,9 +152,7 @@ const LoginPage = () => {
             setLoading(false)
         }
     }
-    interface AuthGateProps {
-        children: ReactNode;
-    }
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 bg-gradient-to-br dark:bg-gradient-to-br from-gray-50 dark:from-slate-900 via-gray-100 dark:via-slate-800 to-gray-50 dark:to-slate-900">

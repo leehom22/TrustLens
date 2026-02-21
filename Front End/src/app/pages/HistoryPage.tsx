@@ -129,7 +129,7 @@ const HistoryPage = (props: { userId: string }) => {
 
   const fetchingFiles = async () => {
     try {
-      console.log("the user id is ", userId)
+      // console.log("the user id is ", userId)
       const res = await axios.get(`${backendUrl}/files/get_uploaded_files/${userId}`);
       if (res.data.success) setHistoryFiles(res.data.data)
 
@@ -157,7 +157,7 @@ const HistoryPage = (props: { userId: string }) => {
         setDeleteDocLoading(true)
         const formData = new FormData()
         formData.append('doc_id', docId)
-        console.log("The document id is:", docId)
+        // console.log("The document id is:", docId)
         const res = await axios.post(`${backendUrl}/files/delete_selected_files`, formData)
         const result = res.data
 

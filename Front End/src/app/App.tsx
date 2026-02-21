@@ -196,8 +196,8 @@ export default function App() {
                             documentUrl={url}
                             fileType={uploadedFile.type}
                             file={uploadedFile}
-                            documentId={documentId}
-                            userId={currentUserId}
+                            documentId={documentId!}
+                            userId={currentUserId!}
                           />
                         )}
                       </div>
