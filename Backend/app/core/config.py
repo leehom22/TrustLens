@@ -59,7 +59,18 @@ _STRICT_FINANCIAL_RULES = {
     "allow_creative_software": False,
     "allow_screenshot": False,
     "weights": {"L1": 0.3, "L2": 0.2, "L3": 0.1, "L4": 0.4},
-    "hard_fail_checks": ["software_risk", "time_paradox", "math_mismatch"]
+    "hard_fail_checks": [
+        "HIGH_METADATA_SOFTWARE_RISK",
+        "MEDIUM_METADATA_SOFTWARE_RISK"
+        "FORMAT_VIOLATION_SCREENSHOT",
+        "TIME_PARADOX_LOGIC",
+        "ID_DATE_TIME_PARADOX",
+        "DATE_FROM_FUTURE",
+        "CHRONOLOGY_INCONSISTENCY",
+        "MATH_ROW_MISMATCH",
+        "MATH_TAX_LOGIC_FAIL",
+        "BALANCE_RECONCILIATION_FAIL"
+    ]
 }
 
 _TRANSACTIONAL_RULES = {
@@ -67,7 +78,11 @@ _TRANSACTIONAL_RULES = {
     "allow_creative_software": False, # Commercial docs should be standard
     "allow_screenshot": True,
     "weights": {"L1": 0.2, "L2": 0.2, "L3": 0.3, "L4": 0.3},
-    "hard_fail_checks": ["math_mismatch", "time_paradox"]
+    "hard_fail_checks": [
+        "MATH_ROW_MISMATCH", 
+        "MATH_TAX_LOGIC_FAIL", 
+        "TIME_PARADOX_LOGIC"
+    ]
 }
 
 # Full Profiles and Weightages Standard for Different Doc Types
@@ -78,14 +93,19 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": True,
         "allow_screenshot": False,
         "weights": {"L1": 0.05, "L2": 0.05, "L3": 0.9, "L4": 0.0},
-        "hard_fail_checks": ["hidden_data_found", "ATS_Hacking"]
+        "hard_fail_checks": [
+            "STRUCTURE_HIDDEN_DATA",
+            "ATS_HACKING_DETECTED"
+        ]
     },
     "certificate": {
         "description": "Official award/verification.",
         "allow_creative_software": True,
         "allow_screenshot": True,
         "weights": {"L1": 0.2, "L2": 0.5, "L3": 0.3, "L4": 0.0},
-        "hard_fail_checks": ["visual_tampering"] # ELA is key here
+        "hard_fail_checks": [
+            "VISUAL_TAMPERING_DETECTED"
+        ]
     },
 
     # --- Group 2: Strict Financials (Merged Standard) ---
@@ -103,7 +123,7 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": False, # Contracts should be Word/PDF
         "allow_screenshot": False,
         "weights": {"L1": 0.2, "L2": 0.1, "L3": 0.3, "L4": 0.4},
-        "hard_fail_checks": ["time_paradox"] # Start Date > End Date is critical
+        "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
     },
     # Alias for fuzzy matching
     "freelance_contract": {
@@ -111,7 +131,7 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": False,
         "allow_screenshot": False,
         "weights": {"L1": 0.2, "L2": 0.1, "L3": 0.3, "L4": 0.4},
-        "hard_fail_checks": ["time_paradox"]
+        "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
     },
 
     # Default (Average Weightage)

@@ -146,17 +146,48 @@ def get_document_raw_text(req_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Tool Error (get_document_raw_text): {e}")
         return {"error": str(e)}
+
+async def grounding_search_agent(query: str) -> Dict[str, Any]:
+    """
+    Delegates a search query to a specialized Search Sub-Agent.
+    Use this when you need to verify external entities, laws, or company backgrounds on the internet.
+    """
+    search_client = genai.Client(api_key=GEMINI_API_KEY)
     
+    sub_agent_prompt = f"""
+    You are a Search Sub-Agent. 
+    Use the Google Search tool to find factual information for the following query. 
+    Extract the core facts, URLs, and relevant snippets. Do not add conversational filler.
+    
+    Query: {query}
+    """
+    
+    try:
+        response = await search_client.aio.models.generate_content(
+            model="gemini-3.0-flash-preview",
+            contents=sub_agent_prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.1   # Keep it factual and reduce hallucination
+            )
+        )
+        return {
+            "status": "success",
+            "search_synthesis": response.text if response.text else "No relevant information found."
+        }
+    except Exception as e:
+        logger.error(f"Search Sub-Agent Failed: {e}")
+        return {"error": f"Search failed: {str(e)}"}
 
 TOOL_IMPLEMENTATIONS = {
     "get_forensic_summary": get_forensic_summary,
-    "get_document_raw_text": get_document_raw_text
+    "get_document_raw_text": get_document_raw_text,
+    "grounding_search": grounding_search_agent
 }
 
 
-
 # ========================= Tool Schemas (Declarations) =========================
-
+"""
 forensic_tool = types.Tool(
     function_declarations=[
         types.FunctionDeclaration(
@@ -195,8 +226,29 @@ raw_text_tool = types.Tool(
     ]
 )
 
+grounding_search_tool = types.Tool(
+    function_declarations=[
+        types.FunctionDeclaration(
+            name="grounding_search_agent",
+            description="Delegates a search query to a specialized Search Sub-Agent for verifying external facts, laws, or company info.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "req_id": {
+                        "type": "string",
+                        "description": "The unique identifier of the analysis request."
+                    }
+                },
+                "required": ["req_id"]
+            }
+        )
+    ]
+)
+
+"""
+
 # Google Search Tool Definition
-google_search_tool = types.Tool(google_search=types.GoogleSearch())
+# google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
 
 # ========================= Guardrails (Chat Content Boundaries) =========================
@@ -295,7 +347,7 @@ def get_mode_config(mode: str, req_id: str):
        - If a Bank Statement uses Canva, say: "This is critical. Bank docs are automated; Canva implies forgery."
     """
 
-    # --- 3. 模式定义 (Hardened Architecture) ---
+    # --- 3. Hardened Architecture ---
 
     if mode == "forensic_analyst":
         
@@ -346,14 +398,13 @@ def get_mode_config(mode: str, req_id: str):
            - **IF** risk_score >= 70 (HIGH): **WARN** ("⚠️ High forensic risk detected, proceed with caution") -> THEN PROCEED to Step 2.
            - **IF** safe: PROCEED to Step 2.
         2. **STEP 2**: Call `get_document_raw_text`. Read the clauses.
-        3. **STEP 3**: Call `Google Search`. Check if quoted rates are *grossly* out of market range (Qualitative check only).
+        3. **STEP 3**: Call `grounding_search_agent`. Check if quoted rates are *grossly* out of market range (Qualitative check only).
 
         ### REQUIRED OUTPUT STRUCTURE
         End with:
         "**Commercial Risk Summary**: [Brief summary of unfair terms]"
         """
-        return {"tools": [get_forensic_summary, get_document_raw_text], "prompt": prompt}
-        # return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text, grounding_search_agent], "prompt": prompt}
 
     elif mode == "policy_advisor":
 
@@ -377,8 +428,7 @@ def get_mode_config(mode: str, req_id: str):
         End with:
         "**Compliance Status**: [Compliant / Non-Compliant / Missing Info]"
         """
-        return {"tools": [get_forensic_summary, get_document_raw_text], "prompt": prompt}
-        # return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text, grounding_search_agent], "prompt": prompt}
 
     elif mode == "rejection_letter":
 
@@ -419,20 +469,20 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
     ]
     policy_doc_types = ["invoice", "receipt", "tax", "statement"]
 
-    # 🛡️ Contract Guardian: 关注条款、陷阱、公平性
+    # 🛡️ Contract Guardian
     contract_keywords = [
         "clause", "term", "agreement", "risk", "loophole", "fair", "unfair", 
         "terminate", "liability", "sign", "trap", "hidden", "obligation", "right"
     ]
     contract_doc_types = ["contract", "agreement", "mou", "nda", "offer letter"]
 
-    # ✉️ Rejection Letter: 关注拒绝、欺诈、草拟邮件
+    # ✉️ Rejection Letter
     rejection_keywords = [
         "draft", "write", "email", "reject", "refuse", "fake", "scam", "reply", 
         "decline", "deny", "letter"
     ]
 
-    # 📊 Forensic Analyst: 关注原本的分析、总结
+    # 📊 Forensic Analyst
     forensic_keywords = [
         "summary", "analysis", "detect", "scan", "check", "evidence", "original", "metadata"
     ]
@@ -442,12 +492,12 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
 
     # 1. Back to Summary (Intent)
     # Any other modes can suggest going back to Forensic Analysis mode to review the summary, but Rejection Letter mode should not (to avoid confusion in tone and purpose)
-    if current_mode != "forensic_analyst" and current_mode != "rejection_letter" or (any(k in q_lower for k in forensic_keywords) or "show me" in q_lower):
-             suggestions.append({
-                "label": "📊 Back to Analysis",  
-                "mode": "forensic_analyst", 
-                "query": "Show me the forensic summary again."
-            })
+    if current_mode != "forensic_analyst" and (current_mode != "rejection_letter" or (any(k in q_lower for k in forensic_keywords) or "show me" in q_lower)):
+        suggestions.append({
+            "label": "📊 Back to Analysis",  
+            "mode": "forensic_analyst", 
+            "query": "Show me the forensic summary again."
+        })
 
     # 2. Rejection Letter (High risk score + Intent) 
     if current_mode != "rejection_letter":
@@ -487,6 +537,7 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
 
     # At most 3 suggestions
     return suggestions[:3]
+
 
 
 # ========================= Main Endpoint =========================
@@ -581,7 +632,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         )
 
     except Exception as e:
-        logger.exception("Chat Error (req_id: {request.req_id})")
+        logger.exception(f"Chat Error (req_id: {request.req_id})")
         return ChatResponse(
             response="I'm analyzing the document securely, but the connection timed out. Please try asking again.",
             suggested_actions=[]

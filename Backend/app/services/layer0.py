@@ -14,61 +14,47 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
     total_weight = 0.0
     hard_fail_triggered = False
     aggregated_risk_signals = []   # collect all layers' risk signals and hard fail signals
+    hard_fail_reasons = []
 
     # Load rules from profile
     weights = profile.get("weights", {})
     hard_fail_list = profile.get("hard_fail_checks", [])
-    
-    # Helper to map generic layer names to config keys
     layer_map_keys = {"L1_Metadata": "L1", "L2_Visual": "L2", "L3_Content": "L3", "L4_Logic": "L4"}
     
-    evidence_summary = []
-
-    # 1. Allow_Screenshot => Hard Fail
-    # Retrieve L3 result to check for screenshot flag
-    l3_evidence = next((e for e in evidence if e.layer_name == "L3_Content"), None)
-    
-    if l3_evidence and l3_evidence.details.get("is_screenshot"):
-        # Check if profile explicitly forbids screenshots (Default to True/Allowed if not set)
-        if not profile.get("allow_screenshot", True):
-            hard_fail_triggered = True
-            aggregated_risk_signals.append(f"Hard Fail Triggered: Screenshot detected. {doc_type} requires original document.")
-
-
     for e in evidence:
-        # Risk Signal collect from each layer
-        if e.risk_signals:
-            aggregated_risk_signals.extend(e.risk_signals)
+        layer_signals = set(e.risk_signals) if e.risk_signals else set()
+        aggregated_risk_signals.extend(list(layer_signals))
 
-        # Hard Fail Check (all details in layer)
-        for check in hard_fail_list:
-            val = e.details.get(check)
-            if val: 
-                hard_fail_triggered = True
-                aggregated_risk_signals.append(f"Hard Fail Triggered: {check} ({val}) in {e.layer_name}")
-                break
-        
+        triggered_fails = hard_fail_list.intersection(layer_signals)
+        if triggered_fails:
+            hard_fail_triggered = True
+            for trigger in triggered_fails:
+                hard_fail_reasons.append(f"[{trigger}] from {e.layer_name}")
+
         # Weighted Calculation
         w_key = layer_map_keys.get(e.layer_name, "L1")
         w = weights.get(w_key, 0.25)
-        
         if e.status == LayerStatus.SKIPPED:
             w = 0.0
-        
-        # Allow_creative_software => Forgive
+
+        # 1. Allow_Screenshot => Hard Fail
+        # Retrieve L3 result to check for screenshot flag
+        if "FORMAT_VIOLATION_SCREENSHOT" in layer_signals and not profile.get("allow_screenshot", True):
+            hard_fail_triggered = True
+            hard_fail_reasons.append("[FORMAT_VIOLATION_SCREENSHOT] (Profile enforced)")
+            
+            weighted_score += (current_score * w)
+            total_weight += w
+
+        # 2. Allow_creative_software => Forgive
         # Keep the evidence, but reduce its weight to zero for the score calculation
         current_score = e.score
         if profile.get("allow_creative_software") and e.layer_name == "L1_Metadata" and "software_risk" in e.details:
-             current_score = 0 # Forgive only in calculation
+            current_score = 0 # Forgive only in calculation
         
         weighted_score += (current_score * w)
         total_weight += w
         
-        # Clean up heatmap in the evidence chain for AI Prompt
-        # ev_dict = e.dict()
-        # if "visual_evidence_url" in ev_dict: del ev_dict["visual_evidence_url"]
-        # evidence_summary.append(ev_dict)
-
 
     # =============== Final Calculation ===============
     summary_code = "CALCULATED"
@@ -78,6 +64,7 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         final_score = 95
         summary_code = "HARD_FAIL"
         risk_level = "CRITICAL"
+        aggregated_risk_signals.extend([f"Hard Fail Triggered: {r}" for r in set(hard_fail_reasons)])
     else:
         final_score = int(weighted_score / total_weight) if total_weight > 0 else 0
         
@@ -88,11 +75,9 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         else: risk_level = "SAFE"
 
     # ==================== Pass Output to main.py =====================
-    distinct_risk_signals = list(set(aggregated_risk_signals))
-
     return {
         "overall_risk_score": final_score, 
         "risk_level": risk_level,
-        "risk_signals": distinct_risk_signals,
+        "risk_signals": list(set(aggregated_risk_signals)),
         "summary_code": summary_code
     }

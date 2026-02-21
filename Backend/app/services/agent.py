@@ -44,11 +44,22 @@ You have access to a `Google Search` tool. You MUST use it to verify data.
   - If tool returns partial match (Name ok, Address different) -> Ambiguous.
   - If tool returns scam reports -> Suspicious.
 
-### 3. HISTORICAL KNOWLEDGE APPLICATION (HIGHEST PRIORITY)
-- **OVERRIDE RULE**: Historical Lessons **OVERRIDE** search results.
-    - If search says "Unverified" but Lesson says "Vendor X is legit local shop", result is VERIFIED.
-    - If search says "Verified" but Lesson says "Vendor Y is a clone scam", result is SUSPICIOUS (Score 100).
-- **Citation**: You must explicitly state: "Applying lesson: [Lesson Content]".
+### 3. HISTORICAL KNOWLEDGE APPLICATION (STRICT HIERARCHY)
+Historical Lessons are the "Gold Standard" and **OVERRIDE** all general forensic rules and Google Search results. You must interpret the prefixes as follows:
+- **[CORRECTION / MUST FOLLOW]** (Highest Priority):
+    - This is a mandatory logic override. 
+    - Example: If technical analysis flags 'ELA_RISK' but a Lesson says "[CORRECTION] Ignore ELA for this vendor", you MUST state the vendor is safe despite the technical score.
+- **[RISK WARNING]** (High Priority):
+    - A known fraud pattern. If you see this, you MUST be extremely critical.
+    - If a vendor matches a [RISK WARNING] lesson, set `grounding_score` to at least 90 (SUSPICIOUS).
+- **[CONFIRMED PATTERN]** (Validation):
+    - A known safe/standard exception for specific documents.
+    - Use this to lower the risk score even if the document "looks" unverified via Google Search.
+**Entity Scoping Rule**:
+- **[SPECIFIC: VendorName]**: These lessons apply ONLY when the current vendor matches. They are the most powerful overrides.
+- **[GENERIC]**: These lessons apply to all documents of this `doc_type`.
+**Citation Requirement**:
+If a Lesson influenced your decision, you MUST explicitly start your `agent_summary` with: "Applying historical lesson: [Summarized Lesson Content]".
 
 ### 4. SCORING & STATUS MAPPING (STRICT)
 You must determine the `grounding_score` first, then derive the `verification_status`.
@@ -70,6 +81,12 @@ You must determine the `grounding_score` first, then derive the `verification_st
 - **NO FABRICATION**: If the search tool returns no URL, return an empty list `[]`. Do NOT invent links.
 - **NO TECHNICAL REVIEW**: Do NOT comment on ELA/Metadata scores.
 - **NO INFERENCE**: Do not infer beyond the retrieved evidence.
+
+### 6. LAYER SUMMARIES & EVIDENCE MAPPING (STRICT)
+You must translate technical data into a professional forensic narrative.
+- **Reference Specifics**: For L4 (Logic), you MUST reference the specific formula and values from 'audit_trails' (e.g., 'Expected 50.00 * 2 = 100.00, but found 120.00').
+- **Signal Integration**: Mention the standard Risk Signals (e.g., MATH_ROW_MISMATCH) in your explanation to align with the technical report.
+- **Handling Empty Data**: If a layer has 'CLEAN' status but no specific details, state 'No technical anomalies detected'. If a layer failed to process, state 'Technical data unavailable for this layer'.
 
 --- OUTPUT GENERATION (JSON STRICT) ---
 {
@@ -188,6 +205,24 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
     lessons_data = fetch_relevant_lessons(report.doc_type, flagged_layers, vendor_name)
     lessons_prompt_str = lessons_data["prompt_text"]
 
+    # Prepare technical evidence
+    evidence_context = ""
+    for layer in report.evidence_chain:
+        evidence_context += f"\n### {layer.layer_name} (Score: {layer.score}, Status: {layer.status.value})\n"
+        evidence_context += f"Signals Triggered: {layer.risk_signals}\n"
+        
+        # Only include necessary details to reduce token consumption, and focus on explainable signals rather than raw data.
+        # The AI's summary should be based on the risk signals and key details, not the entire metadata or visual analysis output.
+        clean_details = {}
+        if layer.layer_name == "L1_Metadata":
+            clean_details = {k: v for k, v in layer.details.items() if k in ["structure", "software_risk_detail", "time_paradox"]}
+        elif layer.layer_name == "L2_Visual":
+            clean_details = {k: v for k, v in layer.details.items() if k in ["forensic_note", "advanced_score_breakdown"]}
+        elif layer.layer_name == "L4_Logic":
+            clean_details = layer.details.get("audit_trails", [])
+            
+        evidence_context += f"Technical Details:\n{json.dumps(clean_details, indent=2)}\n"
+
     # ------ Prompt Context -------
     # Only give neceesary info to reduce consumption of tokens
     user_prompt = f"""
@@ -197,14 +232,17 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
     Risk Level: {report.risk_level}
     Key Signals: {report.risk_signals}
 
-    # Lesson Prompts
-    {lessons_prompt_str}
+    [TECHNICAL EVIDENCE DETAILS]
+    {evidence_context}
 
     [ENTITIES TO VERIFY]
     Vendor Name: {report.grounding_info.get('vendor_name', 'N/A')}
     Address: {report.grounding_info.get('vendor_address', 'N/A')}
     Total Amount: {report.grounding_info.get('total_amount', 'N/A')}
     Details: {report.grounding_info}
+
+    # Lesson Prompts
+    {lessons_prompt_str}
     """
 
     # 2. Execution
@@ -212,7 +250,7 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
 
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3-flash-preview',
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=AGENT_SYSTEM_INSTRUCTION,
