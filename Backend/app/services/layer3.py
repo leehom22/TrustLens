@@ -86,7 +86,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             
             # Metadata injection
             parsed["_meta"] = {
-                "model": "gemini-2.5-flash",
+                "model": "gemini-3.0-flash-preview",
                 "attempt": attempt + 1,
                 "json_repaired": True if raw_text.strip() != str(parsed) else False
             }
