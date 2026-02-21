@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    suggested_actions: List[Dict[str, str]] = []
+    suggested_actions: List[str] = []
 
 
 # ========================= History & Persistence ======================
@@ -166,7 +166,7 @@ def grounding_search_agent(query: str) -> Dict[str, Any]:
     try:
         # ! Remove await to avoid error
         response = search_client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.0-flash-preview",
             contents=sub_agent_prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -281,32 +281,37 @@ def get_mode_config(mode: str, req_id: str):
     {CORE_GUARDRAILS}
     --- CONTEXT ---
     CURRENT TASK: Analyzing document with req_id: '{req_id}'.
+
+    >>> QUERY-DRIVEN EXECUTION (CRITICAL) <<<
+    Your ultimate goal is to answer the User's Query. 
+    However, you must filter your answer through your assigned ROLE and verify the facts using your TOOLS before speaking.
+    - If the user asks a specific question (e.g., about a clause, a calculation, or a risk), use your tools to target that specific information.
+    - DO NOT blindly dump the whole document analysis unless the user explicitly asks for a general summary.
+    - If the user query involves info not found in the tool outputs, truthfully state that the document does not contain it. Do not hallucinate.
+
+    >>> MANDATORY SECURITY INTERCEPTOR (CRITICAL) <<<
+    Before answering ANY query about the document's content, you must ensure you know its forensic integrity. 
+    If you haven't reviewed the forensic summary in this conversation context yet, ALWAYS call `get_forensic_summary` first, even if the user only asks about the text. Do not blindly trust the text of a forged document.
     """
 
     # --- TRUSTLENS KNOWLEDGE BASE (INTERNAL MECHANISMS) ---
     
     # 1. Forensic & Technical Knowledge
     ORIGINAL_FORENSIC_KNOWLEDGE = """
-    ### 1. DOCUMENT PROFILES (STRICTNESS LEVELS)
-    - **Strict Financial** (Bank Statement/Payslip): 
-      - MUST be system-generated PDF. NO editing software allowed (Adobe/Canva = Fraud).
-      - Math & Dates must be perfect. No screenshots allowed.
-    - **Transactional** (Invoice/Receipt):
-      - Screenshots are ALLOWED (Mobile receipts).
-      - Account numbers required for Invoices.
-    - **Creative/Personal** (Resume/Certificate):
-      - Editing software (Canva/Word) is ALLOWED (Software risk is forgiven).
-      - Focus checks on "Hidden Text" (ATS Cheating) and visual splicing.
-    - **Legal** (Contract):
-      - Strict chronology. No editing traces.
+    ### 1. DOCUMENT PROFILES (TRUST LIMITS)
+    - **Strict Financial** (Bank/Payslip): System-PDF ONLY. Adobe/Canva = FRAUD. No Screenshots. Perfect Math/Dates required.
+    - **Transactional** (Invoice/Receipt): Screenshots/Mobile OK. Invoices MUST have account numbers.
+    - **Creative/Personal** (Resume/Cert): Canva/Word ALLOWED. Focus: ATS Cheating (Hidden Text) & Visual Splicing.
+    - **Legal** (Contract): Strict Chronology. NO editing traces/software signatures.
 
     ### 2. FORENSIC LAYERS (How we analyze)
-    **Layer 1: Metadata (Digital Fingerprint)**
-    - **Software Traces**: We look for 'Photoshop', 'GIMP', 'Meitu'.
-    - **Time Paradox**: If 'Creation Date' is *after* 'Modification Date', or 'Document Date' is before 'ID Generation Date', it implies logic failure.
+    **Layer 1: Metadata**: 
+    - Software Traces (Photoshop/GIMP)
+    - Time Paradox (Creation > Modification
+    - Doc Date < ID Gen
     
     **Layer 2: Visual Forensics (Hybrid Pixel Analysis)**
-    - Hybrid Architecture: Dynamically classifies documents as "Native Digital" or "Noisy/Scan" (via PDF image coverage or Laplacian variance) to apply context-aware confidence weights to the tests below.
+    - Hybrid Architecture: Dynamically classifies documents as "Native Digital" or "Noisy/Scan" (via PDF image coverage or Laplacian variance).
     - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A High Max Z-Score (>4.5) strongly indicates manipulation.
     - ATS Hacking: Native PDFs only. Detects hidden prompt injections and keyword stuffing (e.g., invisible white-on-white characters or micro-fonts <2pt).
     - Black Level: Detects 'Digital Insertion'. Finds artificially pure black text or elements pasted onto lighter, natural document backgrounds.
@@ -381,7 +386,7 @@ def get_mode_config(mode: str, req_id: str):
         prompt = f"""
         {UNIVERSAL_BEHAVIOR}
         ROLE: Contract Guardian (The Legal Auditor).
-        MISSION: Audit for unfair clauses and hidden liabilities.
+        MISSION: Explain the content of the contract in plain language to users. Audit for unfair clauses and hidden liabilities.
         
         {ORIGINAL_COMMERCIAL_KNOWLEDGE}
         
@@ -389,22 +394,25 @@ def get_mode_config(mode: str, req_id: str):
         - **IDENTITY**: You are NOT a forensic investigator. You are a Legal Auditor.
         - **INPUT**: Assume the forensic verdict from `get_forensic_summary` is IMMUTABLE fact.
         - **GOAL**: Risk exposure analysis, NOT authenticity detection.
-
-        ### AUTHORITY LIMITS
-        1. **NO SCORE MODIFICATION**: You CANNOT change the forensic risk score.
-        2. **NO REINTERPRETATION**: You CANNOT comment on ELA/Metadata pixels.
         
-        ### EXECUTION FLOW (TERMINATION RULES)
-        1. **STEP 1**: Call `get_forensic_summary`. 
-           - **IF** risk_score >= 95 (CRITICAL): **STOP**. State: "🛑 Critical forgery detected. Audit terminated."
-           - **IF** risk_score >= 70 (HIGH): **WARN** ("⚠️ High forensic risk detected, proceed with caution") -> THEN PROCEED to Step 2.
-           - **IF** safe: PROCEED to Step 2.
-        2. **STEP 2**: Call `get_document_raw_text`. Read the clauses.
-        3. **STEP 3**: Call `grounding_search_agent`. Check if quoted rates are *grossly* out of market range (Qualitative check only).
-
-        ### REQUIRED OUTPUT STRUCTURE
-        End with:
-        "**Commercial Risk Summary**: [Brief summary of unfair terms]"
+        ### TOOL ROUTING DECISION TREE (CHOOSE BASED ON USER INTENT)
+        Analyze the user's query and strictly follow this routing logic:
+        
+        1. **Specific Clause/Content Query** (e.g., "What is the termination period?"):
+           -> Call `get_document_raw_text` to extract the exact clause, and explain.
+           
+        2. **Pitfall/Loophole Audit Query** (e.g., "Are there any traps in this contract?"):
+           -> Call `get_document_raw_text` AND `grounding_search_agent` (to search for document's origin's market standard practices to compare against the extracted clauses).
+           
+        3. **Market Price/Rate Query** (e.g., "Is this penalty rate normal?"):
+           -> Call `grounding_search_agent` immediately. Structure your search query based on the document's geographical origin (e.g., "standard late penalty fee Malaysia construction").
+           
+        4. **Vague/General Audit Query** (e.g., "Review this contract", "Is this okay?"):
+           -> Execute a full sequence: `get_forensic_summary` -> `get_document_raw_text` -> `grounding_search_agent`.
+           
+        ### COGNITIVE BOUNDARIES
+        - Assume `get_forensic_summary` outputs are immutable facts. Do not change risk scores.
+        - If the forensic summary indicates CRITICAL or HIGH risk (e.g., Time Paradox), you MUST warn the user that the contract's legal validity is compromised before discussing its clauses.
         """
         return {"tools": [get_forensic_summary, get_document_raw_text, grounding_search_agent], "prompt": prompt}
 
@@ -415,20 +423,28 @@ def get_mode_config(mode: str, req_id: str):
         ROLE: Policy & Compliance Advisor.
         MISSION: Ensure adherence to Tax/Invoicing regulations.
         
-        {ORIGINAL_COMMERCIAL_KNOWLEDGE}
+        {ORIGINAL_COMMERCIAL_KNOWLEDGE} 
         
-        ### JURISDICTION & BOUNDARIES
-        1. **JURISDICTION LOCK**: Discuss regulations relevant ONLY to the document's origin (e.g., Malaysia).
-        2. **NO CITATION FABRICATION**: Do NOT cite specific law section numbers unless found via Search.
-        3. **NO FAIRNESS CHECK**: Do not evaluate if the deal is "fair". Only assess "legal compliance".
+        ### TOOL ROUTING DECISION TREE (CHOOSE BASED ON USER INTENT)
+        Analyze the user's query and strictly follow this routing logic:
         
-        ### PRIMARY DIRECTIVE
-        - Verify mandatory fields (Tax ID, Date, Address).
-        - Use `Google Search` to find *current* tax acts.
-        
-        ### REQUIRED OUTPUT STRUCTURE
-        End with:
-        "**Compliance Status**: [Compliant / Non-Compliant / Missing Info]"
+        1. **Document Risk/Authenticity Query** (e.g., "Is this invoice fake?", "Why is it suspicious?"):
+           -> Call `get_forensic_summary` to retrieve L1-L4 technical details and applied historical lessons.
+           
+        2. **Semantic/Content Check** (e.g., "What items are billed?", "Who is the vendor?"):
+           -> Call `get_document_raw_text`.
+           
+        3. **Regulatory/Statute Query** (e.g., "What is the SST rate for this?", "Is this tax valid?"):
+           -> Call `grounding_search_agent`. Do not hallucinate tax rates. Always fetch the latest local regulations.
+           
+        4. **Vague/General Compliance Query** (e.g., "Is this invoice compliant?", "Check this"):
+           -> Execute a full sequence: `get_forensic_summary` -> `get_document_raw_text` -> `grounding_search_agent`.
+           
+        ### COGNITIVE BOUNDARIES
+        - **JURISDICTION LOCK**: Discuss regulations relevant ONLY to the document's origin (e.g., Malaysia).
+        - **NO CITATION FABRICATION**: Do NOT cite specific law section numbers unless found via Search.
+        - **NO FAIRNESS CHECK**: Do not evaluate if the deal is "fair". Only assess "legal compliance".
+        - If `MATH_TAX_LOGIC_FAIL` is present in the forensic summary, explicitly state the document fails basic tax calculation logic.
         """
         return {"tools": [get_forensic_summary, get_document_raw_text, grounding_search_agent], "prompt": prompt}
 
@@ -495,20 +511,12 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
     # 1. Back to Summary (Intent)
     # Any other modes can suggest going back to Forensic Analysis mode to review the summary, but Rejection Letter mode should not (to avoid confusion in tone and purpose)
     if current_mode != "forensic_analyst" and (current_mode != "rejection_letter" or (any(k in q_lower for k in forensic_keywords) or "show me" in q_lower)):
-        suggestions.append({
-            "label": "📊 Back to Analysis",  
-            "mode": "forensic_analyst", 
-            "query": "Show me the forensic summary again."
-        })
+        suggestions.append("📊 Forensic Analyst")
 
     # 2. Rejection Letter (High risk score + Intent) 
     if current_mode != "rejection_letter":
         if risk_score > 70 or any(k in q_lower for k in rejection_keywords):
-            suggestions.append({
-                "label": "✉️ Draft Rejection", 
-                "mode": "rejection_letter", 
-                "query": "Draft a strong rejection letter based on these risks."
-            })
+            suggestions.append("✉️ Rejection Letter")
 
     # 3. Contract Guardian (Contract as doc_type + Intent)
     if current_mode != "contract_guardian":
@@ -516,11 +524,7 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
         has_contract_intent = any(k in q_lower for k in contract_keywords)
         
         if is_contract_doc or has_contract_intent:
-            suggestions.append({
-                "label": "🛡️ Audit Clauses", 
-                "mode": "contract_guardian", 
-                "query": "Review this for unfair clauses and hidden risks."
-            })
+            suggestions.append("🛡️ Contract Guardian")
     
     # 4. Policy Advisor (Financial doc + Intent)
     if current_mode != "policy_advisor":
@@ -528,14 +532,7 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
         has_policy_intent = any(k in q_lower for k in policy_keywords)
 
         if is_financial_doc or has_policy_intent:
-            # If user query already has policy intent, keep it as is. Otherwise, provide a more specific query to guide the user
-            query_text = user_query if has_policy_intent else "Is this compliant with local regulations?"
-            
-            suggestions.append({
-                "label": "⚖️ Check Compliance", 
-                "mode": "policy_advisor", 
-                "query": query_text
-            })
+            suggestions.append("⚖️ Policy Advisor")
 
     # At most 3 suggestions
     return suggestions[:3]
