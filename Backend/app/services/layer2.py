@@ -22,6 +22,10 @@ from ..utils.layer2_utils import (
 import logging
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
+import shutil
+def check_poppler():
+    return shutil.which("pdftoppm") is not None
+
 # ================ Poppler Check ====================
 try:
     from pdf2image import convert_from_path
@@ -30,10 +34,14 @@ except ImportError:
     POPPLER_AVAILABLE = False
     logger.warning("⚠️ Poppler/pdf2image missing. PDF Visual ELA will be disabled.")
 
+POPPLER_INSTALLED = check_poppler()
 
 # ================= Split document into pages function =========================
 def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
     if not POPPLER_AVAILABLE: return []
+    if not POPPLER_INSTALLED:
+        logger.error("Poppler binary NOT found in system PATH. PDF analysis will fail.")
+        return []
     try:
         # [Optimization] Memory protection: Read in chunks (generators) to prevent OOM
         # Although it returns a List at the end for interface compatibility, the intermediate process is safer.
