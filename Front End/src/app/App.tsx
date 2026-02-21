@@ -146,96 +146,95 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <div className="flex min-h-screen w-full overflow-x-hidden">
-        {/* Sidebar only appears if user is authenticated */}
-        {user && (
-          <div className="md:sticky md:inset-y-0 md:left-0 z-50 md:flex md:w-72 flex-col">
-            <Sidebar user={user} />
-          </div>
-          )}
+  {/* Added bg-white dark:bg-slate-900 for the root container */}
+  <div className="flex min-h-screen w-full overflow-x-hidden bg-white dark:bg-slate-900 transition-colors duration-300">
+    
+    {/* Sidebar only appears if user is authenticated */}
+    {user && (
+      <div className="md:sticky md:inset-y-0 md:left-0 z-50 md:flex md:w-72 flex-col border-r border-gray-200 dark:border-slate-700">
+        <Sidebar user={user} />
+      </div>
+    )}
 
-        <main className={`flex-1 w-full min-w-0 ${user ? "bg-gray-50" : ""}`}>
-          <div className={user ? "p-4 md:p-7 w-full max-w-7xl mx-auto" : "w-full"}>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={<LoginPage />} />
+    {/* Updated main background logic: 
+        If user exists, it uses a slightly off-white (gray-50) or deep slate (slate-800) */}
+    <main className={`flex-1 w-full min-w-0 transition-colors duration-300 ${
+      user ? "bg-gray-50 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
+    }`}>
+      
+      <div className={user ? "p-4 md:p-7 w-full max-w-7xl mx-auto" : "w-full"}>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LoginPage />} />
 
-              {/* Conditional Home Logic */}
+          {/* Conditional Home Logic */}
+          <Route
+            path="/"
+            element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
+          />
+
+          {/* Protected Routes */}
+          {user && (
+            <>
               <Route
-                path="/"
-                element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
-              />
-
-              {/* Protected Routes */}
-              {user && (
-                <>
-                  {/* uer & expert */}
-                  
-                  <Route
-                    path="/upload-document"
-                    element={
-                      <div className="w-full h-full min-h-[calc(100vh-4rem)]">
-                        {
-                          fileUploadLoading && (
-                            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-                              <div className="flex flex-col items-center gap-4">
-                                <Loader2 className="animate-spin text-primary" size={50} />
-                                <p className="text-lg font-medium animate-pulse">Uploading Document...</p>
-                              </div>
-                            </div>
-                          )
-                        }
-                        {!fileUploadLoading && appState === "upload" && (
-                          <DocumentUploader onFileUpload={handleFileUpload} />
-                        )}
-                        {!fileUploadLoading && appState === "analysis" && uploadedFile && (
-                          <AnalysisInterface
-                            fileName={uploadedFile.name}
-                            onBack={handleBack}
-                            userEmail={user.email || "user@example.com"}
-                            documentUrl={url}
-                            fileType={uploadedFile.type}
-                            file={uploadedFile}
-                            documentId={documentId!}
-                            userId={currentUserId!}
-                          />
-                        )}
+                path="/upload-document"
+                element={
+                  <div className="w-full h-full min-h-[calc(100vh-4rem)]">
+                    {fileUploadLoading && (
+                      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                        <div className="flex flex-col items-center gap-4">
+                          <Loader2 className="animate-spin text-primary" size={50} />
+                          <p className="text-lg font-medium animate-pulse text-slate-900 dark:text-slate-100">
+                            Uploading Document...
+                          </p>
+                        </div>
                       </div>
-                    }
-                  />
-                  {
-                    expert ?
-                      <>
-                        {/* only expert */}
-                        <Route path="/review-document-list" element={<ReviewDocumentList/>} />
-                        <Route path="/expert-dashboard" element={<DocumentReview />} />
-                        <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
-                      </>
-
-                      : (
-                        <>
-                          {/* only user */}
-                          <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
-                          <Route path="/dashboard" element={<Dashboard />} />
-                          <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
-                        </>
-                      )
-                  }
+                    )}
+                    
+                    {!fileUploadLoading && appState === "upload" && (
+                      <DocumentUploader onFileUpload={handleFileUpload} />
+                    )}
+                    
+                    {!fileUploadLoading && appState === "analysis" && uploadedFile && (
+                      <AnalysisInterface
+                        fileName={uploadedFile.name}
+                        onBack={handleBack}
+                        userEmail={user.email || "user@example.com"}
+                        documentUrl={url}
+                        fileType={uploadedFile.type}
+                        file={uploadedFile}
+                        documentId={documentId!}
+                        userId={currentUserId!}
+                      />
+                    )}
+                  </div>
+                }
+              />
+              
+              {expert ? (
+                <>
+                  <Route path="/review-document-list" element={<ReviewDocumentList/>} />
+                  <Route path="/expert-dashboard" element={<DocumentReview />} />
+                  <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
+                </>
+              ) : (
+                <>
+                  <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
                 </>
               )}
+            </>
+          )}
 
-              {/* Catch-all route: 
-                  If user is logged in -> goes to Dashboard/Upload via the "/" redirect logic or specific routes.
-                  If user is NOT logged in -> goes to Landing Page via "/" 
-              */}
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
 
-            <Toaster />
-            <ToastContainer />
-          </div>
-        </main>
+        <Toaster />
+        <ToastContainer />
       </div>
-    </ThemeProvider>
+    </main>
+  </div>
+</ThemeProvider>
   );
 }

@@ -23,9 +23,9 @@ const LogicalConsistency = ({ layer, nextStepRecommendation }: LogicalConsistenc
                     </div>
 
                     {/* Status Badge */}
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color] || statusStyles.gray}`}>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color!] || statusStyles.gray}`}>
                             {layer?.status} 
-                            {
+                              {
                                 layer?.status !== "PASS" && (
                                     <p>
                                         - Score: {layer?.score}

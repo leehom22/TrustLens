@@ -47,21 +47,23 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) =>
                   <div className="z-10 flex gap-1.5 sm:gap-2">
                     <button
                       onClick={() => zoomIn()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-sm sm:text-base font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-sm sm:text-base font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Zoom in"
                     >
                       +
                     </button>
+                    
                     <button
                       onClick={() => zoomOut()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-sm sm:text-base font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-sm sm:text-base font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Zoom out"
                     >
                       −
                     </button>
+                    
                     <button
                       onClick={() => resetTransform()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-xs sm:text-sm font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Reset zoom"
                     >
                       Reset
