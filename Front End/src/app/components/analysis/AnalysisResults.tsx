@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Info, FileText, Globe, Wand2, Shield, Loader2, CircleAlert, AlertCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { motion } from "motion/react";
@@ -116,6 +116,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
         {/* Helper to render a tab content + feedback */}
         {/* Metadata Tab */}
         <TabsContent value="metadata" className="main-card-container">
+          {/* Layer 1 */}
           <Metadata layer={ai_analysis_format?.layer_results[0]} />
           {!openFeedback.metadata && (
             <div className="flex justify-end mt-4">
@@ -140,6 +141,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
 
         {/* Heatmap Tab */}
         <TabsContent value="heatmap" className="main-card-container">
+          {/* Layer 2 */}
           <VisualManipulation layer={ai_analysis_format?.layer_results[1]} />
           {!openFeedback.heatmap && (
             <div className="flex justify-end mt-4">

@@ -27,6 +27,7 @@ class ChatRequest(BaseModel):
     req_id: str = Field(..., description="Request ID")
     user_query: str = Field(..., description="The user's question")
     mode: str = Field(default="forensic_analyst", description="Active Persona Mode")
+    user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'")
 
 class ChatResponse(BaseModel):
     response: str
@@ -34,10 +35,10 @@ class ChatResponse(BaseModel):
 
 
 # ========================= History & Persistence ======================
-def get_chat_history(req_id: str, limit: int = 10):
+def get_chat_history(req_id: str, limit: int = 10, userType: str = "user"):
     # Retrieve recent chat history for context
     try:
-        msgs_ref = db.collection("analysis_results").document(req_id).collection("messages")
+        msgs_ref = db.collection("analysis_results").document(req_id).collection("messages").where("userType","==",userType)
         docs = msgs_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit).stream()
         
         history = []
@@ -54,7 +55,7 @@ def get_chat_history(req_id: str, limit: int = 10):
         logger.error(f"History fetch error: {e}")
         return []
 
-def save_chat_message(req_id: str, user_id: str, role: str, content: str):
+def save_chat_message(req_id: str, user_id: str, role: str, content: str, user_type: str):
     # Save chat message to Firestore
     try:
         msgs_ref = db.collection("analysis_results").document(req_id).collection("messages")
@@ -62,7 +63,8 @@ def save_chat_message(req_id: str, user_id: str, role: str, content: str):
             "user_id": user_id,
             "role": role,
             "content": content,
-            "timestamp": firestore.SERVER_TIMESTAMP
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "userType": user_type
         })
     except Exception as e:
         logger.error(f"Message save error: {e}")
@@ -70,11 +72,13 @@ def save_chat_message(req_id: str, user_id: str, role: str, content: str):
 
 # ========================= Defined Tools (With Strict Typing & Docstrings) =======================
 def get_forensic_summary(req_id: str) -> Dict[str, Any]:
-    """
-    Retrieves the structured forensic analysis summary.
-    Use this to get Risk Scores, Fraud Signals, Visual ELA results, and Logic Audits.
-    Does NOT contain the full raw text of the document.
-    Argument: req_id: The unique identifier of the document.
+    """Retrieves the structured forensic analysis summary.
+
+    Args:
+        req_id: The unique identifier of the document.
+        
+    Returns:
+        A dictionary containing Risk Scores, Fraud Signals, and Logic Audits.
     """
     try:
         doc_ref = db.collection("analysis_results").document(req_id)
@@ -217,7 +221,7 @@ CORE_GUARDRAILS = """
 # ========================= Mode Configuration =========================
 
 def get_mode_config(mode: str, req_id: str):
-
+    print(f"==============The mode is {mode} with request Id {req_id}==============")
     # --- General Behavior ---
     UNIVERSAL_BEHAVIOR = f"""
     {CORE_GUARDRAILS}
@@ -348,7 +352,8 @@ def get_mode_config(mode: str, req_id: str):
         End with:
         "**Commercial Risk Summary**: [Brief summary of unfair terms]"
         """
-        return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text], "prompt": prompt}
+        # return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
 
     elif mode == "policy_advisor":
 
@@ -372,7 +377,8 @@ def get_mode_config(mode: str, req_id: str):
         End with:
         "**Compliance Status**: [Compliant / Non-Compliant / Missing Info]"
         """
-        return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
+        return {"tools": [get_forensic_summary, get_document_raw_text], "prompt": prompt}
+        # return {"tools": [get_forensic_summary, get_document_raw_text, google_search_tool], "prompt": prompt}
 
     elif mode == "rejection_letter":
 
@@ -495,29 +501,52 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         config = get_mode_config(request.mode, req_id)
         
         # 2. History & Persistence
-        history = get_chat_history(request.req_id)
-        save_chat_message(request.req_id, current_user_id, "user", request.user_query)
+        history = get_chat_history(request.req_id,userType=request.user_type)
+        save_chat_message(request.req_id, current_user_id, "user", request.user_query, request.user_type)
 
+        # formatted_history = []
+        # for h in history:
+        #     parts = [types.Part(text=part) for part in h['parts']]
+        #     formatted_history.append(types.Content(
+        #         role=h['role'],
+        #         parts=[types.Part(text=p) for p in h['parts']]
+        #     ))
+        
         formatted_history = []
         for h in history:
-            parts = [types.Part(text=part) for part in h['parts']]
+            parts_to_add = []
+            for p in h['parts']:
+                # If the part is already a dict (from DB), convert to SDK Part
+                if isinstance(p, dict):
+                    # This ensures 'thought', 'function_call', and 'text' are all preserved
+                    parts_to_add.append(types.Part(**p))
+                elif isinstance(p, str):
+                    parts_to_add.append(types.Part(text=p))
+                else:
+                    parts_to_add.append(p)
+
             formatted_history.append(types.Content(
                 role=h['role'],
-                parts=[types.Part(text=p) for p in h['parts']]
+                parts=parts_to_add
             ))
 
         # Pass the functions into tools，SDK will analyse Docstring and apply
         client = genai.Client(api_key=GEMINI_API_KEY)
 
+        while formatted_history and formatted_history[0].role != "user":
+            formatted_history.pop(0)
+
         # 3. Start Chat
         # enable_automatic_function_calling=True for SDK to automatically handle Tool Functions Call
         chat = client.aio.chats.create(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
+            # model="gemini-3-flash-preview",
             config=types.GenerateContentConfig(
                 tools=config["tools"],
                 system_instruction=config.get("prompt", ""),
                 temperature=0.3,
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
+                # thinking_config=types.ThinkingConfig(include_thoughts=False)
             ),
             history=formatted_history
         )
@@ -544,7 +573,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
             final_text += hint_msg
 
         # 7. Save Response
-        save_chat_message(request.req_id, current_user_id, "model", final_text)
+        save_chat_message(request.req_id, current_user_id, "model", final_text, request.user_type)
 
         return ChatResponse(
             response=final_text,

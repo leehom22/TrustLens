@@ -5,13 +5,18 @@ import { Calendar, CheckCircle, Download, ExternalLink, FileText, FileType, Hard
 import { useState } from "react";
 import { toast } from "sonner";
 
+interface ImageSize {
+    height: number,
+    width: number
+} 
 interface HeaderProps {
     selectedDocument: FileHeader | null;
     structure_ai_analysis_id: string;
+    imageSize: ImageSize,
     downloadNotes?: Note[]
     downloadAnnotations?: Annotation[]
 }
-const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotations, downloadNotes }: HeaderProps) => {
+const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotations, downloadNotes, imageSize }: HeaderProps) => {
 
     const [sendingReportLoading, setSendingReportLoading] = useState<boolean>(false)
 
@@ -27,8 +32,10 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                 role,
                 documentURL,
                 notesType,
+                imageSize.width,
+                imageSize.height,
                 notes,
-                annotations
+                annotations,
             )
 
             if (res!.success) {

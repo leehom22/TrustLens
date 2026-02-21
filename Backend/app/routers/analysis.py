@@ -508,6 +508,11 @@ async def generate_document_dashboard(
             "technical_proofs": ["string"],
             "has_visual_evidence": boolean, # Only need to insert true if there is visual evidence link in that layer, otherwise false or omit
             "evidence_image_url": "string", # Only include if there is visual evidence for that layer, otherwise omit
+            "ATS_hacking": "string",  # Only include if there is ATS_hacking finding, otherwise display "None"
+            "ats_hacking_details": {{
+                "hidden_white_chars": number,
+                "micro_font_chars": number,
+            }} # Only include if there is ATS hacking details, otherwise omit
         }}
     ]
     }}
@@ -520,7 +525,7 @@ async def generate_document_dashboard(
 
     • ai_executive_summary =
     Condense "agent_summary" from the input analysis
-    into 2–3 sentences maximum.
+    into 2-3 sentences maximum.
     • Preserve original meaning and conclusions.
     • Do NOT introduce new interpretations.
 
@@ -701,8 +706,8 @@ async def download_analysis_report(
 ):
     try:
         # 1. Ensure the 'reports' directory exists
-        report_dir = "reports"
-        os.makedirs(report_dir, exist_ok=True)
+        report_dir = "/tmp/reports"
+        os.makedirs(report_dir, exist_ok=True) # Permission error in Cloud Run
         file_path = os.path.join(report_dir, f"{doc_id}_analysis.pdf")
 
         # 2. Initialize review_notes empty (safety)

@@ -1,51 +1,53 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
-import { 
-  Mic, 
-  MicOff, 
-  Send, 
-  Sparkles, 
-  ShieldAlert, 
-  Scale, 
-  FileX, 
-  Search,
-  ChevronUp
+import {
+    Mic,
+    MicOff,
+    Send,
+    Sparkles,
+    ShieldAlert,
+    Scale,
+    FileX,
+    Search,
+    ChevronUp
 } from 'lucide-react'
 import { createClient, LiveClient, LiveTranscriptionEvents } from '@deepgram/sdk'
 import { toast } from 'sonner'
-import { collection, query, orderBy, getDocs } from "firebase/firestore"; 
-import { db } from "../../../lib/firebase"; // <--- FIXED PATH
+import { collection, query, orderBy, getDocs, where } from "firebase/firestore";
+import { auth, db } from "../../../lib/firebase"; // <--- FIXED PATH
 
 // --- TYPES ---
 type AnalysisStage = "idle" | "analyzing" | "complete";
 type ChatMode = "forensic_analyst" | "contract_guardian" | "policy_advisor" | "rejection_letter";
 
 interface ChatMessage {
-  role: "user" | "model"; 
-  content: string;
+    role: "user" | "model";
+    content: string;
 }
 
 interface SuggestedAction {
-  label: string;
-  mode: string;
-  query: string;
+    label: string;
+    mode: string;
+    query: string;
 }
 
 interface AiAssistantProps {
-  reqId: string; 
-  initialMessages?: ChatMessage[];
-  stage: AnalysisStage;
+    reqId: string;
+    initialMessages?: ChatMessage[];
+    stage: AnalysisStage;
+    userType: 'user' | 'expert';
 }
 
 const MODES: Record<ChatMode, { label: string; icon: React.ReactNode; color: string }> = {
-  forensic_analyst: { label: "Forensic Analyst", icon: <Search className="w-4 h-4" />, color: "text-blue-600" },
-  contract_guardian: { label: "Contract Guardian", icon: <ShieldAlert className="w-4 h-4" />, color: "text-amber-600" },
-  policy_advisor: { label: "Policy Advisor", icon: <Scale className="w-4 h-4" />, color: "text-green-600" },
-  rejection_letter: { label: "Rejection Letter", icon: <FileX className="w-4 h-4" />, color: "text-red-600" },
+    forensic_analyst: { label: "Forensic Analyst", icon: <Search className="w-4 h-4" />, color: "text-blue-600" },
+    contract_guardian: { label: "Contract Guardian", icon: <ShieldAlert className="w-4 h-4" />, color: "text-amber-600" },
+    policy_advisor: { label: "Policy Advisor", icon: <Scale className="w-4 h-4" />, color: "text-green-600" },
+    rejection_letter: { label: "Rejection Letter", icon: <FileX className="w-4 h-4" />, color: "text-red-600" },
 };
 
-const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) => {
+//** reqId: Collection id from the analysis_result */
+const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssistantProps) => {
     // --- STATE ---
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialMessages);
     const [message, setMessage] = useState("");
@@ -57,11 +59,12 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
 
     // --- REFS ---
     const inputRef = useRef<HTMLInputElement>(null);
-    const chatContainerRef = useRef<HTMLDivElement>(null); 
+    const chatContainerRef = useRef<HTMLDivElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const liveConnectionRef = useRef<LiveClient | null>(null);
     const modeMenuRef = useRef<HTMLDivElement>(null);
 
+    const user = auth.currentUser
     const backendURL = import.meta.env.VITE_BACKEND_URL
     // --- EFFECT: Close mode menu on click outside ---
     useEffect(() => {
@@ -78,13 +81,16 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
     useEffect(() => {
         const fetchHistory = async () => {
             if (!reqId) return;
-            
+
             try {
                 const msgsRef = collection(db, "analysis_results", reqId, "messages");
-                const q = query(msgsRef, orderBy("timestamp", "asc"));
-                
+                const q = query(
+                    msgsRef,
+                    where("userType", "==", userType), // Filter by userType 
+                    orderBy("timestamp", "asc"));
+
                 const snapshot = await getDocs(q);
-                
+
                 if (!snapshot.empty) {
                     const history: ChatMessage[] = snapshot.docs.map(doc => ({
                         role: doc.data().role === "user" ? "user" : "model",
@@ -122,30 +128,37 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
         const newUserMsg: ChatMessage = { role: "user", content: queryText };
         setChatMessages(prev => [...prev, newUserMsg]);
         setMessage("");
-        setSuggestedActions([]); 
+        setSuggestedActions([]);
         setIsThinking(true);
 
         try {
-            const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-
+            // const token = localStorage.getItem("token") || localStorage.getItem("access_token");
+            const token = user ? await user.getIdToken() : null;
+            if (!token) throw new Error("Unauthorized: Please log in to continue.");
             // 2. Call Backend
-            const response = await fetch(`${backendURL}/chat/message`, { 
+            console.log("JSON send to backend: ", {
+                req_id: reqId,
+                user_query: queryText,
+                mode: activeMode
+            });
+            const response = await fetch(`${backendURL}/chat/message`, {
                 method: "POST",
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}` 
+                    "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     req_id: reqId,
                     user_query: queryText,
-                    mode: activeMode
+                    mode: activeMode,
+                    user_type: userType
                 })
             });
 
             if (response.status === 401) throw new Error("Unauthorized: Please log in again.");
             if (!response.ok) throw new Error(`Server Error: ${response.status}`);
 
-            const data = await response.json(); 
+            const data = await response.json();
 
             // 3. Update Chat with AI Response
             const newAiMsg: ChatMessage = { role: "model", content: data.response };
@@ -154,7 +167,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
             if (data.suggested_actions) {
                 setSuggestedActions(data.suggested_actions);
             }
-            
+
             if (overrideMode) {
                 setCurrentMode(overrideMode as ChatMode);
             }
@@ -162,9 +175,9 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
         } catch (error: any) {
             console.error("Chat Error:", error);
             toast.error(error.message || "Failed to connect to TrustLens AI.");
-            setChatMessages(prev => [...prev, { 
-                role: "model", 
-                content: "⚠️ Connection Error: " + (error.message || "I couldn't reach the server.") 
+            setChatMessages(prev => [...prev, {
+                role: "model",
+                content: "⚠️ Connection Error: " + (error.message || "I couldn't reach the server.")
             }]);
         } finally {
             setIsThinking(false);
@@ -180,16 +193,16 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
         try {
             console.log("🎤 Requesting Microphone...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
+
             // Added cross-browser support for Safari
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
-                ? 'audio/webm' 
-                : 'audio/mp4'; 
-            
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm')
+                ? 'audio/webm'
+                : 'audio/mp4';
+
             console.log("🔑 Connecting to Backend...");
             const response = await fetch(`${backendURL}/api/deepgram`);
             const data = await response.json();
-            
+
             if (!data.key) throw new Error("No key from backend");
 
             const deepgram = createClient(data.key);
@@ -213,15 +226,25 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
             connection.on(LiveTranscriptionEvents.Open, () => {
                 console.log("🟢 Deepgram Connection OPEN");
                 // ✅ Start recording ONLY when the connection is fully open
-                mediaRecorder.start(1000); 
+                mediaRecorder.start(1000);
             });
 
             // 2. Transcript Listener
             connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+                // Extract the transcript and the is_final flag
                 const transcript = data.channel.alternatives[0]?.transcript;
-                if (transcript && transcript.trim().length > 0) {
-                    console.log("📝 TEXT RECEIVED:", transcript);
-                    setMessage((prev) => prev + (prev.length > 0 ? " " : "") + transcript);
+                const isFinal = data.is_final; // <--- CHECK THIS FLAG
+
+                if (transcript && transcript.trim().length > 0 && isFinal) {
+                    console.log("📝 FINAL TEXT RECEIVED:", transcript);
+
+                    setMessage((prev) => {
+                        // Avoid adding the exact same string if it was just added 
+                        // (Double-check for rapid-fire final events)
+                        if (prev.endsWith(transcript.trim())) return prev;
+
+                        return prev + (prev.length > 0 ? " " : "") + transcript;
+                    });
                 }
             });
 
@@ -263,14 +286,14 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
         <div>
             <div className="lg:sticky lg:top-32">
                 <div className="bg-white dark:bg-slate-800/80 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg flex flex-col h-[600px] lg:h-[calc(100vh-140px)]">
-                    
+
                     {/* --- HEADER --- */}
                     <div className="p-3 md:p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl flex justify-between items-center">
                         <div>
                             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                                 TrustLens Assistant
-                                <span className={`text-xs px-2 py-0.5 rounded-full border bg-white ${MODES[currentMode].color} border-current`}>
-                                    {MODES[currentMode].label}
+                                <span className={`text-xs px-2 py-0.5 rounded-full border bg-white ${MODES['forensic_analyst'].color} border-current`}>
+                                    {MODES['forensic_analyst'].label}
                                 </span>
                             </h3>
                             <p className="text-xs text-gray-600">
@@ -280,8 +303,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                     </div>
 
                     {/* --- MESSAGES AREA --- */}
-                    <div 
-                        ref={chatContainerRef} 
+                    <div
+                        ref={chatContainerRef}
                         className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 bg-gray-50 dark:bg-slate-900/50 scroll-smooth"
                     >
                         {chatMessages.length === 0 && stage === "complete" && (
@@ -290,9 +313,9 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                                 <p className="text-sm">Analysis complete. Ask me anything about the document.</p>
                             </div>
                         )}
-                        
+
                         {stage !== "complete" && chatMessages.length === 0 && (
-                             <div className="text-center text-gray-400 mt-10 animate-pulse">
+                            <div className="text-center text-gray-400 mt-10 animate-pulse">
                                 <Search className="w-10 h-10 mx-auto mb-2 opacity-50" />
                                 <p className="text-sm">Scanning document layers...</p>
                             </div>
@@ -301,8 +324,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                         {chatMessages.map((msg, idx) => (
                             <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                                 <div className={`max-w-[85%] rounded-lg p-3 shadow-sm text-sm whitespace-pre-wrap leading-relaxed 
-                                    ${msg.role === "user" 
-                                        ? "bg-blue-600 text-white rounded-br-none" 
+                                    ${msg.role === "user"
+                                        ? "bg-blue-600 text-white rounded-br-none"
                                         : "bg-white dark:bg-slate-800 border dark:border-slate-700 text-gray-800 dark:text-gray-200 rounded-bl-none"
                                     }`}>
                                     {msg.content}
@@ -339,7 +362,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
 
                     {/* --- INPUT AREA --- */}
                     <div className="p-3 md:p-4 border-t border-gray-200 bg-white dark:bg-slate-800 rounded-b-xl relative">
-                        
+
                         {/* Mode Selection Popover */}
                         {showModeMenu && (
                             <div ref={modeMenuRef} className="absolute bottom-full left-4 mb-2 w-56 bg-white dark:bg-slate-800 border border-gray-200 rounded-lg shadow-xl overflow-hidden z-20">
@@ -354,8 +377,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                                             ${currentMode === modeKey ? "bg-blue-50 text-blue-700" : "text-gray-700"}
                                         `}
                                     >
-                                        <span className={MODES[modeKey].color}>{MODES[modeKey].icon}</span>
-                                        {MODES[modeKey].label}
+                                        <span className={MODES['forensic_analyst'].color}>{MODES['forensic_analyst'].icon}</span>
+                                        {MODES['forensic_analyst'].label}
                                     </button>
                                 ))}
                             </div>
@@ -363,16 +386,16 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
 
                         <div className="flex gap-2">
                             {/* Mode Button */}
-                            <Button
+                            {/* <Button
                                 onClick={() => setShowModeMenu(!showModeMenu)}
                                 variant="outline"
                                 className="h-10 px-3 gap-2 border-dashed border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
-                                disabled={stage !== "complete"} 
+                                disabled={stage !== "complete"}
                             >
                                 <Sparkles className="w-4 h-4" />
                                 <span className="hidden md:inline text-xs font-medium">Modes</span>
                                 <ChevronUp className={`w-3 h-3 transition-transform ${showModeMenu ? "rotate-180" : ""}`} />
-                            </Button>
+                            </Button> */}
 
                             {/* Input */}
                             <Input
@@ -380,27 +403,27 @@ const AiAssistant = ({ reqId, initialMessages = [], stage }: AiAssistantProps) =
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                                placeholder={stage === "complete" ? `Ask ${MODES[currentMode].label}...` : "Analyzing document..."}
-                                disabled={stage !== "complete" || isThinking} 
+                                placeholder={stage === "complete" ? `Ask ${MODES['forensic_analyst'].label}...` : "Analyzing document..."}
+                                disabled={stage !== "complete" || isThinking}
                                 className="flex-1"
                             />
 
                             {/* Mic Button */}
-                            <Button 
-                                onClick={isRecording ? stopRecording : startRecording} 
-                                disabled={stage !== "complete"} 
-                                variant="outline" 
-                                size="icon" 
+                            <Button
+                                onClick={isRecording ? stopRecording : startRecording}
+                                disabled={stage !== "complete"}
+                                variant="outline"
+                                size="icon"
                                 className={isRecording ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : ""}
                             >
                                 {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                             </Button>
 
                             {/* Send Button */}
-                            <Button 
-                                onClick={() => handleSendMessage()} 
-                                disabled={stage !== "complete" || (!message.trim() && !isRecording) || isThinking} 
-                                size="icon" 
+                            <Button
+                                onClick={() => handleSendMessage()}
+                                disabled={stage !== "complete" || (!message.trim() && !isRecording) || isThinking}
+                                size="icon"
                                 className="bg-blue-600 text-white hover:bg-blue-700"
                             >
                                 <Send className="w-4 h-4" />

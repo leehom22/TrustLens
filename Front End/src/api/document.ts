@@ -97,21 +97,13 @@ export const sendReviewEmailToUser = async (
   role: string,
   documentURL: string,
   notesType: 'pdf' | 'image',
+  imageWidth?: number,
+  imageHeight?: number,
   notes?: Note[],
   annotations?: Annotation[],
 ) => {
   try {
-    console.log("checking parameters for sendReviewEmailToUser: ", {
-      userEmail,
-      docName,
-      docId,
-      analysisId,
-      role,
-      documentURL,
-      notesType,
-      notes,
-      annotations
-    })
+    console.log("The height and the width of the image is: ",imageHeight, imageWidth)
     const formData = new FormData();
     const res = await generatePdfReport(docId, analysisId, docName, role);
     let annotatedPdfBytes = null
@@ -123,10 +115,12 @@ export const sendReviewEmailToUser = async (
         if (!annotatedPdfBytes) {
           throw new Error("No annotated PDF bytes generated");
         }
-        formData.append("annotated_document", new Blob([annotatedPdfBytes], { type: "application/pdf" }), `annotated-${docName}.pdf`);
+        console.log("Generating annotated pdf")
+        formData.append("annotated_pdf", new Blob([annotatedPdfBytes], { type: "application/pdf" }), `annotated-${docName}.pdf`);
 
-      } else if (notesType === 'image' && annotations) {
-        dataURL = await generateAnnotatedImage(documentURL, annotations, { width: 800, height: 600 });
+      } else if (notesType === 'image' && annotations && imageHeight && imageWidth) {
+        dataURL = await generateAnnotatedImage(documentURL, annotations, { width: imageWidth, height: imageHeight });
+        console.log("Generating annotated image")
         if (!dataURL) {
           throw new Error("No annotated PDF bytes generated");
         }
@@ -134,7 +128,7 @@ export const sendReviewEmailToUser = async (
         const imageBlob = await resFetch.blob();
 
         formData.append(
-          "annotated_document",
+          "annotated_image",
           imageBlob,
           `annotated-${docName}.png`
         );

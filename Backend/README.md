@@ -27,3 +27,15 @@ http://127.0.0.1:8000/docs
 
 # Deploy Issues
 Error occur with opencv-python 
+
+#Deploy backend with Cloud Run 
+gcloud run deploy trustlens-backend --source . --region asia-southeast1
+
+1. Sending annotated image to user (DONE)
+2. ATS Analysis bug
+3. Ai chatbot mode (delete mode selection) (DONE)
+4. Deploy CORS issues (DONE)
+
+Fronend Fix:
+1. Expert - Document Review Yellow Color text color
+2. Display more analysis

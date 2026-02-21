@@ -28,7 +28,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
     const [loading, setLoading] = useState(true)
     const [selectedDocument, setSelectedDocument] = useState<FileHeader | null>(null)
     const [stage, setStage] = useState<AnalysisStage>("complete");
-    const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([{ role: "assistant", content: `I've received your document . Starting comprehensive forensic analysis...` }]);
+    const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([{ role: "model", content: `I've received your document . Starting comprehensive forensic analysis...` }]);
     const [ai_analysis_format, setAiAnalysis] = useState<DocumentAnalysisResult | null>(null)
     const [analysisHeader, setAnalysisHeader] = useState({
         analysis_id: '',
@@ -40,6 +40,8 @@ const DocumentAnalysis = (props: { userId: string }) => {
     const [expertReviewNotes, setExpertReviewNotes] = useState<string[]>([])
     const [selectedTabs, setSelectedTabs] = useState<string>('metadata')
     const [structure_ai_analysis_id, setStructure_ai_analysis_id] = useState<string>('')
+    const [rawAnalysisId, setRawAnalysisId] = useState<string>('')
+    const [imageSize, setImageSize] = useState({height:0,width:0})
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
@@ -57,6 +59,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                     doc_type: result.data?.doc_type,
                     structure_analysis_id: result.data?.id,
                 })
+                setRawAnalysisId(result.data?.raw_analysis_id)
                 setStructure_ai_analysis_id(result.data?.id)
                 // console.log("The structure data is: ", result.data)
             } else {
@@ -170,12 +173,13 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                                         documentId={selectedDocument.id}
                                                         documentName={selectedDocument.fileName}
                                                         setDownloadAnnotations={setDownloadAnnotations}
+                                                        setParentImageSize={setImageSize}
                                                     />
                                                 )}
                                             </TabsContent>
 
                                             <TabsContent value="ai-assistant">
-                                                <AiAssistant messages={chatMessages} stage={stage} />
+                                                <AiAssistant reqId={rawAnalysisId} initialMessages={chatMessages} stage={stage} userType='expert'/>
                                             </TabsContent>
                                         </Tabs>
                                     </div>
@@ -189,6 +193,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                             structure_ai_analysis_id={structure_ai_analysis_id}
                                             downloadAnnotations={downloadAnnotations}
                                             downloadNotes={downloadNotes}
+                                            imageSize={imageSize}
                                         />
 
                                         {/* AI Analysis Summary */}

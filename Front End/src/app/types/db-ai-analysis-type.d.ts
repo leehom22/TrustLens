@@ -3,6 +3,10 @@
 export type RiskLevel = 'SAFE' | 'CAUTION' | 'SUSPICIOUS' | 'CRITICAL';
 export type LayerStatus = 'PASS' | 'WARNING' | 'CAUTION' | 'CRITICAL' | 'FAIL';
 export type RiskLevelColor = 'green' | 'yellow' | 'red' | 'blue' | 'gray';
+export interface ATS_HACKING_DETAILS {
+  hidden_white_chars?: number;
+  micro_font_chars?: number;
+} 
 export interface User {
   username: string
   email: string
@@ -43,6 +47,8 @@ export interface LayerResult {
   technical_proofs: string[];
   has_visual_evidence?: boolean;
   evidence_image_url?: string;
+  ATS_hacking?:string;
+  ats_hacking_details?: ATS_HACKING_DETAILS;
 }
 
 export interface DocumentAnalysisResult {

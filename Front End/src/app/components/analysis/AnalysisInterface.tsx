@@ -28,7 +28,7 @@ type AnalysisStage = "idle" | "analyzing" | "complete";
 
 export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType, documentId, file, userId }: AnalysisInterfaceProps) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
-  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [allAnalysisComplete, setAllAnalysisComplete] = useState(false);
   const [requestReview, setRequestReview] = useState<boolean>(false)
@@ -157,7 +157,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
           setStage("complete");
           setChatMessages(prev => [
             ...prev,
-            { role: "assistant", content: " Analysis complete! Please review the detailed results below." }
+            { role: "model", content: " Analysis complete! Please review the detailed results below." }
           ]);
 
           sendEmailNotification(userEmail);
@@ -332,7 +332,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
             <DocumentViewer fileType={fileType} fileUrl={documentUrl} />
           </TabsContent>
           <TabsContent value="ai-assistant">
-            <AiAssistant messages={chatMessages} stage={stage} />
+            <AiAssistant reqId={ai_analysis_header?.raw_analysis_id!} initialMessages={chatMessages} stage={stage} userType="user"/>
           </TabsContent>
         </Tabs>
 

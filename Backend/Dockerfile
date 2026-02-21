@@ -13,6 +13,12 @@ WORKDIR /app
 # Create non-privileged user
 RUN adduser --disabled-password --gecos "" --home "/nonexistent" --shell "/sbin/nologin" --no-create-home --uid 10001 appuser
 
+# Install libGL dependency required by OpenCV (cv2)
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+    
 # Copy dependencies first
 COPY requirements.txt .
 

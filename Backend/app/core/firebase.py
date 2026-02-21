@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 
-# ! For production
+# # ! For production
 # if not firebase_admin._apps:
 #     # Explicitly use ApplicationDefault credentials
 #     cred = credentials.ApplicationDefault() 
@@ -12,6 +12,7 @@ from firebase_admin import credentials, firestore, storage
 #     firebase_admin.initialize_app(cred, {
 #         'storageBucket': 'trustlens-632fa.firebasestorage.app'
 #     })
+# # ! For production
 
 # ! For development only
 # Load .env file
@@ -29,6 +30,8 @@ if not cred_path.exists():
 # Initialize Firebase
 cred = credentials.Certificate(str(cred_path))
 firebase_admin.initialize_app(cred, {'storageBucket': 'trustlens-632fa.firebasestorage.app'})
+
+# ! For development only
 
 db = firestore.client()
 bucket = storage.bucket()

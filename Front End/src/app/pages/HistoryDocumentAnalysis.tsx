@@ -40,7 +40,7 @@ export function HistoryDocumentAnalysis() {
     const [raw_analysis_id, setRaw_analysis_id] = useState<string | null>(null)
     const [doc_type, setDoc_type] = useState<string | null>(null)
     const [structure_analysis_id, setStructure_analysis_id] = useState<string>('')
-    const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+    const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
     const [riskLevelColor, setRiskLevelColor] = useState<RiskLevelColor>('gray')
     const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
 
@@ -54,7 +54,7 @@ export function HistoryDocumentAnalysis() {
 
             if (result.success === true) {
                 setAi_analysis(result.data?.analysis_content)
-                console.log("The ai analysis format is: ", result.data?.analysis_content)
+                // console.log("The ai analysis format is: ", result.data?.analysis_content)
                 setRiskLevelColor(result.data?.analysis_content?.dashboard_header?.risk_level_color || 'gray')
                 setRiskLevel(result.data?.analysis_content?.dashboard_header?.risk_level || 'SAFE')
                 setRaw_analysis_id(result.data?.raw_analysis_id)
@@ -194,7 +194,7 @@ export function HistoryDocumentAnalysis() {
                                     <DocumentViewer fileType={selectedDocument?.mimeType!} fileUrl={selectedDocument?.fileUrl!} />
                                 </TabsContent>
                                 <TabsContent value="ai-assistant" className="h-full">
-                                    <AiAssistant messages={chatMessages} stage={stage} />
+                                    <AiAssistant reqId={raw_analysis_id!} initialMessages={chatMessages} stage={stage} userType="user"/>
                                 </TabsContent>
                             </Tabs>
                         </div>
