@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    suggested_actions: List[Dict[str, str]] = []
+    suggested_actions: List[str] = []
 
 
 # ========================= History & Persistence ======================
