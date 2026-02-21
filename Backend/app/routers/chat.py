@@ -503,20 +503,12 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
     # 1. Back to Summary (Intent)
     # Any other modes can suggest going back to Forensic Analysis mode to review the summary, but Rejection Letter mode should not (to avoid confusion in tone and purpose)
     if current_mode != "forensic_analyst" and (current_mode != "rejection_letter" or (any(k in q_lower for k in forensic_keywords) or "show me" in q_lower)):
-        suggestions.append({
-            "label": "📊 Back to Analysis",  
-            "mode": "forensic_analyst", 
-            "query": "Show me the forensic summary again."
-        })
+        suggestions.append("📊 Forensic Analyst")
 
     # 2. Rejection Letter (High risk score + Intent) 
     if current_mode != "rejection_letter":
         if risk_score > 70 or any(k in q_lower for k in rejection_keywords):
-            suggestions.append({
-                "label": "✉️ Draft Rejection", 
-                "mode": "rejection_letter", 
-                "query": "Draft a strong rejection letter based on these risks."
-            })
+            suggestions.append("✉️ Rejection Letter")
 
     # 3. Contract Guardian (Contract as doc_type + Intent)
     if current_mode != "contract_guardian":
@@ -524,11 +516,7 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
         has_contract_intent = any(k in q_lower for k in contract_keywords)
         
         if is_contract_doc or has_contract_intent:
-            suggestions.append({
-                "label": "🛡️ Audit Clauses", 
-                "mode": "contract_guardian", 
-                "query": "Review this for unfair clauses and hidden risks."
-            })
+            suggestions.append("🛡️ Contract Guardian")
     
     # 4. Policy Advisor (Financial doc + Intent)
     if current_mode != "policy_advisor":
@@ -536,14 +524,7 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
         has_policy_intent = any(k in q_lower for k in policy_keywords)
 
         if is_financial_doc or has_policy_intent:
-            # If user query already has policy intent, keep it as is. Otherwise, provide a more specific query to guide the user
-            query_text = user_query if has_policy_intent else "Is this compliant with local regulations?"
-            
-            suggestions.append({
-                "label": "⚖️ Check Compliance", 
-                "mode": "policy_advisor", 
-                "query": query_text
-            })
+            suggestions.append("⚖️ Policy Advisor")
 
     # At most 3 suggestions
     return suggestions[:3]
