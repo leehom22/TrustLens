@@ -22,6 +22,8 @@ from ..utils.layer2_utils import (
 import logging
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
+POPPLER_PATH = r"C:\poppler-25.12.0\Library\bin"
+
 # ================ Poppler Check ====================
 try:
     from pdf2image import convert_from_path
@@ -41,7 +43,7 @@ def pdf_to_ela_pages(pdf_path: str, max_pages: int = PDF_ELA_MAX_PAGES):
         for i in range(1, max_pages + 1):
             try:
                 # Request only one page at a time
-                page_batch = convert_from_path(pdf_path, dpi=150, first_page=i, last_page=i)
+                page_batch = convert_from_path(pdf_path, dpi=150, first_page=i, last_page=i,poppler_path=POPPLER_PATH)
                 if not page_batch: break
                 pages_list.append(downsample_image(page_batch[0]))
             except Exception:
