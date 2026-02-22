@@ -235,6 +235,30 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             f"Difference: {diff:.2f}" if not is_pass else "Match"
         ))
 
+    # 2.3 Tax Rate Multiplier Audit
+    tax_rate_pct = to_decimal(fin.get("tax_rate_percentage_raw"))
+    
+    if tax_rate_pct > Decimal("0.00") and base_val > Decimal("0.00"):
+        # Tax rate can be in percentage form (e.g., 6 for 6%) or decimal form (e.g., 0.06 for 6%). We will check both.
+        actual_multiplier = tax_rate_pct if tax_rate_pct < Decimal("1.00") else (tax_rate_pct / Decimal("100"))
+        
+        expected_statutory_tax = base_val * actual_multiplier
+        tax_diff = abs(tax - expected_statutory_tax)
+        
+        if tax_diff > Decimal("1.00"):
+            l4_signals.append("TAX_CALCULATION_MISMATCH")
+            score = max(score, 80)
+            status = LayerStatus.HIGH_RISK
+            audit_trails.append(create_audit_record(
+                "Tax Multiplier", "FAIL", f"Subtotal * {tax_rate_pct}% == Tax",
+                f"{base_val} * {tax_rate_pct}% = {expected_statutory_tax:.2f} (Shown as {tax:.2f})",
+                "Statutory tax calculation does not match stated tax amount."
+            ))
+        else:
+            audit_trails.append(create_audit_record(
+                "Tax Multiplier", "PASS", f"Subtotal * {tax_rate_pct}% == Tax",
+                f"Verified {tax_rate_pct}% rate", "Statutory math perfectly matches."
+            ))
 
 
     # ================= Rule 3: Payment Integrity (Invoices) ================

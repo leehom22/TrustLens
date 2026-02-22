@@ -35,7 +35,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
         "invoice_number": "string" or null,
         "reference_number": "string (Extract Transaction ID, Receipt No, or Reference No)",
         "dates": { "invoice_date": "string (YYYY-MM-DD)", "due_date": "string (YYYY-MM-DD)" },
-        "financials": { "opening_balance": number, "closing_balance": number, "currency": "string", "subtotal_amount": number, "tax_amount": number, "total_amount": number },
+        "financials": { "opening_balance": number, "closing_balance": number, "currency": "string", "subtotal_amount": number, "tax_rate_percentage_raw": number, "tax_amount": number, "total_amount": number },
 
         "line_items": [
             {
@@ -65,7 +65,8 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
         "COLUMN_MAPPING_RULES": [
             "IF the numeric value appears in a column labeled 'Paid out', 'Debit', or 'Withdrawals' -> You MUST output a NEGATIVE number (e.g., -60.00).",
             "IF the numeric value appears in a column labeled 'Paid in', 'Credit', or 'Deposit' -> Output a POSITIVE number.",
-            "Visual Layout Priority: The extracted 'value' MUST reflect the column position."
+            "Visual Layout Priority: The extracted 'value' MUST reflect the column position.",
+            "TAX_EXTRACTION: If a tax percentage is explicitly stated visually (e.g., 'TAX RATE 6%', 'SST 8%'), extract ONLY the numeric value into 'tax_rate_percentage' (e.g., output 6 or 8). Strip the '%' symbol. If no rate is visible, output null."
         ]
     """
     
@@ -74,7 +75,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             file_ref = await client.aio.files.upload(file=file_path, config={'mime_type': mime_type})
             
             res = await client.aio.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-3-flash-preview',
                 contents=[file_ref, extraction_prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
