@@ -233,9 +233,9 @@ export function HistoryDocumentAnalysis() {
                                     <Badge
                                         variant="outline"
                                         className={`self-start flex-shrink-0 text-xs sm:text-sm font-semibold ${riskLevel === "CRITICAL" ? "text-red-600 bg-red-50"
-                                                : riskLevel === "SUSPICIOUS" ? "text-orange-600 bg-orange-50"
-                                                    : riskLevel === "CAUTION" ? "text-yellow-700 bg-yellow-50"
-                                                        : "text-green-600 bg-green-50"
+                                                : riskLevel === "SUSPICIOUS" ? "text-orange-600 "
+                                                    : riskLevel === "CAUTION" ? "text-yellow-700 "
+                                                        : "text-green-600 "
                                             }`}
                                     >
                                         {ai_analysis_format?.dashboard_header?.risk_level}

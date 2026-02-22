@@ -46,7 +46,7 @@ export interface LayerResult {
   ai_analysis: string;
   technical_proofs: string[];
   has_visual_evidence?: boolean;
-  evidence_image_url?: string;
+  evidence_image_url?: string[]; //! Make it as a array
   ATS_hacking?:string;
   ats_hacking_details?: ATS_HACKING_DETAILS;
 }

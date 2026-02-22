@@ -16,6 +16,7 @@ from firebase_admin import credentials, firestore, storage
 
 # ! For development only
 # Load .env file
+
 BASE_DIR = Path(__file__).resolve().parent.parent  # Backend/app/core -> Backend/
 load_dotenv(BASE_DIR / ".env")  # Make sure .env is loaded
 

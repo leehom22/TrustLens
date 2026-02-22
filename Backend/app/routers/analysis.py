@@ -460,63 +460,52 @@ async def generate_document_dashboard(
     8. If data is missing → infer structure, NOT meaning.
     9. Use original terminology whenever possible.
     10. Output must be valid JSON only.
-    11. USER-FRIENDLY REWROORDING: Translate technical findings into clear, accessible language for a non-technical user. Avoid dense jargon in the 'ai_executive_summary' and 'ai_analysis' fields. Do NOT change the meaning, severity, or verdict while doing so.
+    11. USER-FRIENDLY REWORDING:
+        Translate technical findings into clear, accessible language
+        for a non-technical user in the "ai_executive_summary"
+        and "ai_analysis" fields.
+        Do NOT change meaning, severity, or verdict.
 
     You are performing DATA REFACTORING, not analysis.
 
     ────────────────────────────
-    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
+    📦 EVIDENCE EXTRACTION RULES
     ────────────────────────────
 
-    {json.dumps(raw_json, indent=2)}
+    Populate "evidence_image_url" as an array of strings.
 
-    This input analysis is the ONLY source of truth.
+    Source of data:
+    - Access evidence_chain[1]
+    - Inside it, read the object property "details"
+    - Inside "details", access the array "all_pages"
+    - For each element inside "all_pages", extract the value of the property "url"
 
-    All outputs must be derived from it.
+    IMPORTANT:
 
-    ────────────────────────────
-    📤 OUTPUT FORMAT (STRICT SCHEMA)
-    ────────────────────────────
-    Return JSON ONLY.
-    No markdown.
-    No explanations.
-    No comments.
+    The URLs inside evidence_chain[1].details.all_pages are already complete and valid.
 
-    {{
-    "ui_render_mode": "dashboard_v2",
-    "document_id": "{raw_json.get('request_id', 'unknown')}",
-    "processed_at": "{datetime.utcnow().isoformat()}",
-    "dashboard_header": {{
-        "overall_score": number,
-        "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
-        "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
-        "verdict_title": "string",
-        "ai_executive_summary": "string",
-        "grounding_search_reference": "string",
-        "doc_type": "string",
-        "next_step_recommendation": "string"
-    }},
-    "layer_results": [
-        {{
-            "layer_id": "L1" | "L2" | "L3" | "L4",
-            "layer_title": "string",
-            "status": "PASS | FAIL | WARNING | SKIPPED",
-            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
-            "icon": "lucide_icon_name",
-            "score": number,
-            "ai_analysis": "string",
-            "technical_proofs": ["string"],
-            "has_visual_evidence": boolean, # Only need to insert true if there is visual evidence link in that layer, otherwise false or omit
-            "evidence_image_url": "string", # Only include if there is visual evidence for that layer, otherwise omit
-            "ATS_hacking": "string",  # Only include if there is ATS_hacking finding, otherwise display "None"
-            "ats_hacking_details": {{
-                "hidden_white_chars": number,
-                "micro_font_chars": number,
-            }} # Only include if there is ATS hacking details, otherwise omit
-        }}
-    ]
-    }}
-    # come out with the user friendly wording based on the original analysis, do not change the meaning or severity of the findings.
+    They typically follow this pattern:
+    "https://storage.googleapis.com/trustlens-632fa.firebasestorage.app/evidence/<id>/visual_ela_pX.jpg"
+
+    Where X may be 1, 2, 3, etc.
+
+    Extraction Rules:
+    - Set "evidence_image_url" equal to an array containing all extracted "url" values.
+    - Extract the exact string value from the "url" property.
+    - Do NOT reconstruct the URL.
+    - Do NOT infer missing URLs.
+    - Do NOT generate URLs based on pattern.
+    - Only use URLs that already exist in the input JSON.
+    - Preserve original order.
+
+    If evidence_image_url contains one or more URLs:
+        set has_visual_evidence = true
+    Else:
+        set has_visual_evidence = false
+
+    If any required property does not exist:
+        return "evidence_image_url": []
+
     ────────────────────────────
     🧭 FIELD MAPPING INSTRUCTIONS
     ────────────────────────────
@@ -544,6 +533,13 @@ async def generate_document_dashboard(
     • technical_proofs = direct supporting evidence
     • score = reflect severity from source analysis
     • status = PASS if safe, FAIL if risk detected
+
+    ATS Handling:
+
+    • Include "ATS_hacking" only if such finding exists.
+    • If not present, set "ATS_hacking": "None"
+    • Include "ats_hacking_details" only if details exist.
+    • Omit "ats_hacking_details" if not present.
 
     Next Step Recommendation:
 
@@ -580,6 +576,59 @@ async def generate_document_dashboard(
     • Modify fraud verdicts
     • Invent inconsistencies
     • Add visual claims not stated
+
+    ────────────────────────────
+    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
+    ────────────────────────────
+
+    {json.dumps(raw_json, indent=2)}
+
+    This input analysis is the ONLY source of truth.
+    All outputs must be derived from it.
+
+    ────────────────────────────
+    📤 OUTPUT FORMAT (STRICT SCHEMA)
+    ────────────────────────────
+
+    Return JSON ONLY.
+    No markdown.
+    No explanations.
+    No comments.
+
+    {{
+        "ui_render_mode": "dashboard_v2",
+        "document_id": "{{raw_json.get('request_id', 'unknown')}}",
+        "processed_at": "{{datetime.utcnow().isoformat()}}",
+        "dashboard_header": {{
+            "overall_score": number,
+            "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
+            "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
+            "verdict_title": "string",
+            "ai_executive_summary": "string",
+            "grounding_search_reference": "string",
+            "doc_type": "string",
+            "next_step_recommendation": "string"
+        }},
+        "layer_results": [
+            {{
+            "layer_id": "L1" | "L2" | "L3" | "L4",
+            "layer_title": "string",
+            "status": "PASS | FAIL | WARNING | SKIPPED",
+            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
+            "icon": "lucide_icon_name",
+            "score": number,
+            "ai_analysis": "string",
+            "technical_proofs": ["string"],
+            "has_visual_evidence": boolean,
+            "evidence_image_url": ["string"],
+            "ATS_hacking": "string",
+            "ats_hacking_details": {{
+                "hidden_white_chars": number,
+                "micro_font_chars": number
+            }}
+            }}
+        ]
+    }}
 
     ────────────────────────────
     ✅ OUTPUT REQUIREMENTS
