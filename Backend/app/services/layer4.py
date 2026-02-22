@@ -152,6 +152,8 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 # ================= Rule 2: Math Integrity (Row & Tax) =================
     # 2.1 Row Audit
     row_errors = []
+    calc_subtotal_net = Decimal("0.00")
+    calc_total_gross = Decimal("0.00")
     calc_subtotal = Decimal("0.00")
     
     for idx, item in enumerate(items):
@@ -159,39 +161,59 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         u = to_decimal(item.get("unit_price"))
         l_total = to_decimal(item.get("line_total"))
         
-        if q is not None and u is not None:
-            expected = q * u
-            # Check f line_total exists, else use the value in document
-            if l_total is not None and l_total != Decimal("0.00"):
-                # Decimal Comparison (0.02 Tolerance)
-                if abs(expected - l_total) > Decimal("0.02"):
-                    row_errors.append({"idx": idx + 1, "visual": f"{q} * {u} != {l_total}"})
-                row_val = l_total
-            else:
-                row_val = expected
+        expected_net = Decimal("0.00")
+        if q != Decimal("0.00") and u != Decimal("0.00"):
+            expected_net = q * u
+            calc_subtotal_net += expected_net
         else:
-            row_val = l_total # Fallback
+            calc_subtotal_net += l_total   # Fallback
 
-        calc_subtotal += row_val
+        calc_total_gross += l_total if l_total != Decimal("0.00") else expected_net
 
+        if expected_net > Decimal("0.00") and l_total != Decimal("0.00"):
+            diff = abs(expected_net - l_total)
+            if diff > Decimal("0.02"):   # Allow 2 cents tolerance for OCR errors
+                row_errors.append({
+                    "idx": idx + 1, 
+                    "visual": f"{q} * {u} = {expected_net:.2f} (Extracted: {l_total:.2f})"
+                })
+
+    doc_subtotal = to_decimal(fin.get("subtotal_amount"))
+    doc_total = to_decimal(fin.get("total_amount", data.get("total_amount")))
+    
+    is_subtotal_match = doc_subtotal > Decimal("0.00") and abs(calc_subtotal_net - doc_subtotal) <= Decimal("1.00")
+    is_total_match = doc_total > Decimal("0.00") and abs(calc_total_gross - doc_total) <= Decimal("1.00")
 
     if row_errors:
-        l4_signals.append("MATH_ROW_MISMATCH")
-        score = max(score, 80)
-        status = LayerStatus.HIGH_RISK
-        for err in row_errors[:3]: # Limit logs
+        if is_subtotal_match or is_total_match:
+            # Net vs Gross Reconciliation Mode: Row-level math doesn't match, but totals are consistent. 
+            # This often indicates a systematic OCR error (e.g., decimal point missed in all unit prices) rather than random data tampering.
             audit_trails.append(create_audit_record(
-                f"Row {err['idx']} Math", "FAIL", "Qty * Unit = Total", err['visual'], "Calc Error"
+                "Row Audit Mode", "PASS", "Net vs Gross Reconciliation", 
+                "Gross amounts detected in Line Total", "Qty*Unit != Line Total, but aggregates perfectly match Document Totals."
             ))
-        audit_trails.append(create_audit_record(
-            "Row Audit Summary", "FAIL", "All Rows Consistent", 
-            f"Failed {len(row_errors)}/{len(items)} rows", "Math inconsistencies detected"
-        ))
+            row_errors = []  
+            calc_subtotal = calc_subtotal_net
+        else:
+            # Critical math failure: Row-level math doesn't match AND totals are inconsistent.
+            l4_signals.append("MATH_ROW_MISMATCH")
+            score = max(score, 80)
+            status = LayerStatus.HIGH_RISK
+            for err in row_errors[:3]: 
+                audit_trails.append(create_audit_record(
+                    f"Row {err['idx']} Math", "FAIL", "Qty * Unit == Extracted Total", err['visual'], "Unexplained discrepancy"
+                ))
+            audit_trails.append(create_audit_record(
+                "Row Audit Summary", "FAIL", "All Rows Consistent", 
+                f"Failed {len(row_errors)}/{len(items)} rows", "Math inconsistencies detected"
+            ))
+            calc_subtotal = calc_subtotal_net 
     elif items:
         audit_trails.append(create_audit_record(
             "Row Audit Summary", "PASS", "Qty * Unit = Total", 
             "All items verified", f"Checked {len(items)} rows"
         ))
+        calc_subtotal = calc_subtotal_net
 
 
     # 2.2 Tax Logic
