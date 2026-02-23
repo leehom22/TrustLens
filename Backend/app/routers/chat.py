@@ -589,8 +589,8 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         # 3. Start Chat
         # enable_automatic_function_calling=True for SDK to automatically handle Tool Functions Call
         chat = client.aio.chats.create(
-            model="gemini-2.0-flash",
-            # model="gemini-3-flash-preview",
+            # model="gemini-2.0-flash",
+            model="gemini-3-flash-preview",
             config=types.GenerateContentConfig(
                 tools=config["tools"],
                 system_instruction=config.get("prompt", ""),

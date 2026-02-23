@@ -26,11 +26,13 @@ interface ChatMessage {
     content: string;
 }
 
+/*
 interface SuggestedAction {
     label: string;
     mode: string;
     query: string;
 }
+*/
 
 interface AiAssistantProps {
     reqId: string;
@@ -54,7 +56,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
     const [isRecording, setIsRecording] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
     const [currentMode, setCurrentMode] = useState<ChatMode>("forensic_analyst");
-    const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
+    const [suggestedActions, setSuggestedActions] = useState<string[]>([]);
     const [showModeMenu, setShowModeMenu] = useState(false);
 
     // --- REFS ---
@@ -184,8 +186,27 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
         }
     };
 
-    const handleSuggestionClick = (action: SuggestedAction) => {
-        handleSendMessage(action.query, action.mode);
+    const handleSuggestionClick = (suggestionText: string) => {
+        let nextMode = currentMode;
+
+        if (suggestionText.includes("Forensic Analyst")) {
+            nextMode = "forensic_analyst";
+        } else if (suggestionText.includes("Rejection Letter")) {
+            nextMode = "rejection_letter";
+        } else if (suggestionText.includes("Contract Guardian")) {
+            nextMode = "contract_guardian";
+        } else if (suggestionText.includes("Policy Advisor")) {
+            nextMode = "policy_advisor";
+        }
+
+        setCurrentMode(nextMode as ChatMode);
+
+        // Clear the input and suggestions
+        setSuggestedActions([]);
+
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
     };
 
     // --- AUDIO LOGIC (UPDATED WITH FIX) ---
@@ -292,8 +313,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                         <div>
                             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                                 TrustLens Assistant
-                                <span className={`text-xs px-2 py-0.5 rounded-full border bg-white ${MODES['forensic_analyst'].color} border-current`}>
-                                    {MODES['forensic_analyst'].label}
+                                <span className={`text-xs px-2 py-0.5 rounded-full border bg-white ${MODES[currentMode].color} border-current`}>
+                                    {MODES[currentMode].label}
                                 </span>
                             </h3>
                             <p className="text-xs text-gray-600">
@@ -347,14 +368,14 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                     {/* --- SUGGESTED ACTIONS --- */}
                     {suggestedActions.length > 0 && !isThinking && (
                         <div className="px-4 py-2 bg-gray-50 dark:bg-slate-900/50 flex gap-2 overflow-x-auto no-scrollbar border-t border-gray-100">
-                            {suggestedActions.map((action, idx) => (
+                            {suggestedActions.map((actionText, idx) => (
                                 <button
                                     key={idx}
-                                    onClick={() => handleSuggestionClick(action)}
+                                    onClick={() => handleSuggestionClick(actionText)}
                                     className="flex-shrink-0 text-xs bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded-full shadow-sm hover:bg-blue-50 transition-colors flex items-center gap-1"
                                 >
                                     <Sparkles className="w-3 h-3" />
-                                    {action.label}
+                                    {actionText}
                                 </button>
                             ))}
                         </div>
@@ -377,8 +398,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                                             ${currentMode === modeKey ? "bg-blue-50 text-blue-700" : "text-gray-700"}
                                         `}
                                     >
-                                        <span className={MODES['forensic_analyst'].color}>{MODES['forensic_analyst'].icon}</span>
-                                        {MODES['forensic_analyst'].label}
+                                        <span className={MODES[modeKey].color}>{MODES[modeKey].icon}</span>
+                                        {MODES[modeKey].label}
                                     </button>
                                 ))}
                             </div>
@@ -403,7 +424,7 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                                placeholder={stage === "complete" ? `Ask ${MODES['forensic_analyst'].label}...` : "Analyzing document..."}
+                                placeholder={stage === "complete" ? `Ask ${MODES[currentMode].label}...` : "Analyzing document..."}
                                 disabled={stage !== "complete" || isThinking}
                                 className="flex-1"
                             />

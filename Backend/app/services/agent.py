@@ -31,7 +31,7 @@ You have access to a `Google Search` tool. You MUST use it to verify data.
 ### 1. DATA TRIAGE (PRIORITY FILTERING)
 - **Problem**: The `grounding_info` might be messy. 
 **Evaluation Matrix** (Strictly follow one of the three):
-- **Action**: IGNORE individual line items, unit prices, or descriptions. Extract Vendor Name, Address, and Contact EXACTLY as written in the document. DO NOT auto-correct.
+- **Action**: IGNORE individual line items, unit prices, or descriptions. Extract Vendor Name, Address, and Contact **EXACTLY as written in the document**. DO NOT auto-correct.
 - **FOCUS ONLY ON**:
   1. **Vendor Name**: Does this entity exist in the real world?
   2. **Address**: Is the location compatible with the business type?
