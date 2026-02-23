@@ -142,7 +142,7 @@ def get_document_raw_text(req_id: str) -> Dict[str, Any]:
         if not raw_text:
             raw_text = str(data.get("grounding_info", {}))
             
-        return {"raw_text_content": raw_text[:PORT]} # Limit to 8000 chars
+        return {"raw_text_content": raw_text[:8000]} # Limit to 8000 chars
     except Exception as e:
         logger.error(f"Tool Error (get_document_raw_text): {e}")
         return {"error": str(e)}
@@ -165,7 +165,7 @@ def grounding_search_agent(query: str) -> Dict[str, Any]:
     
     try:
         # ! Remove await to avoid error
-        response = search_client.aio.models.generate_content(
+        response = search_client.models.generate_content(
             model="gemini-3-flash-preview",
             contents=sub_agent_prompt,
             config=types.GenerateContentConfig(
@@ -473,7 +473,7 @@ def get_mode_config(mode: str, req_id: str):
 
 # ========================= Smart Suggestion Engine =========================
 
-def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str, Any]) -> List[Dict[str, str]]:
+def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str, Any]) -> List[str]:
     suggestions = []
     risk_score = doc_meta.get("overall_risk_score", 0)
     doc_type = doc_meta.get("doc_type", "unknown").lower()
@@ -619,7 +619,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         final_text = ai_raw_text
         if suggestions and request.mode != "rejection_letter":
             top_sugg = suggestions[0]
-            hint_msg = f"\n\n💡 **Tip**: I can also help you **{top_sugg['label']}**. Just click the option below."
+            hint_msg = f"\n\n💡 **Tip**: I can also help you **{top_sugg}**. Just click the option below."
             final_text += hint_msg
 
         # 7. Save Response
