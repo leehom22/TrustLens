@@ -4,6 +4,7 @@ env: dont put "" for the API KEY
 
 # run the server (at Backend path)
 python -m app.main
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 # to put the env variable in a file, use the following code
 <!-- can refer file: routers/user.py at function 'signIn_user' -->

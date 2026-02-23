@@ -246,7 +246,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         tax_diff = abs(tax - expected_statutory_tax)
         
         if tax_diff > Decimal("1.00"):
-            l4_signals.append("TAX_CALCULATION_MISMATCH")
+            l4_signals.append("MATH_TAX_LOGIC_FAIL")
             score = max(score, 80)
             status = LayerStatus.HIGH_RISK
             audit_trails.append(create_audit_record(
