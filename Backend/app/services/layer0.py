@@ -37,18 +37,16 @@ async def run_layer_0_judge(doc_type: str, evidence: List[LayerResult], profile:
         if e.status == LayerStatus.SKIPPED:
             w = 0.0
 
+        current_score = e.score
+        
         # 1. Allow_Screenshot => Hard Fail
         # Retrieve L3 result to check for screenshot flag
         if "FORMAT_VIOLATION_SCREENSHOT" in layer_signals and not profile.get("allow_screenshot", True):
             hard_fail_triggered = True
             hard_fail_reasons.append("[FORMAT_VIOLATION_SCREENSHOT] (Profile enforced)")
-            
-            weighted_score += (current_score * w)
-            total_weight += w
 
         # 2. Allow_creative_software => Forgive
         # Keep the evidence, but reduce its weight to zero for the score calculation
-        current_score = e.score
         if profile.get("allow_creative_software") and e.layer_name == "L1_Metadata" and "software_risk" in e.details:
             current_score = 0 # Forgive only in calculation
         
