@@ -10,17 +10,41 @@ from ..utils.utils import parse_pdf_date
 # ===== Source (Editor tools / Online PDF tools) =====
 
 SOFTWARE_RISK_MAP = {
-    "high": ["photoshop", "gimp", "paint", "meitu", "snapseed", "editor"],
-    "medium": ["canva", "ilovepdf", "smallpdf", "foxyutils", "phantompdf", "camscanner"]
+    # Professional-level image editing software that may indicate potential manipulation
+    "high": [
+        "photoshop", "gimp", "paint", "meitu", "snapseed", "editor", 
+        "illustrator", "coreldraw", "lightroom", "affinity", "pixelmator", 
+        "procreate", "picsart", "photopea", "fotor", "pixlr", "inshot"
+    ],
+    
+    # Online PDF tools and consumer-level software that may indicate non-professional handling (but not necessarily malicious)
+    "medium": [
+        "canva", "ilovepdf", "smallpdf", "foxyutils", "phantompdf", "camscanner",
+        "sejda", "pdf24", "pdfescape", "soda pdf", "pdfcandy", "pdfelement", 
+        "wondershare", "easepdf", "foxit", "nitro pro", "adobe scan", 
+        "vflat", "tapscanner", "figma", "sketch", "visme"
+    ]
 }
 
 SOFTWARE_WHITELIST = [
-    "pdf-xchange", 
-    "acrobat distiller", 
-    "microsoft word", 
-    "canon", 
-    "hp", 
-    "brother" # 打印机驱动常被误报
+    # Common printer drivers and PDF generators
+    "canon", "hp", "brother", "epson", "xerox", "ricoh", "lexmark", 
+    "konica", "kyocera", "fujitsu", "scansnap",
+    
+    # Common document creation and editing software
+    "microsoft word", "excel", "powerpoint", "google docs", "google sheets", 
+    "libreoffice", "openoffice", "pages", "numbers", "acrobat distiller",
+    
+    # Common enterprise software that may generate PDFs
+    "sap", "oracle", "salesforce", "workday", "netsuite", "xero", 
+    "quickbooks", "concur", "jasperreports", "crystal reports",
+    
+    # Common PDF libraries and engines
+    "itext", "tcpdf", "fpdf", "mpdf", "pdfkit", "reportlab", 
+    "wkhtmltopdf", "ghostscript", "dompdf",
+    
+    # Common rendering engines and frameworks that may appear in metadata but are not necessarily risky
+    "quartz", "skia", "chromium", "mozilla", "webkit", "cairo"
 ]
 
 
