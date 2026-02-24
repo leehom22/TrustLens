@@ -255,7 +255,7 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
 
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-3-flash-preview',
+            model='gemini-2.5-pro',
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=AGENT_SYSTEM_INSTRUCTION,
