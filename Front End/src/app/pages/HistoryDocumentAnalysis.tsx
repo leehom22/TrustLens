@@ -43,6 +43,7 @@ export function HistoryDocumentAnalysis() {
     const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
     const [riskLevelColor, setRiskLevelColor] = useState<RiskLevelColor>('gray')
     const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
+    const [overallScore, setOverallScore] = useState<number>(0)
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
@@ -60,6 +61,7 @@ export function HistoryDocumentAnalysis() {
                 setRaw_analysis_id(result.data?.raw_analysis_id)
                 setDoc_type(result.data?.doc_type)
                 setStructure_analysis_id(result.data?.id)
+                setOverallScore(result.data?.analysis_content?.dashboard_header?.overall_score || 0)
                 // console.log("The structure data is: ", result.data)
             } else {
                 toast.error("Failed to fetch document analysis")
@@ -230,7 +232,7 @@ export function HistoryDocumentAnalysis() {
                                     </div>
 
                                     {/* Badge */}
-                                    <Badge
+                                    {/* <Badge
                                         variant="outline"
                                         className={`self-start flex-shrink-0 text-xs sm:text-sm font-semibold ${riskLevel === "CRITICAL" ? "text-red-600 bg-red-50"
                                                 : riskLevel === "SUSPICIOUS" ? "text-orange-600 "
@@ -239,7 +241,8 @@ export function HistoryDocumentAnalysis() {
                                             }`}
                                     >
                                         {ai_analysis_format?.dashboard_header?.risk_level}
-                                    </Badge>
+                                    </Badge> */}
+                                        <div>Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}(Score: {overallScore})</div>
                                 </div>
 
                                 <p className="text-sm md:text-base text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -350,6 +353,7 @@ export function HistoryDocumentAnalysis() {
                                     <LogicalConsistency
                                         layer={ai_analysis_format?.layer_results[3]!}
                                         nextStepRecommendation={ai_analysis_format?.dashboard_header.next_step_recommendation}
+                                        sources={ai_analysis_format?.dashboard_header?.sources}
                                     />
                                     {!openFeedback.findings ? (
                                         <div className="flex justify-end mt-4">

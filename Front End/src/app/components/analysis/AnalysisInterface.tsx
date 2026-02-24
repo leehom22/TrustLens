@@ -70,7 +70,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
         setAllAnalysisComplete(true);
 
         setChatMessages([{
-          role: "assistant",
+          role: "model",
           content: "Restored recent forensic Results (Valid for 24h)."
         }]);
         return; // Exit here, don't trigger startAnalysis

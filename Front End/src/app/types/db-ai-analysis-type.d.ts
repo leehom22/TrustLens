@@ -34,6 +34,7 @@ export interface DashboardHeader {
   grounding_search_reference: string;
   next_step_recommendation: string;
   doc_type: string;
+  sources?: string []
 }
 
 export interface LayerResult {

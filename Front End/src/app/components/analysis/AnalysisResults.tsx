@@ -16,7 +16,8 @@ interface AnalysisResultProps {
   setRequestReview: React.Dispatch<React.SetStateAction<boolean>>
   ai_analysis_format: DocumentAnalysisResult,
   raw_analysis_id: string
-  doc_type: string
+  doc_type: string,
+  
 }
 export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id }: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
@@ -67,10 +68,10 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                     : "border-green-600 text-green-600 bg-green-50"
               }`}
           >
-            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}
+            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Score: {ai_analysis_format?.dashboard_header?.overall_score})
           </Badge>
         </div>
-
+        
         <p className="text-sm md:text-base text-gray-800 dark:text-slate-200">
           {ai_analysis_format?.dashboard_header?.ai_executive_summary}
         </p>
@@ -193,6 +194,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
           <LogicalConsistency
             layer={ai_analysis_format?.layer_results[3]}
             nextStepRecommendation={ai_analysis_format?.dashboard_header?.next_step_recommendation}
+            sources={ai_analysis_format?.dashboard_header?.sources}
           />
           {!openFeedback.findings && (
             <div className="flex justify-end mt-4">

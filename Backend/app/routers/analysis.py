@@ -541,6 +541,50 @@ async def generate_document_dashboard(
     • Include "ats_hacking_details" only if details exist.
     • Omit "ats_hacking_details" if not present.
 
+    ────────────────────────────
+    🌐 SOURCES EXTRACTION RULES
+    ────────────────────────────
+
+    Target output field:
+    "dashboard_header.sources" → must be an array of strings.
+
+    Source location in input JSON:
+    grounding_result.sources
+
+    Extraction steps (STRICT):
+
+    1. Check if "grounding_result" exists in the input JSON.
+    2. Inside it, check if "sources" exists and is an array.
+    3. If "sources" exists:
+    - Each element represents a source reference.
+    - Extract the website URL string from each element.
+    - If the element is already a string → use it directly.
+    - If the element is an object → extract the property that contains the website URL.
+    4. Add each extracted website URL string into the output array:
+    "dashboard_header.sources"
+
+    STRICT RULES:
+
+    - Copy the exact website URL string as provided.
+    - Do NOT rewrite, summarize, or modify the URL.
+    - Do NOT validate the URL.
+    - Do NOT generate new URLs.
+    - Do NOT infer missing URLs.
+    - Do NOT fabricate sources.
+    - Preserve original order.
+    - Only use URLs that already exist in the input JSON.
+
+    Fallback behavior:
+
+    - If "grounding_result" does not exist → set:
+    "sources": []
+
+    - If "grounding_result.sources" does not exist → set:
+    "sources": []
+
+    - If the array is empty → return:
+    "sources": []
+    
     Next Step Recommendation:
 
     • Generate actionable guidance for the user
@@ -607,7 +651,8 @@ async def generate_document_dashboard(
             "ai_executive_summary": "string",
             "grounding_search_reference": "string",
             "doc_type": "string",
-            "next_step_recommendation": "string"
+            "next_step_recommendation": "string",
+            "sources" : ["string"]
         }},
         "layer_results": [
             {{
