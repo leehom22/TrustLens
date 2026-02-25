@@ -92,7 +92,7 @@ DOC_RISK_PROFILES = {
         "description": "Personal branding. Visual editing expected.",
         "allow_creative_software": True,
         "allow_screenshot": False,
-        "weights": {"L1": 0.05, "L2": 0.05, "L3": 0.9, "L4": 0.0},
+        "weights": {"L1": 0.05, "L2": 0.85, "L3": 0.1, "L4": 0.0},
         "hard_fail_checks": [
             "STRUCTURE_HIDDEN_DATA",
             "ATS_HACKING_DETECTED"
@@ -122,7 +122,7 @@ DOC_RISK_PROFILES = {
         "description": "Legal agreement (Freelance/Employment).",
         "allow_creative_software": False, # Contracts should be Word/PDF
         "allow_screenshot": False,
-        "weights": {"L1": 0.2, "L2": 0.1, "L3": 0.3, "L4": 0.4},
+        "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
         "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
     },
     # Alias for fuzzy matching
@@ -130,7 +130,7 @@ DOC_RISK_PROFILES = {
         "description": "Freelance Service Agreement.",
         "allow_creative_software": False,
         "allow_screenshot": False,
-        "weights": {"L1": 0.2, "L2": 0.1, "L3": 0.3, "L4": 0.4},
+        "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
         "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
     },
 
