@@ -119,7 +119,9 @@ const ReviewDocumentList = () => {
     try {
       const res = await axios.get(`${backendUrl}/files/flagged_document`);
       // console.log("Data from flagged files: ", res.data.files)
-      if (res.data.success) setFlaggedFile(res.data.files)
+      if (res.data.success){
+         setFlaggedFile(res.data.files)
+      }
 
     } catch (error) {
       toast.error("Failed to fetch files")
