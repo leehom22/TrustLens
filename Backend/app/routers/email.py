@@ -50,45 +50,51 @@ async def send_report(
         subject="TrustLens Analysis Report",
         recipients=[email],
        body=f"""
-            <div style="font-family: Arial, sans-serif; background-color:#f4f6f8; padding:30px;">
-                <div style="max-width:600px; background:#ffffff; padding:30px; border-radius:8px;">
-                    
-                    <h2 style="color:#1f2937; margin-top:0;">TrustLens Analysis Completed</h2>
-                    
-                    <p>Dear User,</p>
-                    
-                    <p>
-                    The analysis for <strong>{display_name}</strong> has been completed successfully.
-                    </p>
-                    
-                    <p>Please access your dashboard to review the full forensic report:</p>
-                    
-                    <p style="text-align:center; margin:30px 0;">
-                    <a href="https://trustlens-632fa.web.app/history"
-                        style="background-color:#2563eb; color:#ffffff; padding:12px 24px;
-                        text-decoration:none; border-radius:6px; font-weight:bold;">
-                        View Analysis
-                    </a>
-                    </p>
-                    
-                    <p>
-                    If you did not request this service, please ignore this message.
-                    </p>
-                    
-                    <p>
-                        Best regards,<br>
-                        <strong>TrustLens AI Forensic Team</strong>
-                    </p>
-                    
-                    <hr style="border:none; border-top:1px solid #eeeeee; margin:20px 0;">
-                    
-                    <p style="font-size:12px; color:#888;">
-                    This is an automated notification. Please do not reply.
-                    </p>
-                    
-                </div>
-            </div>
-            """,
+        <div style="font-family: Arial, sans-serif; background-color:#f4f6f8; margin: 0; padding: 0; width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+            <table role="presentation" width="100%" height="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f6f8;">
+                <tr>
+                    <td align="center" valign="middle" style="padding: 40px 0;">
+                        <div style="max-width:600px; width: 100%; background:#ffffff; padding:40px; border-radius:12px; text-align: left; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                            
+                            <h2 style="color:#1f2937; margin-top:0; font-size: 24px;">TrustLens Analysis Completed</h2>
+                            
+                            <p style="color: #4b5563; line-height: 1.6;">Dear User,</p>
+                            
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                The analysis for <strong>{display_name}</strong> has been completed successfully.
+                            </p>
+                            
+                            <p style="color: #4b5563; line-height: 1.6;">Please access your dashboard to review the full forensic report:</p>
+                            
+                            <div style="text-align:center; margin:35px 0;">
+                                <a href="https://trustlens-632fa.web.app/history"
+                                    style="background-color:#2563eb; color:#ffffff; padding:14px 28px;
+                                    text-decoration:none; border-radius:6px; font-weight:bold; display: inline-block;">
+                                    View Analysis
+                                </a>
+                            </div>
+                            
+                            <p style="color: #6b7280; font-size: 14px;">
+                                If you did not request this service, please ignore this message.
+                            </p>
+                            
+                            <p style="color: #1f2937; line-height: 1.6;">
+                                Best regards,<br>
+                                <strong>TrustLens AI Forensic Team</strong>
+                            </p>
+                            
+                            <hr style="border:none; border-top:1px solid #eeeeee; margin:25px 0;">
+                            
+                            <p style="font-size:12px; color:#9ca3af; text-align: center;">
+                                This is an automated notification. Please do not reply.
+                            </p>
+                            
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """,
         subtype=MessageType.html
     )
 

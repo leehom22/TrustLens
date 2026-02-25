@@ -100,8 +100,8 @@ export default function App() {
     
 
     if (!file) return
-    const storageRef = ref(storage, `documents/${file.name}`)
-   
+    const storageRef = ref(storage, `documents/${currentUserId}/${file.name}`)
+
     try {
       // 2. Upload the file
       setFileUploadLoading(true)

@@ -114,7 +114,8 @@ async def analyze_pipeline(
             if local_path and os.path.exists(local_path):
                 # Naming: visual_ela_p1.jpg, visual_ela_p2.jpg, etc.
                 page_num = page_info.get("page", idx + 1)
-                ela_dest = f"evidence/{req_id}/visual_ela_p{page_num}.jpg"
+                # Add user id 
+                ela_dest = f"evidence/{user_id}/{req_id}/visual_ela_p{page_num}.jpg"
                 
                 cloud_url = upload_evidence_to_storage(local_path, ela_dest, "image/jpeg")
                 
