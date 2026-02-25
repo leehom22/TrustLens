@@ -23,6 +23,8 @@ export interface FileHeader {
     created_at: string
     flagged?: boolean | null
     expertReview?: boolean | null 
+    encryptedKey?: string | null
+    iv?: string | null
 }
 
 export interface DashboardHeader {

@@ -17,6 +17,7 @@ import { DocumentAnalysisResult, FileHeader } from '@/app/types/db-ai-analysis-t
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
 import { Annotation, Note } from '@/app/types/document-highlight-type';
+import { getAccessibleDocumentUrl } from '@/lib/encrypt';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -99,8 +100,23 @@ const DocumentAnalysis = (props: { userId: string }) => {
                 if (result.success === true) {
                     await fetchingDocucmentAnalysis(docId)
                     await fetchingExpertDocumentReview(docId)
-                    setSelectedDocument(result.data)
-                }
+                    const documentData = result.data 
+
+                     // 🔐 Decrypt using fresh data (NOT state)
+                    const accessibleUrl = await getAccessibleDocumentUrl(
+                        documentData.fileUrl,
+                        documentData.encryptedKey!,
+                        documentData.iv!
+                    );
+    
+                    // console.log("Decrypted key:", accessibleUrl);
+    
+                    // ✅ Now update state once
+                    setSelectedDocument({
+                        ...documentData,
+                        fileUrl: accessibleUrl || documentData.fileUrl,
+                    });
+        }
             } else {
                 toast.error("Document Id not found!")
                 return

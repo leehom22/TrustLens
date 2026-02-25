@@ -20,6 +20,7 @@ import axios from 'axios'
 import { Loader2 } from "lucide-react";
 import { HistoryDocumentAnalysis } from "./pages/HistoryDocumentAnalysis";
 import ReviewDocumentList from "./pages/expert/ReviewDocumentList";
+import { bufferToBase64, encryptFile } from "@/lib/encrypt";
 
 type AppState = "upload" | "analysis";
 
@@ -100,24 +101,31 @@ export default function App() {
 
     if (!file) return
     const storageRef = ref(storage, `documents/${file.name}`)
-
+   
     try {
       // 2. Upload the file
       setFileUploadLoading(true)
-      const snapshot = await uploadBytes(storageRef, file);
+      // const snapshot = await uploadBytes(storageRef, file);
+      // ! Update: Encrypt document in firebase storage 
+       const encryptedFile = await encryptFile(file);
+      const snapshot = await uploadBytes(storageRef, encryptedFile.encryptedBlob);
 
       // 3. Get the public download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
-      setUrl(downloadURL);
+      const fileUrl = URL.createObjectURL(file)
+      setUrl(fileUrl);
       // console.log(`=======Upload successful! - ${downloadURL}=======`);
       if (downloadURL) {
+        console.log("==========The key and iv is: ",bufferToBase64(encryptedFile.key), bufferToBase64(encryptedFile.iv))
         const res = await axios.post(`${backendUrl}/files/upload_files`,{
           "user_id":currentUserId,
           "fileName":file.name,
           "fileUrl":downloadURL,
           'fileSize':file.size,
           'mimeType':file.type,
-          'flagged': "False"
+          'flagged': "False",
+          'encryptedKey': bufferToBase64(encryptedFile.key), // store encrypted key to firestore
+          'iv': bufferToBase64(encryptedFile.iv) // store encrypted key to firestore
         })
 
         if(res.status === 201){

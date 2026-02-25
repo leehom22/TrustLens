@@ -110,7 +110,7 @@ const LoginPage = () => {
 
             // 2. Extract the clean message or use a fallback
             let cleanMessage = errorMessages[error.code] || error.message || "An unexpected error occurred.";
-            
+
             // Check for API error responses
             if (error.response?.status === 400) {
                 cleanMessage = error.response?.data?.detail || "Registration failed. Please check your inputs.";
@@ -190,73 +190,105 @@ const LoginPage = () => {
                 </div>
 
                 {showRegister === false ? (
-                    <div className="space-y-4">
-                        <form className="w-full space-y-4" onSubmit={(e) => handleManualSignIn(e)}>
-                            {/* Email */}
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">
-                                    Email
-                                </label>
-                                <input
-                                    type="email"
-                                    placeholder="Enter email"
-                                    name="email"
-                                    id="email"
-                                    className="px-3 py-2 text-md border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                                />
-                            </div>
+                    <div className="space-y-6">
 
-                            {/* Password */}
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">
-                                    Password
-                                </label>
-                                <div className="relative flex items-center">
-                                    <input
-                                        type={showPassword ? "text" : "password"}
-                                        placeholder="Enter password"
-                                        name="password"
-                                        id="password"
-                                        className="w-full px-3 py-2 pr-10 text-sm border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2 text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-                                    >
-                                        {showPassword ? <EyeClosed size={16} /> : <Eye size={16} />}
-                                    </button>
-                                </div>
-                            </div>
+                        {/* Role Selector */}
+                        <div className="flex bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRole("user")}
+                                className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${selectedRole === "user"
+                                        ? "bg-white dark:bg-slate-900 shadow text-blue-600"
+                                        : "text-gray-600 dark:text-slate-300"
+                                    }`}
+                            >
+                                👤 User
+                            </button>
 
-                            <div className="w-full flex items-center justify-center pt-2">
-                                <button type="submit" className="rounded-lg border-2 py-2 w-full cursor-pointer text-sky-500 border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-colors font-semibold">
-                                    Sign In
-                                </button>
-                            </div>
-                        </form>
-
-                        <div className="flex w-full justify-center items-center gap-2 text-sm">
-                            <p className="text-gray-600 dark:text-slate-400">Don't have an account?</p>
-                            <button className="text-blue-600 dark:text-blue-400 underline cursor-pointer font-medium" onClick={() => setShowRegister(true)}>
-                                Create an account
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRole("expert")}
+                                className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${selectedRole === "expert"
+                                        ? "bg-white dark:bg-slate-900 shadow text-blue-600"
+                                        : "text-gray-600 dark:text-slate-300"
+                                    }`}
+                            >
+                                🧑‍💼 Expert
                             </button>
                         </div>
 
-                        <div className="relative flex items-center py-2">
-                            <div className="flex-grow border-t border-gray-300 dark:border-slate-700"></div>
-                            <span className="flex-shrink mx-4 text-gray-400 text-sm">or</span>
-                            <div className="flex-grow border-t border-gray-300 dark:border-slate-700"></div>
-                        </div>
+                        {/* USER LOGIN (Google Only) */}
+                        {selectedRole === "user" && (
+                            <div className="space-y-4 text-center">
 
-                        <Button
-                            onClick={handleGoogleSignIn}
-                            className="w-full bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 text-gray-900 dark:text-white border border-gray-300 dark:border-slate-600"
-                            size="lg"
-                        >
-                            <img src={google} alt="google" className="w-5 h-5 mr-2"/>
-                            Sign in with Google
-                        </Button>
+                                <p className="text-sm text-gray-600 dark:text-slate-400">
+                                    Users must authenticate using Google.
+                                </p>
+
+                                <Button
+                                    onClick={handleGoogleSignIn}
+                                    className="w-full bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 text-gray-900 dark:text-white border border-gray-300 dark:border-slate-600"
+                                    size="lg"
+                                >
+                                    <img src={google} alt="google" className="w-5 h-5 mr-2" />
+                                    Continue with Google
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* EXPERT LOGIN (Manual Only) */}
+                        {selectedRole === "expert" && (
+                            <form className="space-y-4" onSubmit={handleManualSignIn}>
+
+                                <div className="flex flex-col space-y-1">
+                                    <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                                        Expert Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        placeholder="Enter expert email"
+                                        className="px-3 py-2 border rounded-md bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                                    />
+                                </div>
+
+                                <div className="flex flex-col space-y-1">
+                                    <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                                        Password
+                                    </label>
+
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            name="password"
+                                            placeholder="Enter password"
+                                            className="w-full px-3 py-2 pr-10 border rounded-md bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                                        />
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-2 top-2.5 text-gray-500 hover:text-gray-700 dark:text-slate-400"
+                                        >
+                                            {showPassword ? <EyeClosed size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="w-full py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                                >
+                                    Sign In as Expert
+                                </button>
+
+                                <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
+                                    Expert accounts require prior approval.
+                                </p>
+
+                            </form>
+                        )}
+
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -313,8 +345,8 @@ const LoginPage = () => {
                                 type="submit"
                                 disabled={registerLoading}
                                 className={`rounded-lg border-2 py-2 w-full transition-all font-semibold ${registerLoading
-                                        ? 'cursor-not-allowed opacity-70 bg-gray-100 dark:bg-slate-800 text-gray-400'
-                                        : 'text-sky-500 border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/30'
+                                    ? 'cursor-not-allowed opacity-70 bg-gray-100 dark:bg-slate-800 text-gray-400'
+                                    : 'text-sky-500 border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/30'
                                     }`}
                             >
                                 {registerLoading ? "Registering..." : "Register"}

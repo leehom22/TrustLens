@@ -10,6 +10,8 @@ class FilesSchema(BaseModel):
     fileSize: int
     mimeType: str
     flagged: bool
+    encryptedKey: str
+    iv: str
     
     # get user uploaded files
     @staticmethod

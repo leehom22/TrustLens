@@ -17,7 +17,7 @@ interface AnalysisResultProps {
   ai_analysis_format: DocumentAnalysisResult,
   raw_analysis_id: string
   doc_type: string,
-  
+
 }
 export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id }: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
@@ -60,18 +60,18 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
           <Badge
             variant="outline"
             className={`self-start sm:self-auto text-xs sm:text-sm font-semibold border-2 whitespace-nowrap ${riskLevel === "CRITICAL"
-                ? "border-red-600 text-red-600 bg-red-50"
-                : riskLevel === "SUSPICIOUS"
-                  ? "border-orange-500 text-orange-600 bg-orange-50"
-                  : riskLevel === "CAUTION"
-                    ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                    : "border-green-600 text-green-600 bg-green-50"
+              ? "border-red-600 text-red-600 bg-red-50"
+              : riskLevel === "SUSPICIOUS"
+                ? "border-orange-500 text-orange-600 bg-orange-50"
+                : riskLevel === "CAUTION"
+                  ? "border-yellow-500 text-yellow-700 bg-yellow-50"
+                  : "border-green-600 text-green-600 bg-green-50"
               }`}
           >
-            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Score: {ai_analysis_format?.dashboard_header?.overall_score})
+            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Risk Score: {ai_analysis_format?.dashboard_header?.overall_score})
           </Badge>
         </div>
-        
+
         <p className="text-sm md:text-base text-gray-800 dark:text-slate-200">
           {ai_analysis_format?.dashboard_header?.ai_executive_summary}
         </p>
@@ -81,23 +81,22 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
       <Tabs defaultValue="metadata" className="space-y-4">
 
         {/* Tab header row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-          {/* Scrollable tab list — scrolls horizontally on mobile */}
-          <div className="overflow-x-auto pb-1 -mb-1">
-            <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full sm:min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+          {/* Scrollable tabs */}
+          <div className="overflow-x-auto pb-1 -mb-1 flex-1">
+            <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full ">
               {[
-                { value: "metadata", label: "Metadata & Source" },
-                { value: "heatmap", label: "Visual Manipulation" },
-                { value: "content", label: "Content Semantics" },
-                { value: "findings", label: "Logical Consistency" },
+                { value: 'metadata', label: 'Metadata' },
+                { value: 'heatmap', label: 'Visuals' },
+                { value: 'content', label: 'Semantics' },
+                { value: 'findings', label: 'Consistency' },
               ].map(({ value, label }) => (
                 <TabsTrigger
                   key={value}
                   value={value}
                   className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
-                data-[state=active]:text-blue-600 data-[state=active]:font-bold
-                dark:text-slate-400 dark:data-[state=active]:text-blue-400"
+                        data-[state=active]:text-blue-600 data-[state=active]:font-bold
+                        dark:text-slate-400 dark:data-[state=active]:text-blue-400"
                 >
                   {label}
                 </TabsTrigger>
