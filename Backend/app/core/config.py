@@ -58,10 +58,9 @@ _STRICT_FINANCIAL_RULES = {
     "description": "Official financial record (Bank/HR). Must be system-generated.",
     "allow_creative_software": False,
     "allow_screenshot": False,
-    "weights": {"L1": 0.3, "L2": 0.2, "L3": 0.1, "L4": 0.4},
+    "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.05, "L4": 0.65},
     "hard_fail_checks": [
         "HIGH_METADATA_SOFTWARE_RISK",
-        "MEDIUM_METADATA_SOFTWARE_RISK"
         "FORMAT_VIOLATION_SCREENSHOT",
         "TIME_PARADOX_LOGIC",
         "ID_DATE_TIME_PARADOX",
@@ -77,11 +76,13 @@ _TRANSACTIONAL_RULES = {
     "description": "Commercial transaction proof.",
     "allow_creative_software": False, # Commercial docs should be standard
     "allow_screenshot": True,
-    "weights": {"L1": 0.2, "L2": 0.2, "L3": 0.3, "L4": 0.3},
+    "weights": {"L1": 0.1, "L2": 0.15, "L3": 0.05, "L4": 0.7},
     "hard_fail_checks": [
+        "HIGH_METADATA_SOFTWARE_RISK",
         "MATH_ROW_MISMATCH", 
         "MATH_TAX_LOGIC_FAIL", 
-        "TIME_PARADOX_LOGIC"
+        "BALANCE_RECONCILIATION_FAIL",
+        "TIME_PARADOX_LOGIC",
     ]
 }
 
@@ -102,7 +103,7 @@ DOC_RISK_PROFILES = {
         "description": "Official award/verification.",
         "allow_creative_software": True,
         "allow_screenshot": True,
-        "weights": {"L1": 0.2, "L2": 0.5, "L3": 0.3, "L4": 0.0},
+        "weights": {"L1": 0.1, "L2": 0.8, "L3": 0.1, "L4": 0.0},
         "hard_fail_checks": [
             "VISUAL_TAMPERING_DETECTED"
         ]
@@ -123,7 +124,10 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": False, # Contracts should be Word/PDF
         "allow_screenshot": False,
         "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
-        "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
+        "hard_fail_checks": [
+            "HIGH_METADATA_SOFTWARE_RISK",
+            "TIME_PARADOX_LOGIC"
+        ]
     },
     # Alias for fuzzy matching
     "freelance_contract": {
@@ -131,7 +135,10 @@ DOC_RISK_PROFILES = {
         "allow_creative_software": False,
         "allow_screenshot": False,
         "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
-        "hard_fail_checks": ["TIME_PARADOX_LOGIC"]
+        "hard_fail_checks": [
+            "HIGH_METADATA_SOFTWARE_RISK",
+            "TIME_PARADOX_LOGIC"
+        ]
     },
 
     # Default (Average Weightage)

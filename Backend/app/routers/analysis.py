@@ -167,7 +167,7 @@ async def analyze_pipeline(
         
         # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
         if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
-            l3_score = 100
+            l3_score = 95
             l3_status = LayerStatus.HIGH_RISK
             msg = "Hidden text injection detected (ATS Cheating)."
             l3_data["risk_note"] = msg
