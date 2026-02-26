@@ -23,6 +23,8 @@ export interface FileHeader {
     created_at: string
     flagged?: boolean | null
     expertReview?: boolean | null 
+    encryptedKey?: string | null
+    iv?: string | null
 }
 
 export interface DashboardHeader {
@@ -34,6 +36,7 @@ export interface DashboardHeader {
   grounding_search_reference: string;
   next_step_recommendation: string;
   doc_type: string;
+  sources?: string []
 }
 
 export interface LayerResult {
@@ -46,7 +49,7 @@ export interface LayerResult {
   ai_analysis: string;
   technical_proofs: string[];
   has_visual_evidence?: boolean;
-  evidence_image_url?: string;
+  evidence_image_url?: string[]; //! Make it as a array
   ATS_hacking?:string;
   ats_hacking_details?: ATS_HACKING_DETAILS;
 }

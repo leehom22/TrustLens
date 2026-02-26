@@ -62,7 +62,7 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
           </div>
 
           {/* Status Badge */}
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color] || statusStyles.gray}`}>
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusStyles[layer?.status_color!] || statusStyles.gray}`}>
             {layer?.status}
             {layer?.status !== "PASS" && (
               <span className="ml-1">
@@ -80,13 +80,17 @@ export function VisualManipulation({ layer }: { layer: LayerResult }) {
               <span className="px-3 py-1 bg-black/70 text-white text-xs font-semibold rounded-full backdrop-blur-sm">
                 FORENSIC EVIDENCE
               </span>
+              <span>
+                
+              </span>
               <span className={`px-3 py-1 ${getStatusColor(layer?.status).badge} text-white text-xs font-semibold rounded-full`}>
                 {layer?.status}
               </span>
             </div>
 
             <div className={`relative transition-all duration-300 ${isZoomed[layer?.layer_id] ? 'cursor-zoom-out' : 'cursor-zoom-in top-10'}`}>
-              <DocumentViewer fileType="image" fileUrl={layer?.evidence_image_url} />
+              <div className="mx-3 my-2 text-red-400">The result does not directly indicate the authencity of the document</div>
+              <DocumentViewer fileType="image" imageUrl={layer?.evidence_image_url} />
               {!layer?.evidence_image_url && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>

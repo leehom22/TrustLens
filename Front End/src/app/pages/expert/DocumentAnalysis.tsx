@@ -17,10 +17,11 @@ import { DocumentAnalysisResult, FileHeader } from '@/app/types/db-ai-analysis-t
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
 import { Annotation, Note } from '@/app/types/document-highlight-type';
+import { getAccessibleDocumentUrl } from '@/lib/encrypt';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
-const DocumentAnalysis = (props: { userId: string }) => {
+const DocumentAnalysis = (props: { userId: string, }) => {
     // ** Expert side - Document Analysis with document viewer 
     const params = useParams()
     const docId = params.docId
@@ -42,6 +43,8 @@ const DocumentAnalysis = (props: { userId: string }) => {
     const [structure_ai_analysis_id, setStructure_ai_analysis_id] = useState<string>('')
     const [rawAnalysisId, setRawAnalysisId] = useState<string>('')
     const [imageSize, setImageSize] = useState({height:0,width:0})
+    const [ userFlaggedReason, setUserFlaggedReason] = useState<string>('')
+
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
@@ -61,7 +64,7 @@ const DocumentAnalysis = (props: { userId: string }) => {
                 })
                 setRawAnalysisId(result.data?.raw_analysis_id)
                 setStructure_ai_analysis_id(result.data?.id)
-                // console.log("The structure data is: ", result.data)
+
             } else {
                 toast.error("Failed to fetch document analysis")
                 return
@@ -99,8 +102,25 @@ const DocumentAnalysis = (props: { userId: string }) => {
                 if (result.success === true) {
                     await fetchingDocucmentAnalysis(docId)
                     await fetchingExpertDocumentReview(docId)
-                    setSelectedDocument(result.data)
-                }
+                    setUserFlaggedReason(result.data.flaggedReason)
+
+                    const documentData = result.data 
+
+                     // 🔐 Decrypt using fresh data (NOT state)
+                    const accessibleUrl = await getAccessibleDocumentUrl(
+                        documentData.fileUrl,
+                        documentData.encryptedKey!,
+                        documentData.iv!
+                    );
+    
+                    // console.log("Decrypted key:", accessibleUrl);
+    
+                    // ✅ Now update state once
+                    setSelectedDocument({
+                        ...documentData,
+                        fileUrl: accessibleUrl || documentData.fileUrl,
+                    });
+        }
             } else {
                 toast.error("Document Id not found!")
                 return
@@ -247,8 +267,23 @@ const DocumentAnalysis = (props: { userId: string }) => {
                                                 />
                                             </TabsContent>
                                         </Tabs>
+                                        
+                                     <div className= "bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-6 transition-colors shadow-sm mt-6">
+                                            <h3 className=" font-bold text-gray-700 dark:text-slate-300 mb-2">
+                                                🚩 Document Flagged Reason (User Reported)
+                                            </h3>
 
-                                        {/* Review Status */}
+                                            {userFlaggedReason ? (
+                                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-md text-gray-800 dark:text-slate-200 whitespace-pre-wrap break-words">
+                                                {userFlaggedReason}
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-gray-500 dark:text-slate-400 italic">
+                                                No reason provided.
+                                                </div>
+                                            )}
+                                     </div>
+                                                                                {/* Review Status */}
                                         <div className="mt-6">
                                             {selectedDocument.expertReview === true ? (
                                                 <div className="bg-green-50/50 dark:bg-emerald-900/10 border border-green-200 dark:border-emerald-800/50 rounded-xl p-4 sm:p-6 transition-all shadow-sm">

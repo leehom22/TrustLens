@@ -114,7 +114,8 @@ async def analyze_pipeline(
             if local_path and os.path.exists(local_path):
                 # Naming: visual_ela_p1.jpg, visual_ela_p2.jpg, etc.
                 page_num = page_info.get("page", idx + 1)
-                ela_dest = f"evidence/{req_id}/visual_ela_p{page_num}.jpg"
+                # Add user id 
+                ela_dest = f"evidence/{user_id}/{req_id}/visual_ela_p{page_num}.jpg"
                 
                 cloud_url = upload_evidence_to_storage(local_path, ela_dest, "image/jpeg")
                 
@@ -460,63 +461,52 @@ async def generate_document_dashboard(
     8. If data is missing → infer structure, NOT meaning.
     9. Use original terminology whenever possible.
     10. Output must be valid JSON only.
-    11. USER-FRIENDLY REWROORDING: Translate technical findings into clear, accessible language for a non-technical user. Avoid dense jargon in the 'ai_executive_summary' and 'ai_analysis' fields. Do NOT change the meaning, severity, or verdict while doing so.
+    11. USER-FRIENDLY REWORDING:
+        Translate technical findings into clear, accessible language
+        for a non-technical user in the "ai_executive_summary"
+        and "ai_analysis" fields.
+        Do NOT change meaning, severity, or verdict.
 
     You are performing DATA REFACTORING, not analysis.
 
     ────────────────────────────
-    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
+    📦 EVIDENCE EXTRACTION RULES
     ────────────────────────────
 
-    {json.dumps(raw_json, indent=2)}
+    Populate "evidence_image_url" as an array of strings.
 
-    This input analysis is the ONLY source of truth.
+    Source of data:
+    - Access evidence_chain[1]
+    - Inside it, read the object property "details"
+    - Inside "details", access the array "all_pages"
+    - For each element inside "all_pages", extract the value of the property "url"
 
-    All outputs must be derived from it.
+    IMPORTANT:
 
-    ────────────────────────────
-    📤 OUTPUT FORMAT (STRICT SCHEMA)
-    ────────────────────────────
-    Return JSON ONLY.
-    No markdown.
-    No explanations.
-    No comments.
+    The URLs inside evidence_chain[1].details.all_pages are already complete and valid.
 
-    {{
-    "ui_render_mode": "dashboard_v2",
-    "document_id": "{raw_json.get('request_id', 'unknown')}",
-    "processed_at": "{datetime.utcnow().isoformat()}",
-    "dashboard_header": {{
-        "overall_score": number,
-        "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
-        "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
-        "verdict_title": "string",
-        "ai_executive_summary": "string",
-        "grounding_search_reference": "string",
-        "doc_type": "string",
-        "next_step_recommendation": "string"
-    }},
-    "layer_results": [
-        {{
-            "layer_id": "L1" | "L2" | "L3" | "L4",
-            "layer_title": "string",
-            "status": "PASS | FAIL | WARNING | SKIPPED",
-            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
-            "icon": "lucide_icon_name",
-            "score": number,
-            "ai_analysis": "string",
-            "technical_proofs": ["string"],
-            "has_visual_evidence": boolean, # Only need to insert true if there is visual evidence link in that layer, otherwise false or omit
-            "evidence_image_url": "string", # Only include if there is visual evidence for that layer, otherwise omit
-            "ATS_hacking": "string",  # Only include if there is ATS_hacking finding, otherwise display "None"
-            "ats_hacking_details": {{
-                "hidden_white_chars": number,
-                "micro_font_chars": number,
-            }} # Only include if there is ATS hacking details, otherwise omit
-        }}
-    ]
-    }}
-    # come out with the user friendly wording based on the original analysis, do not change the meaning or severity of the findings.
+    They typically follow this pattern:
+    "https://storage.googleapis.com/trustlens-632fa.firebasestorage.app/evidence/<id>/visual_ela_pX.jpg"
+
+    Where X may be 1, 2, 3, etc.
+
+    Extraction Rules:
+    - Set "evidence_image_url" equal to an array containing all extracted "url" values.
+    - Extract the exact string value from the "url" property.
+    - Do NOT reconstruct the URL.
+    - Do NOT infer missing URLs.
+    - Do NOT generate URLs based on pattern.
+    - Only use URLs that already exist in the input JSON.
+    - Preserve original order.
+
+    If evidence_image_url contains one or more URLs:
+        set has_visual_evidence = true
+    Else:
+        set has_visual_evidence = false
+
+    If any required property does not exist:
+        return "evidence_image_url": []
+
     ────────────────────────────
     🧭 FIELD MAPPING INSTRUCTIONS
     ────────────────────────────
@@ -545,6 +535,57 @@ async def generate_document_dashboard(
     • score = reflect severity from source analysis
     • status = PASS if safe, FAIL if risk detected
 
+    ATS Handling:
+
+    • Include "ATS_hacking" only if such finding exists.
+    • If not present, set "ATS_hacking": "None"
+    • Include "ats_hacking_details" only if details exist.
+    • Omit "ats_hacking_details" if not present.
+
+    ────────────────────────────
+    🌐 SOURCES EXTRACTION RULES
+    ────────────────────────────
+
+    Target output field:
+    "dashboard_header.sources" → must be an array of strings.
+
+    Source location in input JSON:
+    grounding_result.sources
+
+    Extraction steps (STRICT):
+
+    1. Check if "grounding_result" exists in the input JSON.
+    2. Inside it, check if "sources" exists and is an array.
+    3. If "sources" exists:
+    - Each element represents a source reference.
+    - Extract the website URL string from each element.
+    - If the element is already a string → use it directly.
+    - If the element is an object → extract the property that contains the website URL.
+    4. Add each extracted website URL string into the output array:
+    "dashboard_header.sources"
+
+    STRICT RULES:
+
+    - Copy the exact website URL string as provided.
+    - Do NOT rewrite, summarize, or modify the URL.
+    - Do NOT validate the URL.
+    - Do NOT generate new URLs.
+    - Do NOT infer missing URLs.
+    - Do NOT fabricate sources.
+    - Preserve original order.
+    - Only use URLs that already exist in the input JSON.
+
+    Fallback behavior:
+
+    - If "grounding_result" does not exist → set:
+    "sources": []
+
+    - If "grounding_result.sources" does not exist → set:
+    "sources": []
+
+    - If the array is empty → return:
+    "sources": []
+    
     Next Step Recommendation:
 
     • Generate actionable guidance for the user
@@ -580,6 +621,60 @@ async def generate_document_dashboard(
     • Modify fraud verdicts
     • Invent inconsistencies
     • Add visual claims not stated
+
+    ────────────────────────────
+    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
+    ────────────────────────────
+
+    {json.dumps(raw_json, indent=2)}
+
+    This input analysis is the ONLY source of truth.
+    All outputs must be derived from it.
+
+    ────────────────────────────
+    📤 OUTPUT FORMAT (STRICT SCHEMA)
+    ────────────────────────────
+
+    Return JSON ONLY.
+    No markdown.
+    No explanations.
+    No comments.
+
+    {{
+        "ui_render_mode": "dashboard_v2",
+        "document_id": "{{raw_json.get('request_id', 'unknown')}}",
+        "processed_at": "{{datetime.utcnow().isoformat()}}",
+        "dashboard_header": {{
+            "overall_score": number,
+            "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
+            "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
+            "verdict_title": "string",
+            "ai_executive_summary": "string",
+            "grounding_search_reference": "string",
+            "doc_type": "string",
+            "next_step_recommendation": "string",
+            "sources" : ["string"]
+        }},
+        "layer_results": [
+            {{
+            "layer_id": "L1" | "L2" | "L3" | "L4",
+            "layer_title": "string",
+            "status": "PASS | FAIL | WARNING | SKIPPED",
+            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
+            "icon": "lucide_icon_name",
+            "score": number,
+            "ai_analysis": "string",
+            "technical_proofs": ["string"],
+            "has_visual_evidence": boolean,
+            "evidence_image_url": ["string"],
+            "ATS_hacking": "string",
+            "ats_hacking_details": {{
+                "hidden_white_chars": number,
+                "micro_font_chars": number
+            }}
+            }}
+        ]
+    }}
 
     ────────────────────────────
     ✅ OUTPUT REQUIREMENTS

@@ -14,30 +14,30 @@ export function AnalysisProcess() {
   const [steps, setSteps] = useState<AnalysisStep[]>([
     {
       id: "ingestion",
-      title: "Secure File Ingestion",
-      description: "Verifying MIME types, correcting file extensions, and performing security sandbox checks.",
-      aiModel: "FastAPI Guard v4.0",
+      title: "Multi-Layer Risk Aggregator & Judge",
+      description: "Consolidates evidence from L1-L4 analysis layers. It applies weighted scoring based on document profiles, evaluates 'Hard Fail' triggers (such as unauthorized screenshots), and calculates a final risk level (SAFE to CRITICAL) while allowing for specific policy overrides like creative software forgiveness.",
+      aiModel: "Gemini 1.5 Flash",
       status: "pending"
     },
     {
       id: "forensics",
       title: "Multi-Layer Forensic Pipeline",
       description: "Executing deep analysis on Metadata, Visual layers, Content, and Logic consistency.",
-      aiModel: "ForensicEngine Pro",
+      aiModel: "Gemini-2.5-Pro + Gemini-3-Flash-Preview",
       status: "pending"
     },
     {
       id: "mapping",
       title: "Data Restructuring",
       description: "Mapping raw forensic findings into standardized dashboard schemas using Vision-Context.",
-      aiModel: "Gemini 1.5 Flash",
+      aiModel: "Gemini-Flash-Latest",
       status: "pending"
     },
     {
       id: "finalization",
       title: "Insight Refactoring",
       description: "Generating user-friendly summaries and actionable next steps without altering risk scores.",
-      aiModel: "Data Restructuring Engine",
+      aiModel: "Gemini-Flash-Latest",
       status: "pending"
     }
   ]);
@@ -55,7 +55,7 @@ export function AnalysisProcess() {
           idx === currentStepIndex ? { ...step, status: "complete" } : step
         ));
         setCurrentStepIndex(prev => prev + 1);
-      }, 16000); // Simulate 12 seconds per step
+      }, 17000); // Simulate 16 seconds per step
 
       return () => clearTimeout(timer);
     }

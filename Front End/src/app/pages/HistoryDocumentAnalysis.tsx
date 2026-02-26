@@ -15,6 +15,7 @@ import { handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import DocumentFeedback from "../components/analysis/DocumentFeedback";
 import { statusStyles } from "@/lib/utils";
+import { decryptFile, getAccessibleDocumentUrl } from "@/lib/encrypt";
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -43,6 +44,7 @@ export function HistoryDocumentAnalysis() {
     const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
     const [riskLevelColor, setRiskLevelColor] = useState<RiskLevelColor>('gray')
     const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
+    const [overallScore, setOverallScore] = useState<number>(0)
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
@@ -60,6 +62,8 @@ export function HistoryDocumentAnalysis() {
                 setRaw_analysis_id(result.data?.raw_analysis_id)
                 setDoc_type(result.data?.doc_type)
                 setStructure_analysis_id(result.data?.id)
+                setOverallScore(result.data?.analysis_content?.dashboard_header?.overall_score || 0)
+
                 // console.log("The structure data is: ", result.data)
             } else {
                 toast.error("Failed to fetch document analysis")
@@ -73,26 +77,46 @@ export function HistoryDocumentAnalysis() {
     //** main  */
     const fetchingFile = async () => {
         try {
-            setLoadingData(true)
-            if (docId) {
-                const response = await axios.get(`${backendUrl}/files/get_selected_files/${docId}`)
-                const result = response.data
+            setLoadingData(true);
 
-                if (result.success === true) {
-                    setSelectedDocument(result.data)
-                    await fetchingDocucmentAnalysis(docId)
-                }
-            } else {
-                toast.error("Document Id not found!")
-                return
+            if (!docId) {
+                toast.error("Document Id not found!");
+                return;
+            }
+
+            const response = await axios.get(
+                `${backendUrl}/files/get_selected_files/${docId}`
+            );
+
+            const result = response.data;
+
+            if (result.success === true) {
+                const documentData = result.data;
+
+                // 🔐 Decrypt using fresh data (NOT state)
+                const accessibleUrl = await getAccessibleDocumentUrl(
+                    documentData.fileUrl,
+                    documentData.encryptedKey!,
+                    documentData.iv!
+                );
+
+                // console.log("Decrypted key:", accessibleUrl);
+
+                // ✅ Now update state once
+                setSelectedDocument({
+                    ...documentData,
+                    fileUrl: accessibleUrl || documentData.fileUrl,
+                });
+
+                await fetchingDocucmentAnalysis(docId);
             }
         } catch (error) {
-            toast.error("Failed to laod document")
-            console.log("Error loading document: ", error)
+            toast.error("Failed to load document");
+            console.log("Error loading document:", error);
         } finally {
-            setLoadingData(false)
+            setLoadingData(false);
         }
-    }
+    };
 
     const handleConfirmReview = async () => {
         try {
@@ -194,7 +218,7 @@ export function HistoryDocumentAnalysis() {
                                     <DocumentViewer fileType={selectedDocument?.mimeType!} fileUrl={selectedDocument?.fileUrl!} />
                                 </TabsContent>
                                 <TabsContent value="ai-assistant" className="h-full">
-                                    <AiAssistant reqId={raw_analysis_id!} initialMessages={chatMessages} stage={stage} userType="user"/>
+                                    <AiAssistant reqId={raw_analysis_id!} initialMessages={chatMessages} stage={stage} userType="user" />
                                 </TabsContent>
                             </Tabs>
                         </div>
@@ -230,16 +254,17 @@ export function HistoryDocumentAnalysis() {
                                     </div>
 
                                     {/* Badge */}
-                                    <Badge
+                                    {/* <Badge
                                         variant="outline"
                                         className={`self-start flex-shrink-0 text-xs sm:text-sm font-semibold ${riskLevel === "CRITICAL" ? "text-red-600 bg-red-50"
-                                                : riskLevel === "SUSPICIOUS" ? "text-orange-600 bg-orange-50"
-                                                    : riskLevel === "CAUTION" ? "text-yellow-700 bg-yellow-50"
-                                                        : "text-green-600 bg-green-50"
+                                                : riskLevel === "SUSPICIOUS" ? "text-orange-600 "
+                                                    : riskLevel === "CAUTION" ? "text-yellow-700 "
+                                                        : "text-green-600 "
                                             }`}
                                     >
                                         {ai_analysis_format?.dashboard_header?.risk_level}
-                                    </Badge>
+                                    </Badge> */}
+                                    <div>Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}(Risk Score: {overallScore})</div>
                                 </div>
 
                                 <p className="text-sm md:text-base text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -278,8 +303,8 @@ export function HistoryDocumentAnalysis() {
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         <button
                                             className={`py-1.5 px-3 border rounded-lg text-xs sm:text-sm whitespace-nowrap ${selectedDocument?.flagged === false
-                                                    ? 'border-red-500 text-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20'
-                                                    : 'border-gray-400 text-gray-400 cursor-not-allowed'
+                                                ? 'border-red-500 text-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20'
+                                                : 'border-gray-400 text-gray-400 cursor-not-allowed'
                                                 } transition-colors`}
                                             onClick={() => setRequestReview(true)}
                                             disabled={selectedDocument?.flagged!}
@@ -350,6 +375,7 @@ export function HistoryDocumentAnalysis() {
                                     <LogicalConsistency
                                         layer={ai_analysis_format?.layer_results[3]!}
                                         nextStepRecommendation={ai_analysis_format?.dashboard_header.next_step_recommendation}
+                                        sources={ai_analysis_format?.dashboard_header?.sources}
                                     />
                                     {!openFeedback.findings ? (
                                         <div className="flex justify-end mt-4">

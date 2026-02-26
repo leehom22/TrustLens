@@ -9,16 +9,16 @@ import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 interface DocumentViewerProps {
-  fileUrl: string;
+  fileUrl?: string;
+  imageUrl?: string[]
   fileType: string;
 }
 
-const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) => {
+const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType, imageUrl }) => {
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
-
   return (
     <div className="w-full bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-inner h-[50vh] sm:h-[60vh] md:h-[70vh] lg:h-[80vh]">
-      {fileType === 'application/pdf' ? (
+      {fileType === 'application/pdf' && fileUrl ? (
         /* PDF VIEWING ENGINE */
         <div className="h-full">
           <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
@@ -47,21 +47,23 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) =>
                   <div className="z-10 flex gap-1.5 sm:gap-2">
                     <button
                       onClick={() => zoomIn()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-sm sm:text-base font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-sm sm:text-base font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Zoom in"
                     >
                       +
                     </button>
+
                     <button
                       onClick={() => zoomOut()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-sm sm:text-base font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-sm sm:text-base font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Zoom out"
                     >
                       −
                     </button>
+
                     <button
                       onClick={() => resetTransform()}
-                      className="bg-white/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white text-xs sm:text-sm font-medium transition-colors"
+                      className="bg-white/90 dark:bg-slate-700/90 px-3 py-1.5 sm:p-2 rounded shadow hover:bg-white dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-medium transition-colors border border-transparent dark:border-slate-600"
                       aria-label="Reset zoom"
                     >
                       Reset
@@ -69,11 +71,24 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ fileUrl, fileType }) =>
                   </div>
 
                   <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }}>
-                    <img
-                      src={fileUrl}
-                      alt="Document"
-                      className="h-full w-full object-contain"
-                    />
+                    <div className="flex flex-col items-center gap-4 w-full">
+                      {
+                        Array.isArray(imageUrl) === true ? 
+                        imageUrl?.map((url, index) => (
+                          <img
+                            key={index}
+                            src={url}
+                            alt={`Document ${index + 1}`}
+                            className="max-w-full object-contain"
+                          />
+                        )) :
+                        <img
+                            src={imageUrl || fileUrl}
+                            alt={`Document`}
+                            className="max-w-full object-contain"
+                          />
+                    }
+                    </div>
                   </TransformComponent>
 
                 </div>
