@@ -158,12 +158,17 @@ class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
             "timestamp": datetime.utcnow().isoformat(),
-            "level": record.levelname,
+            "severity": record.levelname,   # Identify the log level in GCP Logging
             "message": record.getMessage(),
             "module": record.module,
         }
         if hasattr(record, "request_id"):
             log_record["request_id"] = record.request_id
+
+        # Include any additional fields if present (e.g., from extra in logger.info(..., extra={...}))
+        if hasattr(record, "json_fields") and isinstance(record.json_fields, dict):
+            log_record.update(record.json_fields)
+
         return json.dumps(log_record)   # dict return as JSON string
 
 logger = logging.getLogger("TrustLens-Backend-Logger")

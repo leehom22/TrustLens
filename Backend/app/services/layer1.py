@@ -130,6 +130,9 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             p_lower = producer.lower()
             c_lower = creator.lower()
             full_meta_str = f"{p_lower} {c_lower}"
+
+            found_high = []
+            found_medium = []
             
             # Evaluation 2: High Risk Tools and Medium Risk Tools
             is_whitelisted = any(safe in full_meta_str for safe in SOFTWARE_WHITELIST)

@@ -7,6 +7,7 @@ import shutil
 import requests
 import json
 import google.generativeai as genai
+import time
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
 from fastapi.responses import FileResponse
@@ -44,6 +45,35 @@ structure_analysis_collection = 'structure_analysis_result'
 
 analysis_router = APIRouter()
 
+# ======================== Timing and Logging Function =========================
+async def measure_task(layer_name: str, req_id: str, awaitable_task):
+    start_time = time.perf_counter()
+    status = "SUCCESS"
+    try:
+        result = await awaitable_task
+        if hasattr(result, "status"):
+            status_value = result.status.value if hasattr(result.status, "value") else str(result.status)
+            if status_value.upper() == "ERROR":
+                status = "ERROR"
+            elif status_value.upper() == "SKIPPED":
+                status = "SKIPPED"
+    except Exception as e:
+        status = f"ERROR: {str(e)}"
+        raise e
+    finally:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        metric_payload = {
+            "event_type": "latency_metric",
+            "request_id": req_id,
+            "layer": layer_name,
+            "duration_ms": duration_ms,
+            "status": status
+        }
+        logger.info(f"[{layer_name}] executed in {duration_ms}ms", extra={"json_fields": metric_payload})
+    return result
+
+
+# ======================== Pipeline Execution =========================
 async def analyze_pipeline(
     doc_id: str, 
     req_id: str,
@@ -93,8 +123,12 @@ async def analyze_pipeline(
         t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
         t3 = run_layer_3_extraction(temp_path, verified_content_type)
 
-        # 3. Wait for all layers to complete
-        l1_res, l2_res, l3_data_raw = await asyncio.gather(t1, t2, t3)
+        # 3. Wait for all layers to complete and gather results
+        l1_res, l2_res, l3_data_raw = await asyncio.gather(
+            measure_task("L1_Metadata", req_id, t1),
+            measure_task("L2_Visual", req_id, t2),
+            measure_task("L3_Extraction", req_id, t3)
+        )
         l3_data = l3_data_raw if l3_data_raw is not None else {}
 
         evidence_urls = {
@@ -192,6 +226,8 @@ async def analyze_pipeline(
         ))
         
         # [Step 5] Layer 4: Logic Audit
+        start_l4 = time.perf_counter()   # Start timing for Layer 4
+
         logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "freelance_contract"]
         
         if detected_profile_key in logic_required_types:
@@ -204,6 +240,19 @@ async def analyze_pipeline(
                 risk_signals = [],
                 details={"reason": f"Not applicable for {detected_profile_key}"}
             ))
+
+        # Timing log for Layer 4
+        l4_duration_ms = int((time.perf_counter() - start_l4) * 1000)
+        logger.info(f"[L4_Logic] executed in {l4_duration_ms}ms", extra={
+            "json_fields": {
+                "event_type": "latency_metric",
+                "request_id": req_id,
+                "doc_type": detected_profile_key,
+                "layer": "L4_Logic",
+                "duration_ms": l4_duration_ms,
+                "status": "SUCCESS"
+            }
+        })
             
         # [Step 6] Layer 0: Final Technical Judge (Deterministic)
         judge_res_raw = await run_layer_0_judge(detected_profile_key, evidence_chain, profile)
@@ -261,8 +310,22 @@ async def analyze_pipeline(
         logger.info("Technical Analysis Complete", extra={"request_id": req_id, "score": report.overall_risk_score})
 
         # [Step 8] AI Agent Investigation
+        start_agent = time.perf_counter()
+
         ai_res_raw = await run_agent_analysis(report)
         ai_results = ai_res_raw if ai_res_raw is not None else {}
+
+        agent_duration_ms = int((time.perf_counter() - start_agent) * 1000)
+        logger.info(f"[L5_Agent] executed in {agent_duration_ms}ms", extra={
+            "json_fields": {
+                "event_type": "latency_metric",
+                "request_id": req_id,
+                "doc_type": detected_profile_key,
+                "layer": "L5_Agent",
+                "duration_ms": agent_duration_ms,
+                "status": "SUCCESS"
+            }
+        })
         
         # [Step 9] Hybrid Merge
         tech_score = report.overall_risk_score or 0
@@ -691,13 +754,27 @@ async def generate_document_dashboard(
     """
 
 
-    # -----------------------------
-    # 4️⃣ Generate Structured Output
-    # -----------------------------
+    # ----------------------------------------
+    # 4️⃣ Generate Structured Output & Logging
+    # ----------------------------------------
     try:
+        start_restructure = time.perf_counter()
+
         response = model.generate_content(
             [prompt, image_parts[0]]
         )
+
+        restructure_duration_ms = int((time.perf_counter() - start_restructure) * 1000)
+        logger.info(f"[AI_Restructure] executed in {restructure_duration_ms}ms", extra={
+            "json_fields": {
+                "event_type": "latency_metric",
+                "document_id": documentId,
+                "raw_analysis_id": raw_analysis_id,
+                "layer": "AI_Restructure",
+                "duration_ms": restructure_duration_ms,
+                "status": "SUCCESS"
+            }
+        })
 
         clean_json = (
             response.text
