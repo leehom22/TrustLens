@@ -107,7 +107,8 @@ You must translate technical data into a professional forensic narrative.
         "L2_Visual": "Translate code to plain English.",
         "L3_Content": "Translate code to plain English.",
         "L4_Logic": "Translate code to plain English."
-    }
+    },
+    "next_step_recommendation": "Provide clear, actionable guidance for the human reviewer based on the specific findings (e.g., 'Contact the vendor to verify the mismatched bank account', 'Request the physical original document due to digital tampering', or 'Safe to proceed with standard processing')."
 }
 """
 
@@ -272,7 +273,8 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
             "verification_status": "UNVERIFIED",
             "grounding_score": 0, # Default to 0 risk if AI fails, let Tech Score rule
             "grounding_result": {"error": "Parsing error"},
-            "layer_summaries": {}
+            "layer_summaries": {},
+            "next_step_recommendation": "Review document findings manually."
         }
         
         # Combining output with default format
@@ -291,5 +293,6 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
             "grounding_score": 0,
             "grounding_result": {"error": str(e)},
             "layer_summaries": {},
-            "active_lessons_applied": []
+            "active_lessons_applied": [],
+            "next_step_recommendation": "Review document findings manually."
         }

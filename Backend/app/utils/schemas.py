@@ -52,7 +52,7 @@ class AnalysisRecord(FinalReport):
 
     # 1. AI Explanation Summary (Context)
     agent_summary: str = Field(..., description="AI generated executive summary combining forensics and grounding")
-    final_recommendation: str = Field(..., description="ACCEPT | REVIEW | REJECT")
+    final_recommendation: str = Field(..., description="Actionable guidance sentence from AI Agent")
     active_lessons_applied: List[str] = Field(default_factory=list, description="Historical lessons used in reasoning")
 
     # 2. Grounding Search result

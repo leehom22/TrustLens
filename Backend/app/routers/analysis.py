@@ -332,7 +332,10 @@ async def analyze_pipeline(
         grounding_score = ai_results.get("grounding_score", 0)
         
         final_risk_score = max(tech_score, grounding_score)
+
+        ai_recommendation = ai_results.get("next_step_recommendation", "Review document findings manually.")
         
+        """
         final_rec = "REVIEW"
         if final_risk_score > 80:
             final_rec = "REJECT"
@@ -343,6 +346,7 @@ async def analyze_pipeline(
 
         if ai_results.get("verification_status") == "SUSPICIOUS" and final_rec == "ACCEPT":
             final_rec = "REVIEW"
+        """
 
         # [Step 10] Packaging AnalysisRecord
         final_record = AnalysisRecord(
@@ -357,7 +361,7 @@ async def analyze_pipeline(
             grounding_result = ai_results.get("grounding_result"),
             layer_summaries = ai_results.get("layer_summaries"),
             active_lessons_applied = ai_results.get("active_lessons_applied", []),
-            final_recommendation = final_rec
+            final_recommendation = ai_recommendation
         )
         
         # [Step 11] Session Memory
@@ -459,7 +463,9 @@ async def analyze_document(
         raise HTTPException(status_code=500, detail=str(e))    
 
 
-# =============== AI for Restructuring Data (Frontend Display Structure) ==============
+
+# =============== Function for Restructuring Data (Frontend Display Structure) ==============
+
 @analysis_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
     documentId: str = Form(...),
@@ -467,24 +473,23 @@ async def generate_document_dashboard(
     file: UploadFile = File(...),
 ):
     """
-    Restructure an existing AI document analysis into a standardized dashboard format.
-    The AI must NOT change meaning, scores, or conclusions.
+    PURE DATA RESTRUCTURING ENGINE
+    
+    STRICT RULES:
+    1. NO decision logic - only format existing data
+    2. NO recalculation of risk scores or levels
+    3. NO generation of new text - only use existing fields
+    4. NO mapping of risk levels to different values
+    5. NO creation of verdicts or recommendations
+    
+    This endpoint ONLY restructures the existing analysis data
+    into a dashboard-friendly format.
     """
-
-    model = genai.GenerativeModel("gemini-flash-latest")
-
-    # -----------------------------
-    # 1️⃣ Load Image (Context Only)
-    # -----------------------------
-    image_bytes = await file.read()
-
-    image_parts = [{
-        "mime_type": file.content_type,
-        "data": image_bytes
-    }]
+    
+    start_restructure = time.perf_counter()
 
     # -----------------------------
-    # 2️⃣ Parse Raw Analysis JSON
+    # 1️⃣ Parse Raw Analysis JSON
     # -----------------------------
     try:
         raw_json = json.loads(document_raw_data)
@@ -495,347 +500,364 @@ async def generate_document_dashboard(
         }
 
     raw_analysis_id = raw_json.get("request_id", "unknown")
-
-    # -----------------------------
-    # 3️⃣ RESTRUCTURING PROMPT
-    # -----------------------------
-    prompt = f"""
-    You are a DATA RESTRUCTURING ENGINE.
-
-    Your task is to transform an EXISTING AI-GENERATED DOCUMENT ANALYSIS into a standardized dashboard JSON format.
-
-    You are NOT performing document analysis.
-    You are NOT verifying the image.
-    You are NOT generating new findings.
-
-    You are strictly restructuring and mapping data.
-
-    ────────────────────────────
-    🚨 STRICT RULES — MUST FOLLOW
-    ────────────────────────────
-
-    1. DO NOT re-analyze the document.
-    2. DO NOT verify or interpret the image.
-    3. DO NOT change risk scores, findings, or conclusions.
-    4. DO NOT add, remove, or invent risks.
-    5. DO NOT hallucinate missing evidence.
-    6. ONLY restructure existing analysis data.
-    7. Preserve severity, tone, and intent exactly.
-    8. If data is missing → infer structure, NOT meaning.
-    9. Use original terminology whenever possible.
-    10. Output must be valid JSON only.
-    11. USER-FRIENDLY REWORDING:
-        Translate technical findings into clear, accessible language
-        for a non-technical user in the "ai_executive_summary"
-        and "ai_analysis" fields.
-        Do NOT change meaning, severity, or verdict.
-
-    You are performing DATA REFACTORING, not analysis.
-
-    ────────────────────────────
-    📦 EVIDENCE EXTRACTION RULES
-    ────────────────────────────
-
-    Populate "evidence_image_url" as an array of strings.
-
-    Source of data:
-    - Access evidence_chain[1]
-    - Inside it, read the object property "details"
-    - Inside "details", access the array "all_pages"
-    - For each element inside "all_pages", extract the value of the property "url"
-
-    IMPORTANT:
-
-    The URLs inside evidence_chain[1].details.all_pages are already complete and valid.
-
-    They typically follow this pattern:
-    "https://storage.googleapis.com/trustlens-632fa.firebasestorage.app/evidence/<id>/visual_ela_pX.jpg"
-
-    Where X may be 1, 2, 3, etc.
-
-    Extraction Rules:
-    - Set "evidence_image_url" equal to an array containing all extracted "url" values.
-    - Extract the exact string value from the "url" property.
-    - Do NOT reconstruct the URL.
-    - Do NOT infer missing URLs.
-    - Do NOT generate URLs based on pattern.
-    - Only use URLs that already exist in the input JSON.
-    - Preserve original order.
-
-    If evidence_image_url contains one or more URLs:
-        set has_visual_evidence = true
-    Else:
-        set has_visual_evidence = false
-
-    If any required property does not exist:
-        return "evidence_image_url": []
-
-    ────────────────────────────
-    🧭 FIELD MAPPING INSTRUCTIONS
-    ────────────────────────────
-
-    Executive Summary Mapping:
-
-    • ai_executive_summary =
-    Condense "agent_summary" from the input analysis
-    into 2-3 sentences maximum.
-    • Preserve original meaning and conclusions.
-    • Do NOT introduce new interpretations.
-
-    Layer Analysis Mapping:
-
-    Extract analysis from:
-
-    • layer_summaries.L1_Metadata → layer_id = "L1"
-    • layer_summaries.L2_Visual → layer_id = "L2"
-    • layer_summaries.L3_Content → layer_id = "L3"
-    • layer_summaries.L4_Logic → layer_id = "L4"
-
-    For each layer:
-
-    • ai_analysis = summarized explanation of the layer findings
-    • technical_proofs = direct supporting evidence
-    • score = reflect severity from source analysis
-    • status = PASS if safe, FAIL if risk detected
-
-    ATS Handling:
-
-    • Include "ATS_hacking" only if such finding exists.
-    • If not present, set "ATS_hacking": "None"
-    • Include "ats_hacking_details" only if details exist.
-    • Omit "ats_hacking_details" if not present.
-
-    ────────────────────────────
-    🌐 SOURCES EXTRACTION RULES
-    ────────────────────────────
-
-    Target output field:
-    "dashboard_header.sources" → must be an array of strings.
-
-    Source location in input JSON:
-    grounding_result.sources
-
-    Extraction steps (STRICT):
-
-    1. Check if "grounding_result" exists in the input JSON.
-    2. Inside it, check if "sources" exists and is an array.
-    3. If "sources" exists:
-    - Each element represents a source reference.
-    - Extract the website URL string from each element.
-    - If the element is already a string → use it directly.
-    - If the element is an object → extract the property that contains the website URL.
-    4. Add each extracted website URL string into the output array:
-    "dashboard_header.sources"
-
-    STRICT RULES:
-
-    - Copy the exact website URL string as provided.
-    - Do NOT rewrite, summarize, or modify the URL.
-    - Do NOT validate the URL.
-    - Do NOT generate new URLs.
-    - Do NOT infer missing URLs.
-    - Do NOT fabricate sources.
-    - Preserve original order.
-    - Only use URLs that already exist in the input JSON.
-
-    Fallback behavior:
-
-    - If "grounding_result" does not exist → set:
-    "sources": []
-
-    - If "grounding_result.sources" does not exist → set:
-    "sources": []
-
-    - If the array is empty → return:
-    "sources": []
     
-    Next Step Recommendation:
-
-    • Generate actionable guidance for the user
-    • Must be based strictly on existing findings
-    • Must NOT introduce new risks
-    • Example intent:
-    - Verification steps
-    - Manual review
-    - Contact issuer
-    - Request original document
-
-    Grounding Reference:
-
-    • grounding_search_reference =
-    Source validation references if present
-    (e.g., bank formats, receipt standards, document norms)
-
-    ────────────────────────────
-    ⚠️ DATA PRESERVATION RULE
-    ────────────────────────────
-
-    You must preserve:
-
-    • Risk severity
-    • Fraud indicators
-    • Numerical scores
-    • Analytical conclusions
-    • Evidence claims
-
-    You must NOT:
-
-    • Downgrade or upgrade risk
-    • Modify fraud verdicts
-    • Invent inconsistencies
-    • Add visual claims not stated
-
-    ────────────────────────────
-    📥 INPUT ANALYSIS (SOURCE OF TRUTH)
-    ────────────────────────────
-
-    {json.dumps(raw_json, indent=2)}
-
-    This input analysis is the ONLY source of truth.
-    All outputs must be derived from it.
-
-    ────────────────────────────
-    📤 OUTPUT FORMAT (STRICT SCHEMA)
-    ────────────────────────────
-
-    Return JSON ONLY.
-    No markdown.
-    No explanations.
-    No comments.
-
-    {{
-        "ui_render_mode": "dashboard_v2",
-        "document_id": "{{raw_json.get('request_id', 'unknown')}}",
-        "processed_at": "{{datetime.utcnow().isoformat()}}",
-        "dashboard_header": {{
-            "overall_score": number,
-            "risk_level": "SAFE" | "CAUTION" | "SUSPICIOUS" | "CRITICAL",
-            "risk_level_color": "green" | "yellow" | "red" | "blue" | "gray",
-            "verdict_title": "string",
-            "ai_executive_summary": "string",
-            "grounding_search_reference": "string",
-            "doc_type": "string",
-            "next_step_recommendation": "string",
-            "sources" : ["string"]
-        }},
-        "layer_results": [
-            {{
-            "layer_id": "L1" | "L2" | "L3" | "L4",
-            "layer_title": "string",
-            "status": "PASS | FAIL | WARNING | SKIPPED",
-            "status_color": "green" | "yellow" | "red" | "blue" | "gray",
-            "icon": "lucide_icon_name",
-            "score": number,
-            "ai_analysis": "string",
-            "technical_proofs": ["string"],
-            "has_visual_evidence": boolean,
-            "evidence_image_url": ["string"],
-            "ATS_hacking": "string",
-            "ats_hacking_details": {{
-                "hidden_white_chars": number,
-                "micro_font_chars": number
-            }}
-            }}
-        ]
-    }}
-
-    ────────────────────────────
-    ✅ OUTPUT REQUIREMENTS
-    ────────────────────────────
-
-    • Valid JSON only
-    • No trailing commas
-    • No markdown blocks
-    • No explanations
-    • Schema must match exactly
-    • All 4 layers must exist (L1 - L4)
-
-    Return the structured dashboard JSON now.
-    """
-
-
-    # ----------------------------------------
-    # 4️⃣ Generate Structured Output & Logging
-    # ----------------------------------------
-    try:
-        start_restructure = time.perf_counter()
-
-        response = model.generate_content(
-            [prompt, image_parts[0]]
-        )
-
-        restructure_duration_ms = int((time.perf_counter() - start_restructure) * 1000)
-        logger.info(f"[AI_Restructure] executed in {restructure_duration_ms}ms", extra={
-            "json_fields": {
-                "event_type": "latency_metric",
-                "document_id": documentId,
-                "raw_analysis_id": raw_analysis_id,
-                "layer": "AI_Restructure",
-                "duration_ms": restructure_duration_ms,
-                "status": "SUCCESS"
-            }
-        })
-
-        clean_json = (
-            response.text
-            .strip()
-            .replace("```json", "")
-            .replace("```", "")
-        )
-
-        analysis_map = json.loads(clean_json)
-
-    except Exception as e:
-        analysis_map = {
-            "error": "Failed to parse AI response",
-            "raw": response.text if "response" in locals() else str(e)
+    # -----------------------------
+    # 2️⃣ Extract Core Data (NO TRANSFORMATION)
+    # -----------------------------
+    
+    # Extract evidence chain
+    evidence_chain = raw_json.get("evidence_chain", [])
+    
+    # Helper function to find layer by name
+    def find_layer(layer_name):
+        return next((l for l in evidence_chain if l.get("layer_name") == layer_name), {})
+    
+    # Get individual layers - preserve exact layer names from source
+    l1 = find_layer("L1_Metadata")
+    l2 = find_layer("L2_Visual")
+    l3 = find_layer("L3_Content")
+    l4 = find_layer("L4_Logic")
+    
+    # -----------------------------
+    # 3️⃣ Extract ALL fields as-is
+    # -----------------------------
+    
+    # Risk data - use EXACT values from source
+    overall_score = raw_json.get("overall_risk_score")
+    risk_level = raw_json.get("risk_level")
+    doc_type = raw_json.get("doc_type", "unknown")
+    
+    # Agent outputs - use EXACT text from source
+    agent_summary = raw_json.get("agent_summary", "")
+    
+    # Layer summaries - use EXACT text from source if available
+    layer_summaries = raw_json.get("layer_summaries", {})
+    
+    # Grounding results - use EXACT data from source
+    grounding_result = raw_json.get("grounding_result", {})
+    grounding_notes = grounding_result.get("notes", "")
+    
+    # Sources - preserve original structure, don't transform
+    sources = grounding_result.get("sources", [])
+    
+    # -----------------------------
+    # 4️⃣ Extract Evidence URLs
+    # -----------------------------
+    evidence_urls = []
+    
+    # Try multiple possible locations where evidence URLs might exist
+    # This is data location mapping, NOT decision logic
+    if l2.get("visual_evidence_url"):
+        evidence_urls.append(l2["visual_evidence_url"])
+    
+    l2_details = l2.get("details", {})
+    all_pages = l2_details.get("all_pages", [])
+    for page in all_pages:
+        url = page.get("url")
+        if url and url not in evidence_urls:
+            evidence_urls.append(url)
+    
+    # -----------------------------
+    # 5️⃣ Extract ATS Hacking Data
+    # -----------------------------
+    ats_hacking = l2.get("ATS_Hacking")
+    ats_hacking_details = None
+    
+    if l2_details.get("ats_hacking_details"):
+        ats_hacking_details = l2_details["ats_hacking_details"]
+    
+    # -----------------------------
+    # 6️⃣ Status Mapping
+    # -----------------------------
+    # This is purely presentational - maps internal status to UI display values
+    # Does NOT change risk assessment, only how it's displayed
+    def map_status_to_ui(status_str):
+        if not status_str:
+            return "SKIPPED", "gray"
+        
+        # Direct mapping table - 1:1 relationship, no interpretation
+        status_map = {
+            "clean": ("PASS", "green"),
+            "suspicious": ("WARNING", "yellow"),
+            "high_risk": ("FAIL", "red"),
+            "error": ("FAIL", "red"),
+            "skipped": ("SKIPPED", "gray")
         }
-
+        
+        return status_map.get(status_str.lower(), ("SKIPPED", "gray"))
+    
+    # Map each layer's status - preserves original assessment, only changes display format
+    l1_status, l1_color = map_status_to_ui(l1.get("status"))
+    l2_status, l2_color = map_status_to_ui(l2.get("status"))
+    l3_status, l3_color = map_status_to_ui(l3.get("status"))
+    l4_status, l4_color = map_status_to_ui(l4.get("status"))
+    
     # -----------------------------
-    # 5️⃣ Fetch Doc Type
+    # 7️⃣ Extract Technical Proofs
     # -----------------------------
-    doc_type = "unknown"
+    
+    # ------------ Handle Risk Signals with Semantic Translation -------------
+    SIGNAL_TRANSLATION_MAP = {
+        "STRUCTURE_HIDDEN_DATA": "Hidden data payload detected after file EOF.",
+        "STRUCTURE_CORRUPTED_EOF": "Corrupted or strictly truncated file structure.",
+        "HIGH_METADATA_SOFTWARE_RISK": "Edited with high-risk image manipulation software.",
+        "MEDIUM_METADATA_SOFTWARE_RISK": "Processed by consumer-level PDF/Image tool.",
+        "TIME_PARADOX_METADATA": "Logical Time Paradox: File created after it was modified.",
+        "VISUAL_TAMPERING_DETECTED": "Inconsistent pixel quality indicating localized manipulation.",
+        "ATS_HACKING_DETECTED": "Hidden white characters or micro-fonts detected.",
+        "MATH_ROW_MISMATCH": "Line item calculation (Qty × Unit) does not match extracted total.",
+        "MATH_TAX_LOGIC_FAIL": "Statutory tax calculation or subtotal aggregation failed.",
+        "MISSING_INVOICE_ID": "Missing unique document identifier (Invoice/Receipt No).",
+        "MISSING_CORE_ACCOUNT_ID": "Bank Statement is missing core account identifier.",
+        "MISSING_PAYMENT_ROUTE": "Invoice is missing bank account details for payment routing.",
+        "MISSING_PAYMENT_PROOF": "Missing payment verification data (Account or Ref ID).",
+        "BENEFICIARY_MISMATCH": "Account holder name does not match the vendor name.",
+        "TIME_PARADOX_LOGIC": "Logical Error: Due Date is earlier than Document Issue Date.",
+        "ID_DATE_TIME_PARADOX": "Impossible chronography: Transaction ID generated before document existed.",
+        "ID_DATE_LAG_SUSPICIOUS": "Suspicious lag between transaction ID and receipt generation.",
+        "ID_DATE_MISMATCH_STRICT": "Transaction ID belongs to a completely different day.",
+        "LONG_ENTRY_DELAY": "Unusual processing delay extending beyond normal administrative window.",
+        "DATE_FROM_FUTURE": "Transaction date is in the future relative to analysis time.",
+        "CHRONOLOGY_INCONSISTENCY": "Sequential order of transactions is corrupted (Time Jump).",
+        "BALANCE_RECONCILIATION_FAIL": "Opening Balance + Cash Flows does not equal Closing Balance."
+    }
 
-    doc_ref = db.collection("analysis_results").document(raw_analysis_id)
-    doc_snap = doc_ref.get()
+    INTERNAL_SIGNAL_BLACKLIST = {"JSON_REPAIRED"}   # Filter out technical signals that are not meaningful
 
-    if doc_snap.exists:
-        doc_data = doc_snap.to_dict()
-        doc_type = doc_data.get("doc_type", "unknown")
+    def format_proofs(signals_list):
+        if not signals_list:
+            return []
+        return [
+            SIGNAL_TRANSLATION_MAP.get(sig, sig) 
+            for sig in signals_list 
+            if sig not in INTERNAL_SIGNAL_BLACKLIST
+        ]
 
+    l1_proofs = format_proofs(l1.get("risk_signals", []))
+    l2_proofs = format_proofs(l2.get("risk_signals", []))
+    l3_proofs = format_proofs(l3.get("risk_signals", []))
+    l4_proofs = format_proofs(l4.get("risk_signals", []))
+
+    # -------------- Data Enrichment from Layer Details ----------------
+
+    # --- L1: Metadata Details ---
+    l1_details = l1.get("details", {})
+    if l1_details.get("producer_raw"):
+        l1_proofs.append(f"Document Generator: {l1_details['producer_raw']}")
+    if l1_details.get("software_risk"):
+        l1_proofs.append(l1_details["software_risk"])
+    if l1_details.get("time_paradox"):
+        l1_proofs.append(l1_details["time_paradox"])
+    if l1_details.get("structure", {}).get("structure_note"):
+        l1_proofs.append(l1_details["structure"]["structure_note"])
+
+    # --- L2: Visual Details ---
+    l2_details = l2.get("details", {})
+    if l2_details.get("mode"):
+        l2_proofs.append(f"Visual Analysis Mode: {l2_details['mode']}")
+    
+    worst_metrics = l2_details.get("worst_page_details", {}).get("metrics", {})
+    if worst_metrics.get("max_z_score"):
+        z_score = worst_metrics["max_z_score"]
+        if z_score > 0:
+            l2_proofs.append(f"Peak ELA Anomaly (Z-Score): {z_score:.2f}")
+
+    # --- L3: Content Details ---
+    l3_details = l3.get("details", {})
+    vis_elements = l3_details.get("visual_elements", {})
+    if vis_elements.get("mixed_fonts"):
+        l3_proofs.append("Multiple inconsistent font types detected across text layout.")
+    if vis_elements.get("misaligned_layout"):
+        l3_proofs.append("Text bounding box misalignments detected in table or layout.")
+
+    # --- L4: Logic Audit Trails ---
+    l4_details = l4.get("details", {})
+    audit_trails = l4_details.get("audit_trails", [])
+    
+    # Extract up to 3 FAILs for L4 proofs, with detailed formatting
+    fails = [t for t in audit_trails if t.get("status") == "FAIL"]
+    for f in fails[:3]:
+        # Concatenation Format: "[Row 1 Math] 5.0 * 10.0 = 50.00 (Extracted: 60.00)"
+        proof_str = f"[{f.get('check_name', 'Audit')}] {f.get('visual_feedback', '')}"
+        if proof_str not in l4_proofs:
+            l4_proofs.append(proof_str)
+            
+    # If no FAILs, then show PASS proofs to provide positive evidence and balance the narrative
+    if not fails:
+        passes = [t for t in audit_trails if t.get("status") == "PASS"]
+        for p in passes[:2]:
+            proof_str = f"Verified: {p.get('check_name', 'Audit')} - {p.get('reason', 'OK')}"
+            if proof_str not in l4_proofs:
+                l4_proofs.append(proof_str)
+
+    # Crop proofs to max 6 per layer for UI display
+    l1_proofs = list(dict.fromkeys(l1_proofs))[:5]
+    l2_proofs = list(dict.fromkeys(l2_proofs))[:5]
+    l3_proofs = list(dict.fromkeys(l3_proofs))[:5]
+    l4_proofs = list(dict.fromkeys(l4_proofs))[:5]
+    
     # -----------------------------
-    # 6️⃣ Build Payload
+    # 8️⃣ Build Layer Results
+    # -----------------------------
+    layer_results = [
+        {
+            "layer_id": "L1",
+            "layer_title": "Metadata Forensics",  # Fixed display title
+            "status": l1_status,
+            "status_color": l1_color,
+            "icon": "file-text",
+            "score": l1.get("score", 0),
+            "ai_analysis": layer_summaries.get("L1_Metadata", "No AI summary available."),
+            "technical_proofs": l1_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        },
+        {
+            "layer_id": "L2",
+            "layer_title": "Visual Forensics",
+            "status": l2_status,
+            "status_color": l2_color,
+            "icon": "eye",
+            "score": l2.get("score", 0),
+            "ai_analysis": layer_summaries.get("L2_Visual", "No AI summary available."),
+            "technical_proofs": l2_proofs,
+            "has_visual_evidence": len(evidence_urls) > 0,
+            "evidence_image_url": evidence_urls,
+            "ATS_hacking": ats_hacking if ats_hacking else "None"
+        },
+        {
+            "layer_id": "L3",
+            "layer_title": "Content Extraction",
+            "status": l3_status,
+            "status_color": l3_color,
+            "icon": "file-digit",
+            "score": l3.get("score", 0),
+            "ai_analysis": layer_summaries.get("L3_Content", "No AI summary available."),
+            "technical_proofs": l3_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        },
+        {
+            "layer_id": "L4",
+            "layer_title": "Logic Audit",
+            "status": l4_status,
+            "status_color": l4_color,
+            "icon": "calculator",
+            "score": l4.get("score", 0),
+            "ai_analysis": layer_summaries.get("L4_Logic", "No AI summary available."),
+            "technical_proofs": l4_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        }
+    ]
+    
+    # Add ATS hacking data if present
+    if ats_hacking:
+        layer_results[1]["ATS_hacking"] = ats_hacking
+    if ats_hacking_details:
+        layer_results[1]["ats_hacking_details"] = ats_hacking_details
+    
+    # -----------------------------
+    # 9️⃣ Build Dashboard Header
+    # -----------------------------
+    risk_upper = str(risk_level).upper()
+    
+    title_map = {
+        "CRITICAL": "Critical Risk Detected",
+        "HIGH_RISK": "High Risk Detected",
+        "SUSPICIOUS": "Suspicious Elements Found",
+        "CAUTION": "Caution Advised",
+        "SAFE": "Document Verified",
+        "CLEAN": "Document Verified"
+    }
+
+    # Risk level color mapping - purely presentational, no semantic change
+    color_map = {
+        "SAFE": "green",
+        "CAUTION": "yellow",
+        "SUSPICIOUS": "orange",
+        "CRITICAL": "red",
+        "HIGH_RISK": "red"
+    }
+    
+    dashboard_header = {
+        "overall_score": overall_score,
+        "risk_level": risk_level,
+        "risk_level_color": color_map.get(str(risk_level).upper(), "gray"),
+        "verdict_title": title_map.get(risk_upper, "Analysis Complete"),
+        "ai_executive_summary": agent_summary,
+        "grounding_search_reference": grounding_notes,
+        "doc_type": doc_type,
+        "next_step_recommendation": raw_json.get("final_recommendation", "Review document findings manually."),
+        "sources": sources  # EXACT structure from source
+    }
+    
+    # -----------------------------
+    # 🔟 Build Final Dashboard
+    # -----------------------------
+    dashboard = {
+        "ui_render_mode": "dashboard_v2",
+        "document_id": raw_analysis_id,
+        "processed_at": datetime.utcnow().isoformat(),
+        "dashboard_header": dashboard_header,
+        "layer_results": layer_results
+    }
+
+    restructure_duration_ms = int((time.perf_counter() - start_restructure) * 1000)
+    logger.info(f"[AI_Restructure] executed in {restructure_duration_ms}ms", extra={
+        "json_fields": {
+            "event_type": "latency_metric",
+            "document_id": documentId,
+            "raw_analysis_id": raw_analysis_id,
+            "layer": "AI_Restructure",
+            "duration_ms": restructure_duration_ms,
+            "status": "SUCCESS"
+        }
+    })
+    
+    # -----------------------------
+    # 1️⃣1️⃣ Fetch Additional Metadata
+    # -----------------------------
+    # This is adding context, NOT changing the analysis
+    try:
+        doc_ref = db.collection("analysis_results").document(raw_analysis_id)
+        doc_snap = doc_ref.get()
+        if doc_snap.exists:
+            doc_data = doc_snap.to_dict()
+            # Only add fields that don't conflict with existing data
+            if not doc_type or doc_type == "unknown":
+                dashboard["dashboard_header"]["doc_type"] = doc_data.get("doc_type", "unknown")
+    except Exception as e:
+        print(f"Warning: Could not fetch additional metadata: {e}")
+    
+    # -----------------------------
+    # 1️⃣2️⃣ Save to Database
     # -----------------------------
     db_payload = {
         "documentId": documentId,
         "raw_analysis_id": raw_analysis_id,
         "doc_type": doc_type,
-        "analysis_content": analysis_map,
+        "analysis_content": dashboard,
         "created_at": datetime.utcnow().isoformat(),
     }
-
-    # -----------------------------
-    # 7️⃣ Save Result
-    # -----------------------------
-    db.collection("structure_analysis_result").add(db_payload)
     
-    # add risk level and risk score to 'upload_file' collection for history display and sorting
-    upload_document_db = db.collection('upload_files').document(documentId).get()
+    try:
+        db.collection("structure_analysis_result").add(db_payload)
+        
+        upload_document_db = db.collection('upload_files').document(documentId).get()
+        if upload_document_db.exists:
+            db.collection('upload_files').document(documentId).update({
+                "risk_level": risk_level,
+                "risk_level_color": dashboard_header["risk_level_color"],
+                "overall_score": overall_score
+            })
+    except Exception as e:
+        print(f"Warning: Firestore save error: {e}")
     
-    if upload_document_db.exists:
-        risk_level = analysis_map.get("dashboard_header", {}).get("risk_level", "unknown")
-        overall_score = analysis_map.get("dashboard_header", {}).get("overall_score", 0)
-        risk_level_color = analysis_map.get("dashboard_header", {}).get("risk_level_color", "gray")
-
-        db.collection('upload_files').document(documentId).update({
-            "risk_level": risk_level,
-            "risk_level_color": risk_level_color,
-            "overall_score": overall_score
-        })
-    else:
-        print(f"Warning: Document with ID {documentId} not found in 'upload_files' collection for risk level update.")
-
     return db_payload
+
+
+
 
 
     
