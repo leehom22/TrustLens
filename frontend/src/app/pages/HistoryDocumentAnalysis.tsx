@@ -264,7 +264,7 @@ export function HistoryDocumentAnalysis() {
                                     >
                                         {ai_analysis_format?.dashboard_header?.risk_level}
                                     </Badge> */}
-                                    <div>Risk Level: {ai_analysis_format?.dashboard_header?.risk_level}(Risk Score: {overallScore})</div>
+                                    <div>Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Risk Score: {overallScore})</div>
                                 </div>
 
                                 <p className="text-sm md:text-base text-slate-700 dark:text-slate-300 leading-relaxed">
