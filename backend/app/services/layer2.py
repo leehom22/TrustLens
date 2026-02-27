@@ -30,6 +30,10 @@ if platform.system() == "Windows":
 else:
     POPPLER_PATH = None  # Linux uses system PATH
 def check_poppler():
+    if platform.system() == "Windows" and POPPLER_PATH:
+        target_exe = os.path.join(POPPLER_PATH, "pdftoppm.exe")
+        if os.path.exists(target_exe):
+            return True
     return shutil.which("pdftoppm") is not None
 
 # ================ Poppler Check ====================
