@@ -489,7 +489,7 @@ async def generate_document_dashboard(
     start_restructure = time.perf_counter()
 
     # -----------------------------
-    # 1️⃣ Parse Raw Analysis JSON
+    # 1️. Parse Raw Analysis JSON
     # -----------------------------
     try:
         raw_json = json.loads(document_raw_data)
@@ -502,7 +502,7 @@ async def generate_document_dashboard(
     raw_analysis_id = raw_json.get("request_id", "unknown")
     
     # -----------------------------
-    # 2️⃣ Extract Core Data (NO TRANSFORMATION)
+    # 2. Extract Core Data (NO TRANSFORMATION)
     # -----------------------------
     
     # Extract evidence chain
@@ -519,7 +519,7 @@ async def generate_document_dashboard(
     l4 = find_layer("L4_Logic")
     
     # -----------------------------
-    # 3️⃣ Extract ALL fields as-is
+    # 3. Extract ALL fields as-is
     # -----------------------------
     
     # Risk data - use EXACT values from source
@@ -541,7 +541,7 @@ async def generate_document_dashboard(
     sources = grounding_result.get("sources", [])
     
     # -----------------------------
-    # 4️⃣ Extract Evidence URLs
+    # 4. Extract Evidence URLs
     # -----------------------------
     evidence_urls = []
     
@@ -558,7 +558,7 @@ async def generate_document_dashboard(
             evidence_urls.append(url)
     
     # -----------------------------
-    # 5️⃣ Extract ATS Hacking Data
+    # 5. Extract ATS Hacking Data
     # -----------------------------
     ats_hacking = l2.get("ATS_Hacking")
     ats_hacking_details = None
@@ -567,7 +567,7 @@ async def generate_document_dashboard(
         ats_hacking_details = l2_details["ats_hacking_details"]
     
     # -----------------------------
-    # 6️⃣ Status Mapping
+    # 6. Status Mapping
     # -----------------------------
     # This is purely presentational - maps internal status to UI display values
     # Does NOT change risk assessment, only how it's displayed
@@ -593,7 +593,7 @@ async def generate_document_dashboard(
     l4_status, l4_color = map_status_to_ui(l4.get("status"))
     
     # -----------------------------
-    # 7️⃣ Extract Technical Proofs
+    # 7. Extract Technical Proofs
     # -----------------------------
     
     # ------------ Handle Risk Signals with Semantic Translation -------------
@@ -697,7 +697,7 @@ async def generate_document_dashboard(
     l4_proofs = list(dict.fromkeys(l4_proofs))[:5]
     
     # -----------------------------
-    # 8️⃣ Build Layer Results
+    # 8. Build Layer Results
     # -----------------------------
     layer_results = [
         {
@@ -758,7 +758,7 @@ async def generate_document_dashboard(
         layer_results[1]["ats_hacking_details"] = ats_hacking_details
     
     # -----------------------------
-    # 9️⃣ Build Dashboard Header
+    # 9. Build Dashboard Header
     # -----------------------------
     risk_upper = str(risk_level).upper()
     
@@ -793,7 +793,7 @@ async def generate_document_dashboard(
     }
     
     # -----------------------------
-    # 🔟 Build Final Dashboard
+    # 10. Build Final Dashboard
     # -----------------------------
     dashboard = {
         "ui_render_mode": "dashboard_v2",
@@ -816,7 +816,7 @@ async def generate_document_dashboard(
     })
     
     # -----------------------------
-    # 1️⃣1️⃣ Fetch Additional Metadata
+    # 11. Fetch Additional Metadata
     # -----------------------------
     # This is adding context, NOT changing the analysis
     try:
@@ -831,7 +831,7 @@ async def generate_document_dashboard(
         print(f"Warning: Could not fetch additional metadata: {e}")
     
     # -----------------------------
-    # 1️⃣2️⃣ Save to Database
+    # 12. Save to Database
     # -----------------------------
     db_payload = {
         "documentId": documentId,
