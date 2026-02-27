@@ -26,3 +26,39 @@ python Backend/run.py
 # - Endpoint Test
 http://127.0.0.1:8000/docs
 
+
+// README.md
+
+⚙️ TrustLens Backend (AI Engine)
+The core logic layer that orchestrates Gemini AI and Deepgram to verify document integrity.
+
+🧠 Core Logic
+Gemini AI: Performs visual forensic analysis on document pixels and metadata.
+
+Deepgram: Used for voice-authenticated document release or audio-log analysis.
+
+Firebase: Stores document metadata and manages file triggers.
+
+FastAPI Mail: Sends instant "High-Risk" alerts to administrators when forgery is detected.
+
+🛠️ Installation & API
+Navigate to folder: cd backend
+
+Create virtual environment: python -m venv venv && source venv/bin/activate
+
+Install dependencies: pip install -r requirements.txt
+
+Environment Variables:
+
+GOOGLE_API_KEY=your_gemini_key
+DEEPGRAM_API_KEY=your_deepgram_key
+FIREBASE_SERVICE_ACCOUNT=path_to_json
+MAIL_USERNAME=your_email
+
+
+📡 API Endpoints (Core)
+
+Method,Endpoint,Description
+POST,/analyze,Uploads document for Gemini forensic analysis.
+POST,/verify-voice,Processes Deepgram audio for biometric confirmation.
+GET,/report/{id},Fetches a specific forgery detection report.
