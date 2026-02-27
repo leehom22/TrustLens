@@ -8,7 +8,7 @@ import { getStorage } from 'firebase/storage'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  apiKey: "AIzaSyBRT7Mx5exTgT370WF1QDw7GnLJ9TGKtxg",
   authDomain: "trustlens-632fa.firebaseapp.com",
   projectId: "trustlens-632fa",
   storageBucket: "trustlens-632fa.firebasestorage.app",
