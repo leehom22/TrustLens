@@ -55,7 +55,7 @@ export function AnalysisProcess() {
           idx === currentStepIndex ? { ...step, status: "complete" } : step
         ));
         setCurrentStepIndex(prev => prev + 1);
-      }, 17000); // Simulate 16 seconds per step
+      }, 15000); // Simulate 16 seconds per step
 
       return () => clearTimeout(timer);
     }

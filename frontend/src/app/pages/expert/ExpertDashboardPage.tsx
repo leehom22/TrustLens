@@ -13,6 +13,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { RiskLevel } from '@/app/types/db-ai-analysis-type';
 
 // --- TYPE DEFINITIONS ---
 // Matching the interface from your ReviewDocumentList
@@ -37,7 +38,7 @@ const RISK_PRIORITY: Record<string, number> = {
   'SAFE': 0,
 };
 
-const UserDashboard = () => {
+const ExpertDashboardPage = () => {
     const [dbDocuments, setDbDocuments] = useState<FileDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>('All');
@@ -399,4 +400,4 @@ const UserDashboard = () => {
     );
 }
 
-export default UserDashboard;
+export default ExpertDashboardPage;

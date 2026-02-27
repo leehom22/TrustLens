@@ -14,7 +14,7 @@ import { DocumentUploader } from "./components/analysis/DocumentUploader";
 import { AnalysisInterface } from "./components/analysis/AnalysisInterface";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "../lib/firebase";
-import DocumentReview from "./pages/expert/DocumentReviewPage";
+import ExpertDashboardPage from "./pages/expert/ExpertDashboardPage";
 import DocumentAnalysis from "./pages/expert/DocumentAnalysis";
 import axios from 'axios'
 import { Loader2 } from "lucide-react";
@@ -222,7 +222,7 @@ export default function App() {
               {expert ? (
                 <>
                   <Route path="/review-document-list" element={<ReviewDocumentList/>} />
-                  <Route path="/expert-dashboard" element={<DocumentReview />} />
+                  <Route path="/expert-dashboard" element={<ExpertDashboardPage />} />
                   <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
                 </>
               ) : (
