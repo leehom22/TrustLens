@@ -316,12 +316,12 @@ async def analyze_pipeline(
         ai_results = ai_res_raw if ai_res_raw is not None else {}
 
         agent_duration_ms = int((time.perf_counter() - start_agent) * 1000)
-        logger.info(f"[L5_Agent] executed in {agent_duration_ms}ms", extra={
+        logger.info(f"[Analysis_Agent] executed in {agent_duration_ms}ms", extra={
             "json_fields": {
                 "event_type": "latency_metric",
                 "request_id": req_id,
                 "doc_type": detected_profile_key,
-                "layer": "L5_Agent",
+                "layer": "Analysis_Agent",
                 "duration_ms": agent_duration_ms,
                 "status": "SUCCESS"
             }
