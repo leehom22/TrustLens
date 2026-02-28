@@ -15,7 +15,8 @@ import {
 import { createClient, LiveClient, LiveTranscriptionEvents } from '@deepgram/sdk'
 import { toast } from 'sonner'
 import { collection, query, orderBy, getDocs, where } from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase"; // <--- FIXED PATH
+import ReactMarkdown from 'react-markdown'
+import { auth, db } from "../../../lib/firebase"; 
 
 // --- TYPES ---
 type AnalysisStage = "idle" | "analyzing" | "complete";
@@ -349,7 +350,9 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                                         ? "bg-blue-600 text-white rounded-br-none"
                                         : "bg-white dark:bg-slate-800 border dark:border-slate-700 text-gray-800 dark:text-gray-200 rounded-bl-none"
                                     }`}>
-                                    {msg.content}
+                                        <ReactMarkdown>
+                                            {msg.content}
+                                        </ReactMarkdown>
                                 </div>
                             </div>
                         ))}

@@ -13,7 +13,8 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { RiskLevel } from '@/app/types/db-ai-analysis-type';
+import { RiskLevel, RiskLevelColor } from '@/app/types/db-ai-analysis-type';
+import { statusStyles } from '@/lib/utils';
 
 // --- TYPE DEFINITIONS ---
 // Matching the interface from your ReviewDocumentList
@@ -23,19 +24,20 @@ interface FileDoc {
     fileUrl: string;
     fileSize: number;
     created_at: string;
-    riskScore: number;
-    riskLevel: string;
+    overall_score: number;
+    risk_level: string;
     analyzedBy: string;
     expertReview?: boolean | null;
+    risk_level_color?: RiskLevelColor;
 }
 
 type RiskLevelFilter = RiskLevel | "All"
 
 const RISK_PRIORITY: Record<string, number> = {
-  'CRITICAL': 3,
-  'SUSPICIOUS': 2,
-  'CAUTION': 1,
-  'SAFE': 0,
+    'CRITICAL': 3,
+    'SUSPICIOUS': 2,
+    'CAUTION': 1,
+    'SAFE': 0,
 };
 
 const ExpertDashboardPage = () => {
@@ -71,7 +73,7 @@ const ExpertDashboardPage = () => {
         // A. Filter by Search Term
         let filtered = dbDocuments.filter((doc) =>
             doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            doc.riskLevel.toLowerCase().includes(searchTerm.toLowerCase())
+            doc.risk_level.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
         // B. Calculate Stats (Based on ALL fetched documents, regardless of search)
@@ -306,22 +308,18 @@ const ExpertDashboardPage = () => {
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-400">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold">{doc.riskScore}</span>
+                                                    <span className="font-bold">{doc.overall_score}</span>
                                                     <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                                         <div
-                                                            className={`h-full ${doc.riskScore > 70 ? 'bg-red-500' : doc.riskScore > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
-                                                            style={{ width: `${doc.riskScore}%` }}
+                                                            className={`h-full ${doc.overall_score > 70 ? 'bg-red-500' : doc.overall_score > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                                            style={{ width: `${doc.overall_score}%` }}
                                                         />
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium border text-sm
-                      ${doc.riskLevel === 'High' ? 'bg-red-50 border-red-100 text-red-700 dark:bg-red-900/20 dark:border-red-900/30'
-                                                        : doc.riskLevel === 'Medium' ? 'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900/30'
-                                                            : 'bg-green-50 border-green-100 text-green-700 dark:bg-green-900/20 dark:border-green-900/30'}`}>
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${doc.riskLevel === 'High' ? 'bg-red-500' : doc.riskLevel === 'Medium' ? 'bg-amber-500' : 'bg-green-500'}`} />
-                                                    {doc.riskLevel || 'Low'}
+                                                <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}`}>
+                                                    {doc.risk_level || "Low"}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-500 dark:text-slate-400">{formatDate(doc.created_at)}</td>
@@ -365,22 +363,22 @@ const ExpertDashboardPage = () => {
                                     {/* Row: risk level + date */}
                                     <div className="flex items-center justify-between gap-2 mb-3">
                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium border text-xs
-                  ${doc.riskLevel === 'High' ? 'bg-red-50 border-red-100 text-red-700 dark:bg-red-900/20 dark:border-red-900/30'
-                                                : doc.riskLevel === 'Medium' ? 'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900/30'
+                  ${doc.risk_level === 'High' ? 'bg-red-50 border-red-100 text-red-700 dark:bg-red-900/20 dark:border-red-900/30'
+                                                : doc.risk_level === 'Medium' ? 'bg-amber-50 border-amber-100 text-amber-700 dark:bg-amber-900/20 dark:border-amber-900/30'
                                                     : 'bg-green-50 border-green-100 text-green-700 dark:bg-green-900/20 dark:border-green-900/30'}`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${doc.riskLevel === 'High' ? 'bg-red-500' : doc.riskLevel === 'Medium' ? 'bg-amber-500' : 'bg-green-500'}`} />
-                                            {doc.riskLevel || 'Low'}
+                                            <div className={`w-1.5 h-1.5 rounded-full ${statusStyles[doc.risk_level_color || 'gray']}`} />
+                                            {doc.risk_level || 'Low'}
                                         </span>
                                         <span className="text-xs text-gray-400 dark:text-slate-500">{formatDate(doc.created_at)}</span>
                                     </div>
 
                                     {/* Risk score bar */}
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold text-gray-700 dark:text-slate-300 w-6">{doc.riskScore}</span>
+                                        <span className="text-xs font-bold text-gray-700 dark:text-slate-300 w-6">{doc.overall_score}</span>
                                         <div className="flex-1 h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                             <div
-                                                className={`h-full transition-all ${doc.riskScore > 70 ? 'bg-red-500' : doc.riskScore > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
-                                                style={{ width: `${doc.riskScore}%` }}
+                                                className={`h-full transition-all ${doc.overall_score > 70 ? 'bg-red-500' : doc.overall_score > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                                style={{ width: `${doc.overall_score}%` }}
                                             />
                                         </div>
                                         <span className="text-xs text-gray-400">risk score</span>
