@@ -48,7 +48,7 @@ def extract_first_date(text: str) -> Optional[datetime]:
     # 2. Matching with punctuation (- or / or \ or .)
     try:
         # Seeking for substring with format 25 Nov 23 or 2023-11-25 with common possible formats
-        dates = re.findall(r"(\d{1,4}[-/\.]\w{1,3}[-/\.]\d{2,4})", text)
+        dates = re.findall(r"(\d{1,4}[-/\.\s]\w{1,3}[-/\.\s]\d{2,4})", text)
         for d_str in dates:
             try:
                 for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%Y", "%d %b %y", "%d %b %Y"]:
@@ -453,8 +453,8 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 ))
 
 
-    # 4C: Chronology Audit (New Feature for Bank Statements)
-    if doc_type in ["bank_statement", "payslip"] and len(line_item_dates) > 1:
+    # 4C: Chronology Audit
+    if len(line_item_dates) > 1:
         
         # --- Real World Sanity Date Check ---
         real_now = datetime.now(timezone.utc)
@@ -501,13 +501,23 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
         if chronology_errors:
             l4_signals.append("CHRONOLOGY_INCONSISTENCY")
-            score = max(score, 85)
-            if status != LayerStatus.HIGH_RISK: status = LayerStatus.SUSPICIOUS
+
+            if doc_type in ["bank_statement", "payslip"]:
+                score = max(score, 85)
+                status = LayerStatus.HIGH_RISK
+                reason_suffix = "Critical: Systematic timeline breach in financial record."
             
-            # Record the first two mistakes
+            # Other document types with date sequence (e.g., delivery note) can be more forgiving as the date sequence might not be critical
+            else:
+                score = max(score, 60)
+                if status == LayerStatus.CLEAN:
+                    status = LayerStatus.SUSPICIOUS
+                reason_suffix = "Caution: Logical sequence error in document items."
+            
+            # Only show first 2 errors
             for err in chronology_errors[:2]:
                 audit_trails.append(create_audit_record(
-                    "Timeline Logic", "FAIL", "Sequential Order", err, "Inconsistent timeline detected"
+                    "Timeline Logic", "FAIL", "Sequential Order", err, reason_suffix
                 ))
                 
         elif not future_violation:

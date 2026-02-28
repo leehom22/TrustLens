@@ -316,12 +316,12 @@ async def analyze_pipeline(
         ai_results = ai_res_raw if ai_res_raw is not None else {}
 
         agent_duration_ms = int((time.perf_counter() - start_agent) * 1000)
-        logger.info(f"[L5_Agent] executed in {agent_duration_ms}ms", extra={
+        logger.info(f"[Analysis_Agent] executed in {agent_duration_ms}ms", extra={
             "json_fields": {
                 "event_type": "latency_metric",
                 "request_id": req_id,
                 "doc_type": detected_profile_key,
-                "layer": "L5_Agent",
+                "layer": "Analysis_Agent",
                 "duration_ms": agent_duration_ms,
                 "status": "SUCCESS"
             }
@@ -604,7 +604,9 @@ async def generate_document_dashboard(
         "MEDIUM_METADATA_SOFTWARE_RISK": "Processed by consumer-level PDF/Image tool.",
         "TIME_PARADOX_METADATA": "Logical Time Paradox: File created after it was modified.",
         "VISUAL_TAMPERING_DETECTED": "Inconsistent pixel quality indicating localized manipulation.",
-        "ATS_HACKING_DETECTED": "Hidden white characters or micro-fonts detected.",
+        "ATS_HACKING_DETECTED": "Document Integrity: Hidden formatting anomalies identified (ATS Hacking).",
+        "ATS_HACKING_DETECTED_White_Text": "Evidence: Invisible white-on-white text layers found in document content.",
+        "ATS_HACKING_DETECTED_Micro_Font": "Evidence: Suspicious micro-sized fonts (< 2pt) used to manipulate machine indexing.",
         "MATH_ROW_MISMATCH": "Line item calculation (Qty × Unit) does not match extracted total.",
         "MATH_TAX_LOGIC_FAIL": "Statutory tax calculation or subtotal aggregation failed.",
         "MISSING_INVOICE_ID": "Missing unique document identifier (Invoice/Receipt No).",
