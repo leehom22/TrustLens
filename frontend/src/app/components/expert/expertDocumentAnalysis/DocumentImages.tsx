@@ -339,7 +339,7 @@ export default function ImageViewer({ userId, documentUrl, documentId, documentN
 
                         {/* Zoom */}
                         <button
-                            className="px-3 py-2 bg-gray-200 rounded"
+                            className="px-3 py-2 bg-gray-200 rounded text-black"
                             onClick={() => transformRef.current?.zoomIn()}
                         >
                             <ZoomIn className="w-4 h-4 inline mr-1" />
@@ -347,7 +347,7 @@ export default function ImageViewer({ userId, documentUrl, documentId, documentN
                         </button>
 
                         <button
-                            className="px-3 py-2 bg-gray-200 rounded"
+                            className="px-3 py-2 bg-gray-200 rounded text-black"
                             onClick={() => transformRef.current?.zoomOut()}
                         >
                             <ZoomOut className="w-4 h-4 inline mr-1" />
@@ -355,7 +355,7 @@ export default function ImageViewer({ userId, documentUrl, documentId, documentN
                         </button>
 
                         <button
-                            className="px-3 py-2 bg-gray-200 rounded"
+                            className="px-3 py-2 bg-gray-200 rounded text-black"
                             onClick={() => transformRef.current?.resetTransform()}
                         >
                             <RotateCcw className="w-4 h-4 inline mr-1" />

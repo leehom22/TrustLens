@@ -8,7 +8,7 @@ const AnalysisSummary = ({ selectedDocument }: { selectedDocument: DocumentAnaly
             <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <AlertCircle
                     className="w-5 h-5"
-                    style={{ color: selectedDocument!.dashboard_header.risk_level_color }}
+                    style={{ color: selectedDocument!.dashboard_header.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header.risk_level_color}}
                 />
                 {selectedDocument!.dashboard_header.verdict_title}
             </h3>
@@ -18,11 +18,11 @@ const AnalysisSummary = ({ selectedDocument }: { selectedDocument: DocumentAnaly
                 <span
                     className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
                     style={{
-                        backgroundColor: `${selectedDocument!.dashboard_header.risk_level_color}20`,
-                        color: selectedDocument!.dashboard_header.risk_level_color
+                        backgroundColor: `white`,
+                        color: selectedDocument!.dashboard_header.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header.risk_level_color
                     }}
                 >
-                    {selectedDocument!.dashboard_header.risk_level} - Score: {selectedDocument!.dashboard_header.overall_score}
+                    {selectedDocument!.dashboard_header.risk_level} - Risk Score: {selectedDocument!.dashboard_header.overall_score}
                 </span>
             </div>
 

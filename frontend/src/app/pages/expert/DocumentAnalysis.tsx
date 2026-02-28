@@ -227,24 +227,24 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                             className="space-y-4"
                                         >
                                             {/* Horizontally scrollable tab list on mobile */}
-                                            <div className="overflow-x-auto pb-1 -mb-1">
-                                                <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full sm:min-w-0">
-                                                    {[
-                                                        { value: 'metadata', label: 'Metadata & Source' },
-                                                        { value: 'heatmap', label: 'Visual Manipulation' },
-                                                        { value: 'content', label: 'Content Semantics' },
-                                                        { value: 'findings', label: 'Logical Consistency' },
-                                                    ].map(({ value, label }) => (
-                                                        <TabsTrigger
-                                                            key={value}
-                                                            value={value}
-                                                            className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
-                    data-[state=active]:text-blue-600 data-[state=active]:font-bold
-                    dark:text-slate-400 dark:data-[state=active]:text-blue-400"
-                                                        >
-                                                            {label}
-                                                        </TabsTrigger>
-                                                    ))}
+                                            <div className="overflow-x-auto pb-1 -mb-1 flex-1">
+                                                <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full ">
+                                                {[
+                                                    { value: 'metadata', label: 'Metadata' },
+                                                    { value: 'heatmap', label: 'Visuals' },
+                                                    { value: 'content', label: 'Semantics' },
+                                                    { value: 'findings', label: 'Consistency' },
+                                                ].map(({ value, label }) => (
+                                                    <TabsTrigger
+                                                    key={value}
+                                                    value={value}
+                                                    className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
+                                                            data-[state=active]:text-blue-600 data-[state=active]:font-bold
+                                                            dark:text-slate-400 dark:data-[state=active]:text-blue-400"
+                                                    >
+                                                    {label}
+                                                    </TabsTrigger>
+                                                ))}
                                                 </TabsList>
                                             </div>
 

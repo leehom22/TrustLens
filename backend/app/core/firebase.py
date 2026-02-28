@@ -11,7 +11,7 @@ from firebase_admin import credentials, firestore, storage
     
 #     firebase_admin.initialize_app(cred, {
 #         'storageBucket': 'trustlens-632fa.firebasestorage.app'
-#     })
+#     }) 
 # # ! For production
 
 # ! For development only
