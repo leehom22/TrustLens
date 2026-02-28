@@ -274,6 +274,11 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             page_results.append({
                 "page": idx + 1,
                 "score": current_page_score,
+                "breakdown": {
+                    "ATS_Hacking": ats_score,
+                    "Black_Level": final_black_score,
+                    "Texture": final_texture_score
+                },
                 "url": f"/evidence/{heatmap_name}",
                 "local_path": os.path.abspath(heatmap_path),
                 "metrics": metrics
@@ -308,11 +313,11 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "analyzed_pages": len(images), 
                 "all_pages": page_results,
                 "worst_page_details": worst,
-                "advanced_score_breakdown": {
-                    "ATS_Hacking": ats_score,
-                    "Black_Level": final_black_score,
-                    "Texture/Statistical_Island": final_texture_score,
-                },
+                "advanced_score_breakdown": worst.get("breakdown", {
+                    "ATS_Hacking": 0,
+                    "Black_Level": 0.0,
+                    "Texture/Statistical_Island": 0
+                }),
                 "ats_hacking_details": {
                     "hidden_white_chars": ats_total_hidden,
                     "micro_font_chars": ats_total_tiny

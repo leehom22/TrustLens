@@ -267,12 +267,17 @@ def analyze_ats_hacking(pdf_path: str, page_idx: int, cv_img: np.ndarray):
                 # Check 1: White on White (Color Analysis)
                 c = char.get('non_stroking_color')
                 if c is not None:
-                    # CMYK or RGB white
-                    if c == (1,) or c == [1] or c == (1,1,1) or c == [1,1,1] or c == (0,0,0,0):
-                        is_suspicious = True
-                        reason = "White"
-                    # Sometimes white is represented as 1 in Grayscale
-                    elif isinstance(c, (float, int)) and c == 1:
+                    if isinstance(c, (tuple, list)):
+                        if len(c) == 1 and c[0] >= 0.95:  # Grayscale White
+                            is_suspicious = True
+                            reason = "White"
+                        elif len(c) == 3 and all(v >= 0.95 for v in c):  # RGB White
+                            is_suspicious = True
+                            reason = "White"
+                        elif len(c) == 4 and all(v <= 0.05 for v in c):  # CMYK White (No ink)
+                            is_suspicious = True
+                            reason = "White"
+                    elif isinstance(c, (float, int)) and c >= 0.95:
                         is_suspicious = True
                         reason = "White"
 
@@ -285,7 +290,7 @@ def analyze_ats_hacking(pdf_path: str, page_idx: int, cv_img: np.ndarray):
 
                 if is_suspicious:
                     text_char = char.get('text', '')
-                    if not text_char or text_char.isspace():
+                    if not text_char:
                         continue
                     
                     hidden_chars.append(char)
@@ -310,9 +315,14 @@ def analyze_ats_hacking(pdf_path: str, page_idx: int, cv_img: np.ndarray):
                             cv_img[top:bottom, x0:x1] = sub_img
                         
                         # Draw text in red
-                        font_scale = max(0.4, (bottom - top) / 30.0)
+                        if not text_char.isspace():
+                            font_scale = max(0.4, (bottom - top) / 30.0)
+                            cv2.putText(cv_img, text_char, (x0, bottom-2),
+                                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), 1)
+                        """
                         cv2.putText(cv_img, text_char, (x0, bottom-2),
                                     cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0,0,255), 1)
+                        """
 
             total_suspicious = len(hidden_chars)
             if total_suspicious > 5:
@@ -320,10 +330,12 @@ def analyze_ats_hacking(pdf_path: str, page_idx: int, cv_img: np.ndarray):
                 result["score"] = min(100, 50 + total_suspicious * 2)
                 result["mask"] = mask
                 
+                signals = set()
                 if result["details"]["hidden_count"] > 0:
-                    result["signals"].append(f"ATS_Hacking")
+                    signals.add("ATS_Hacking_White_Text")
                 if result["details"]["tiny_count"] > 0:
-                    result["signals"].append(f"ATS_Hacking")
+                    signals.add("ATS_Hacking_Micro_Font")
+                result["signals"] = list(signals)
                     
     except Exception as e:
         # pdfplumber sometimes fails on malformed PDFs
