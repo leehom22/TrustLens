@@ -1,33 +1,62 @@
 💻 TrustLens Frontend
-The user interface for document ingestion and real-time forgery reporting.
 
-✨ Features
+TrustLens Frontend is the secure web interface for AI-powered document fraud detection and expert review.
 
-Login:
+It enables users to upload documents, view real-time forensic analysis, chat with AI, and request expert verification — all in a responsive, role-based system.
 
-Analysis Dashboard: Visualizes "Confidence Scores" and highlighted forgery zones.
+🚀 What It Does
 
-Expert Analysis Dashboard Page: 
+👤 User Workflow
 
-Expert Document Review Page: 
+1. Upload encrypted documents for analysis
+2. View AI forensic results (Summary, Metadata, Semantics, Consistency)
+3. Inspect documents with zoom & pan
+4. Chat with AI about findings
+5. Request manual expert review
+6. Track history of past analyses
+7. Receive email notifications
+8. Submit feedback to improve the system
 
-Secure Auth: Firebase Authentication for multi-tenant access.
 
-Drag-and-Drop: Intuitive document upload interface.
+🧑‍⚖️ Expert Workflow
+
+1. Review flagged documents
+2. Annotate PDFs/images with comments
+3. Chat with AI for assistance
+4. Submit official decisions (Authentic / Suspicious / Forgery)
+5. Send review reports to users via email
 
 
-Responsive Design: Built with Tailwind CSS for mobile and desktop forensics.
+🔐 Key Highlights
 
-📦 Setup
+- Role-based access control (User / Expert)
+- Encrypted document handling
+- Real-time analysis updates
+- Fully responsive (mobile + desktop)
+- Modular and scalable architecture
 
-Navigate to folder: cd frontend
 
-Install dependencies: npm install
+🛠 Tech Stack
 
-Configure .env:
+- React
+- Tailwind CSS
+- Firebase (Auth & Storage)
+- AI-powered backend integration
 
-Plaintext
-VITE_FIREBASE_API_KEY= your_key
+
+📦 Quick Start
+
+1. cd frontend
+2. npm install
+3. Create .env:
+
+VITE_FIREBASE_API_KEY=your_key
 VITE_BACKEND_URL=http://127.0.0.1:8000
 
-Launch: npm run dev
+
+Run:
+npm run dev
+
+🎯 Impact
+
+TrustLens Frontend turns complex forensic analysis into an accessible, transparent, and actionable experience — empowering both everyday users and experts in one unified platform.
