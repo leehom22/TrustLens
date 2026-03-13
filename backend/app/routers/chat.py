@@ -319,14 +319,18 @@ def get_mode_config(mode: str, req_id: str):
     - Texture / Statistical Islands: Detects 'Smoothing' or 'Erasing'. Identifies abnormally smooth patches that lack the expected background noise or variance (indicating smudging, patching, or cloning).
     
     **Layer 3: Content & Semantics**
-    - **Hidden Text**: White-on-white text used to trick AI Resume readers (ATS).
-    - **Urgency**: "Pay now or legal action" combined with bad quality = Scam.
+    - Semantic paradoxes: internal contradictions (e.g., graduation vs. work dates, contract expiry < effective). Signal: `SEMANTIC_PARADOX_DETECTED`.
+    - Scam patterns: urgency threats, mismatched authorities. Signal: `SCAM_PATTERN_DETECTED`.
 
     **Layer 4: Logic Audit (The Mathematician)**
-    - **Math Integrity**: `Qty x Unit Price == Total`? `Subtotal + Tax == Total`?
-    - **Chronology**: Do dates flow sequentially? (Time Travel check).
-    - **Beneficiary Check**: Does `Account Holder` match `Vendor Name`? (Prevents Injection Fraud).
-    - **Balance Reconciliation**: `Opening + Flow == Closing`?
+    - Math integrity: `Qty×Unit == Total` (`MATH_ROW_MISMATCH`); subtotal+tax == total (`MATH_TAX_LOGIC_FAIL`).
+    - Payment route: missing invoice ID/account (`MISSING_INVOICE_ID`, `MISSING_PAYMENT_ROUTE`).
+    - Beneficiary mismatch (`BENEFICIARY_MISMATCH`).
+    - Temporal logic: due < invoice (`TIME_PARADOX_LOGIC`); ID date vs. doc date (`ID_DATE_TIME_PARADOX`); future dates (`DATE_FROM_FUTURE`); chronology jumps (`CHRONOLOGY_INCONSISTENCY`).
+    - Statement balance: open+flow == close (`BALANCE_RECONCILIATION_FAIL`).
+    - Payslip: deduction breakdown mismatch (`MATH_DEDUCTION_MISMATCH`), net pay error (`MATH_NET_PAY_MISMATCH`).
+    - Summon: invalid agency (`INVALID_ISSUING_AGENCY`), offence > issue/due (`SUMMON_TIME_PARADOX`).
+    - Contract: party symmetry (`ENTITY_SYMMETRY_VIOLATION`), effective > expiry (`CONTRACT_TIME_PARADOX`).
 
     ### 3. SCORING RUBRIC
     - **CRITICAL / HARD FAIL (95-100)**: Proven Tampering, Time Paradox, or Math Fail. REJECT.

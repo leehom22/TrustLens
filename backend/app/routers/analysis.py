@@ -636,7 +636,17 @@ async def generate_document_dashboard(
         "LONG_ENTRY_DELAY": "Unusual processing delay extending beyond normal administrative window.",
         "DATE_FROM_FUTURE": "Transaction date is in the future relative to analysis time.",
         "CHRONOLOGY_INCONSISTENCY": "Sequential order of transactions is corrupted (Time Jump).",
-        "BALANCE_RECONCILIATION_FAIL": "Opening Balance + Cash Flows does not equal Closing Balance."
+        "BALANCE_RECONCILIATION_FAIL": "Opening Balance + Cash Flows does not equal Closing Balance.",
+        "MATH_DEDUCTION_MISMATCH": "Payslip deductions breakdown does not sum up to the total deductions.",
+        "MATH_NET_PAY_MISMATCH": "Payslip Net Pay calculation (Gross - Deductions) is incorrect.",
+        "INVALID_ISSUING_AGENCY": "Document issuing agency is not recognized as a valid Malaysian authority.",
+        "SUMMON_TIME_PARADOX": "Impossible timeline: Offence occurred after the summon was issued or due.",
+        "ENTITY_SYMMETRY_VIOLATION": "High Risk: Contract appears to be self-dealing or circular (Party A matches Party B).",
+        "CONTRACT_TIME_PARADOX": "Logical error: Contract expires before it takes effect.",
+        "MYKAD_INVALID_STATE": "MyKad structural error: Invalid State/Country PB code.",
+        "MYKAD_INVALID_DOB": "MyKad structural error: Date of birth is physically impossible.",
+        "MYKAD_MINOR_SIGNATORY": "Legal compliance risk: Signatory is a minor (< 18 years old).",
+        "MYKAD_AGE_ANOMALY": "Identity anomaly: Signatory age is unusually high (> 100 years old)."
     }
 
     INTERNAL_SIGNAL_BLACKLIST = {"JSON_REPAIRED"}   # Filter out technical signals that are not meaningful
@@ -699,11 +709,20 @@ async def generate_document_dashboard(
     l4_details = l4.get("details", {})
     audit_trails = l4_details.get("audit_trails", [])
     
-    # Extract up to 3 FAILs for L4 proofs, with detailed formatting
+    # Extract up to 4 FAILs for L4 proofs, with detailed formatting
     fails = [t for t in audit_trails if t.get("status") == "FAIL"]
-    for f in fails[:3]:
+    for f in fails[:4]:
         # Concatenation Format: "[Row 1 Math] 5.0 * 10.0 = 50.00 (Extracted: 60.00)"
-        proof_str = f"[{f.get('check_name', 'Audit')}] {f.get('visual_feedback', '')}"
+        check_name = f.get('check_name', 'Audit')
+        visual = f.get('visual_feedback', '')
+        reason = f.get('reason', '')
+        # For Rule 6-9，take info from reasons
+        # Filter rendundant "Unexplained discrepancy" in Rule 2
+        if reason and reason not in ["Unexplained discrepancy"]:
+            proof_str = f"[{check_name}] {visual} - {reason}"
+        else:
+            proof_str = f"[{check_name}] {visual}"
+            
         if proof_str not in l4_proofs:
             l4_proofs.append(proof_str)
             

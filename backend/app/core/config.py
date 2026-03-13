@@ -69,7 +69,8 @@ _STRICT_FINANCIAL_RULES = {
         "CHRONOLOGY_INCONSISTENCY",
         "MATH_ROW_MISMATCH",
         "MATH_TAX_LOGIC_FAIL",
-        "BALANCE_RECONCILIATION_FAIL"
+        "BALANCE_RECONCILIATION_FAIL",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
@@ -85,6 +86,7 @@ _TRANSACTIONAL_RULES = {
         "MATH_TAX_LOGIC_FAIL",
         "BALANCE_RECONCILIATION_FAIL",
         "TIME_PARADOX_LOGIC",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
@@ -96,7 +98,8 @@ _LEGAL_CONTRACT_RULES = {
     "hard_fail_checks": [
         "HIGH_METADATA_SOFTWARE_RISK",
         "SCAM_PATTERN_DETECTED",
-        "TIME_PARADOX_LOGIC"
+        "TIME_PARADOX_LOGIC",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
@@ -107,7 +110,8 @@ _STRICT_OFFICIAL_RULES = {
     "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.4, "L4": 0.3}, 
     "hard_fail_checks": [
         "HIGH_METADATA_SOFTWARE_RISK",
-        "ID_DATE_TIME_PARADOX"
+        "ID_DATE_TIME_PARADOX",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
@@ -123,7 +127,8 @@ DOC_RISK_PROFILES = {
         "weights": {"L1": 0.05, "L2": 0.55, "L3": 0.4, "L4": 0.0},
         "hard_fail_checks": [
             "STRUCTURE_HIDDEN_DATA",
-            "ATS_HACKING_DETECTED"
+            "ATS_HACKING_DETECTED",
+            "MYKAD_INVALID_DOB"
         ]
     },
     "certificate": {
@@ -132,7 +137,8 @@ DOC_RISK_PROFILES = {
         "allow_screenshot": True,
         "weights": {"L1": 0.1, "L2": 0.65, "L3": 0.25, "L4": 0.0},
         "hard_fail_checks": [
-            "VISUAL_TAMPERING_DETECTED"
+            "VISUAL_TAMPERING_DETECTED",
+            "MYKAD_INVALID_DOB",
         ]
     },
 

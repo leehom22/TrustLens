@@ -70,6 +70,54 @@ def normalize_entity_name(name: str) -> str:
     return clean
 
 
+# --- Validates Malaysian IC (MyKad) formats with strict JPN State Codes and dynamic age logic ---
+def validate_mykad(ic_str: str, doc_type: str, doc_date: datetime = None) -> List[Dict]:
+
+    if not ic_str: return []
+    
+    clean_ic = re.sub(r"[^\d]", "", str(ic_str))
+    if len(clean_ic) != 12: 
+        return [] 
+        
+    errors = []
+    yy, mm, dd = int(clean_ic[0:2]), int(clean_ic[2:4]), int(clean_ic[4:6])
+    pb = int(clean_ic[6:8])
+
+    # 1. Strict State Code Check (PB) based on official JPN documentation
+    valid_pb = set(list(range(1, 60)))
+    
+    if pb not in valid_pb:
+        errors.append({"type": "MYKAD_INVALID_STATE", "msg": f"State/Country code '{pb:02d}' is technically invalid."})
+
+    # 2. Dynamic Date Format Check
+    current_year = datetime.now().year
+    current_century = (current_year // 100) * 100
+    current_yy = current_year % 100
+    
+    if yy <= current_yy:
+        year = current_century + yy
+    else:
+        year = current_century - 100 + yy
+        
+    dob = None
+    try:
+        dob = datetime(year, mm, dd)
+    except ValueError:
+        errors.append({"type": "MYKAD_INVALID_DOB", "msg": f"Date of Birth '{clean_ic[0:6]}' is physically impossible."})
+
+    # 3. Age Check (ONLY triggered for legal/contractual documents)
+    if dob and doc_type in ["contract", "legal_document"]:
+        compare_date = doc_date if doc_date else datetime.now()
+        age = (compare_date - dob).days / 365.25
+        
+        if age < 18:
+            errors.append({"type": "MYKAD_MINOR_SIGNATORY", "msg": f"Signatory age is approx {int(age)} years old (< 18)."})
+        elif age > 100:
+            errors.append({"type": "MYKAD_AGE_ANOMALY", "msg": f"Signatory age is approx {int(age)} years old. Unlikely."})
+
+    return errors
+
+
 def create_audit_record(name: str, status: str, formula: str, visual: str, reason: str = ""):
     return {
         "check_name": name,
@@ -714,6 +762,25 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                         f"Effective {eff_date.date()} > Expiry {exp_date.date()}",
                         "Logical error: Contract expires before it takes effect."
                     ))
+
+    # ================= Rule 9: Universal IC Format Verification =================
+    extracted_ics = list(set(data.get("extracted_ic_numbers", [])))
+    if extracted_ics:
+        for ic in extracted_ics:
+            mykad_errors = validate_mykad(ic, doc_type, invoice_date)
+            for err in mykad_errors:
+                l4_signals.append(err["type"])
+                score = max(score, 85)
+                status = LayerStatus.HIGH_RISK
+                audit_trails.append(create_audit_record(
+                    "Identity Verification", "FAIL", "MyKad Logic Check",
+                    f"Extracted IC: {ic}", err["msg"]
+                ))
+            if not mykad_errors and len(re.sub(r"[^\d]", "", str(ic))) == 12:
+                audit_trails.append(create_audit_record(
+                    "Identity Verification", "PASS", "MyKad Logic Check",
+                    f"IC {ic} verified", "Date logic and JPN state code passed."
+                ))
 
 
 # ================= Final Output Packaging =================
