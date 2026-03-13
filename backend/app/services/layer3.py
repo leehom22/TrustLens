@@ -4,6 +4,7 @@ from google.genai import types
 from typing import Dict, Any
 from ..core.config import logger, GEMINI_API_KEY
 from ..utils.utils import clean_and_repair_json
+import random
 
 async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, Any]:
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -38,7 +39,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     
     Return VALID JSON ONLY with this schema:
     {
-        "doc_type": "invoice" | "receipt" | "bank_statement" | "payslip" | "resume" | "certificate" | "contract" | "summon" | "legal_document" | "unknown",
+        "doc_type": "invoice" | "receipt" | "payment_receipt" | "bank_statement" | "payslip" | "resume" | "certificate" | "contract" | "summon" | "legal_document" | "unknown",
         
         "forensic_reasoning_trace": {
             "internal_semantic_paradoxes": [
@@ -109,7 +110,9 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
 
     """
     
-    for attempt in range(2): 
+    max_attempts = 2
+
+    for attempt in range(max_attempts): 
         try:
             file_ref = await client.aio.files.upload(file=file_path, config={'mime_type': mime_type})
             
@@ -117,7 +120,8 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
                 model='gemini-3-flash-preview',
                 contents=[file_ref, extraction_prompt],
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    http_options={'timeout': 45000}
                 )
             )
 
@@ -144,20 +148,21 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             parsed["has_scam_pattern"] = inf.get("has_scam_pattern", False)
             parsed["has_semantic_paradox"] = inf.get("has_semantic_paradox", False)
             
-            # reasoning = parsed.get("forensic_reasoning_trace", {})
-            # parsed["semantic_paradox_details"] = reasoning.get("internal_semantic_paradoxes", [])
-            # parsed["scam_pattern_details"] = reasoning.get("scam_pattern_analysis", [])
-            
             return parsed
         
         except Exception as e:
-            logger.warning(f"L3 Retry {attempt+1}: {e}")
-            await asyncio.sleep(0.5)
+            error_type = type(e).__name__
+            logger.warning(f"L3 Attempt {attempt+1} failed ({error_type}): {e}")
+            
+            if attempt < max_attempts - 1:
+                # Avoid concurrency conflict
+                sleep_time = 0.5 + attempt + random.uniform(0, 0.3)
+                await asyncio.sleep(sleep_time)
             
     # Fallback
     return {
         "doc_type": "unknown", 
-        "error": "Extraction failed",
+        "error": f"Extraction failed after {max_attempts} attempts with 45s per attempt.",
         "has_scam_pattern": False,
         "has_semantic_paradox": False,
         "is_screenshot": False

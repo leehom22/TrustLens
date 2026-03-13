@@ -58,6 +58,18 @@ def extract_first_date(text: str) -> Optional[datetime]:
     
     return None
 
+
+def normalize_entity_name(name: str) -> str:
+    if not name: return ""
+    # Convert to lowercase and remove symbol
+    clean = re.sub(r'[^a-z0-9]', '', str(name).lower())
+    # Remove common prefix of company names in Malaysia
+    for suffix in ['sdnbhd', 'bhd', 'ltd', 'inc', 'llc', 'corporation', 'enterprise']:
+        if clean.endswith(suffix):
+            clean = clean[:-len(suffix)]
+    return clean
+
+
 def create_audit_record(name: str, status: str, formula: str, visual: str, reason: str = ""):
     return {
         "check_name": name,
@@ -353,7 +365,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
 
 
 
-# ================= Rule 4: Date & Consistency Logic =================
+    # ================= Rule 4: Date & Consistency Logic =================
     
     # 4A: Basic Due Date Logic (Restored)
     if invoice_date and due_date and due_date < invoice_date:
@@ -383,17 +395,19 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         # Delta < 0: From future -> High Risk
         # Delta > 0: Delay -> Depends on synchronous and asynchronous document types
         delta = (invoice_date - hidden_date).days
-        raw_text_dump = str(data).upper()
+        raw_text_dump = (data.get("raw_document_content", "") + " ".join([i.get("desc", "") for i in items])).upper()
+        raw_text_clean = re.sub(r"[^\w\s]", "", raw_text_dump)
 
         # --- ( Synchronous & Asynchronous Document Classification ) ---
         # 1. According to doc_type
+        is_strict_mode = False
         is_strict_mode = doc_type in ["payment_receipt"]
         
         # 2. Keyword Override (E-Wallet strict, Official Receipt / Tax Invoice not strict )
-        ewallet_keywords = ["TOUCH 'N GO", "EWALLET", "GRABPAY", "DUITNOW", "ALIPAY"]
+        ewallet_keywords = ["TOUCH 'N GO", "PAYPAL", "EWALLET", "GRABPAY", "DUITNOW", "ALIPAY"]
         if any(kw in raw_text_dump for kw in ewallet_keywords):
             is_strict_mode = True
-        if "OFFICIAL RECEIPT" in raw_text_dump or "TAX INVOICE" in raw_text_dump:
+        if "OFFICIAL RECEIPT" in raw_text_clean or "TAX INVOICE" in raw_text_clean:
             is_strict_mode = False
 
         # --- Audit Execution ---
@@ -457,17 +471,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     if len(line_item_dates) > 1:
         
         # --- Real World Sanity Date Check ---
-        real_now = datetime.now(timezone.utc)
+        real_now_date = datetime.now().date()
         future_violation = None
         for d in line_item_dates:
-            # Naive datetime converted into UTC for comparison
-            if d.tzinfo is None:
-                d_aware = d.replace(tzinfo=timezone.utc)
-            else:
-                d_aware = d
-            
-            # 24 hours tolerance for time zone errors
-            if d_aware > (real_now + timedelta(hours=24)):
+            # 1 day tolerance for difference in timezones
+            if d.date() > real_now_date + timedelta(days=1):
                 future_violation = d
                 break
         
@@ -563,6 +571,151 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             ))
 
 
+    # ================= Rule 6: Payslip Integrity =================
+    if doc_type == "payslip":
+        pd = data.get("payslip_details") or {}
+        if pd:
+            gross = to_decimal(pd.get("gross_pay"))
+            total_deduct = to_decimal(pd.get("total_deductions"))
+            net_pay = to_decimal(pd.get("net_pay"))
+            breakdown = pd.get("deduction_breakdown") or {}
+            
+            # 6.1 Deductions Breakdown Math
+            if breakdown and total_deduct > Decimal("0.00"):
+                calc_deduct = sum([to_decimal(v) for v in breakdown.values()])
+                if calc_deduct > Decimal("0.00"):
+                    diff_deduct = abs(calc_deduct - total_deduct)
+                    if diff_deduct > Decimal("1.00"):
+                        l4_signals.append("MATH_DEDUCTION_MISMATCH")
+                        score = max(score, 80)
+                        status = LayerStatus.HIGH_RISK
+                        audit_trails.append(create_audit_record(
+                            "Deduction Math", "FAIL", "Sum(Breakdown) == Total Deductions",
+                            f"{calc_deduct:.2f} != {total_deduct:.2f}",
+                            f"Gap: {diff_deduct:.2f}. Deduction items don't add up."
+                        ))
+                    else:
+                        audit_trails.append(create_audit_record(
+                            "Deduction Math", "PASS", "Sum(Breakdown) == Total Deductions",
+                            f"{calc_deduct:.2f} == {total_deduct:.2f}",
+                            "Breakdown math verified."
+                        ))
+
+            # 6.2 Net Pay Math
+            if gross > Decimal("0.00") and net_pay > Decimal("0.00"):
+                calc_net = gross - total_deduct
+                diff_net = abs(calc_net - net_pay)
+                if diff_net > Decimal("1.00"):
+                    l4_signals.append("MATH_NET_PAY_MISMATCH")
+                    score = max(score, 85)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Net Pay Math", "FAIL", "Gross - Deductions == Net Pay",
+                        f"{gross:.2f} - {total_deduct:.2f} != {net_pay:.2f} (Calc: {calc_net:.2f})",
+                        f"Gap: {diff_net:.2f}. Net pay calculation failed."
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "Net Pay Math", "PASS", "Gross - Deductions == Net Pay",
+                        f"Verified {net_pay:.2f}",
+                        "Net pay math verified."
+                    ))
+
+
+    # ================= Rule 7: Summon Integrity =================
+    if doc_type == "summon":
+        sd = data.get("summon_details") or {}
+        if sd:
+            # 7.1 Issuing Agency Whitelist Check
+            agency = str(sd.get("issuing_agency", "")).upper()
+            if agency:
+                valid_agencies = ["PDRM", "JPJ", "DBKL", "MBPJ", "MBSA", "MPSJ", "POLIS", "MAHKAMAH", "JIM", "JABATAN IMIGRESEN", "LHDN", "HASIL", "KASTAM", "SSM"]
+                if not any(v in agency for v in valid_agencies):
+                    l4_signals.append("INVALID_ISSUING_AGENCY")
+                    score = max(score, 90)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Agency Verification", "FAIL", "Agency in Whitelist",
+                        f"Extracted: {agency}",
+                        "Issuing agency not recognized as a valid Malaysian authority."
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "Agency Verification", "PASS", "Agency in Whitelist",
+                        f"Matched: {agency}",
+                        "Valid issuing authority."
+                    ))
+
+            # 7.2 Summon Timeline Check
+            offence_dt_str = sd.get("offence_date")
+            if offence_dt_str:
+                offence_date = extract_first_date(offence_dt_str)
+                
+                # Check 1: Offence Date vs Invoice (Issue) Date
+                if offence_date and invoice_date and offence_date.date() > invoice_date.date():
+                    l4_signals.append("SUMMON_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Summon Timeline", "FAIL", "Offence <= Issue Date",
+                        f"Offence {offence_date.date()} > Issue {invoice_date.date()}",
+                        "Impossible timeline: Offence occurred after notice was issued."
+                    ))
+                
+                # Check 2: Offence Date vs Due Date
+                if offence_date and due_date and offence_date.date() > due_date.date():
+                    l4_signals.append("SUMMON_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Summon Timeline", "FAIL", "Offence <= Due Date",
+                        f"Offence {offence_date.date()} > Due {due_date.date()}",
+                        "Impossible timeline: Due date is before the offence."
+                    ))
+
+
+    # ================= Rule 8: Legal Document Integrity =================
+    if doc_type in ["contract", "legal_document"]:
+        ld = data.get("legal_details") or {}
+        if ld:
+            party_a = normalize_entity_name(ld.get("party_a", {}).get("name", ""))
+            party_b = normalize_entity_name(ld.get("party_b", {}).get("name", ""))
+            
+            # 8.1 Entity Symmetry Check
+            if party_a and party_b and len(party_a) > 3 and party_a == party_b:
+                l4_signals.append("ENTITY_SYMMETRY_VIOLATION")
+                score = max(score, 85)
+                status = LayerStatus.HIGH_RISK
+                audit_trails.append(create_audit_record(
+                    "Entity Symmetry", "FAIL", "Party A != Party B",
+                    f"'{party_a}' == '{party_b}'",
+                    "High Risk: Contract appears to be self-dealing or circular."
+                ))
+            elif party_a and party_b:
+                audit_trails.append(create_audit_record(
+                    "Entity Symmetry", "PASS", "Party A != Party B",
+                    "Distinct entities",
+                    "Parties are appropriately distinct."
+                ))
+
+            # 8.2 Validity Period Check
+            eff_dt_str = ld.get("effective_date")
+            exp_dt_str = ld.get("expiry_date")
+            if eff_dt_str and exp_dt_str:
+                eff_date = extract_first_date(eff_dt_str)
+                exp_date = extract_first_date(exp_dt_str)
+                
+                if eff_date and exp_date and eff_date > exp_date:
+                    l4_signals.append("CONTRACT_TIME_PARADOX")
+                    score = max(score, 80)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Validity Period", "FAIL", "Effective <= Expiry",
+                        f"Effective {eff_date.date()} > Expiry {exp_date.date()}",
+                        "Logical error: Contract expires before it takes effect."
+                    ))
+
+
 # ================= Final Output Packaging =================
     details["audit_trails"] = audit_trails
 
@@ -571,7 +724,9 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         "TIME_PARADOX_LOGIC",
         "ID_DATE_TIME_PARADOX",
         "DATE_FROM_FUTURE",
-        "CHRONOLOGY_INCONSISTENCY"
+        "CHRONOLOGY_INCONSISTENCY",
+        "SUMMON_TIME_PARADOX",
+        "CONTRACT_TIME_PARADOX"
     ]
     is_critical_paradox = any(sig in l4_signals for sig in critical_time_triggers)
 

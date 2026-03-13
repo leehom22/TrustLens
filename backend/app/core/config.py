@@ -120,7 +120,7 @@ DOC_RISK_PROFILES = {
         "description": "Personal branding. Visual editing expected.",
         "allow_creative_software": True,
         "allow_screenshot": False,
-        "weights": {"L1": 0.05, "L2": 0.65, "L3": 0.3, "L4": 0.0},
+        "weights": {"L1": 0.05, "L2": 0.55, "L3": 0.4, "L4": 0.0},
         "hard_fail_checks": [
             "STRUCTURE_HIDDEN_DATA",
             "ATS_HACKING_DETECTED"
@@ -130,7 +130,7 @@ DOC_RISK_PROFILES = {
         "description": "Official award/verification.",
         "allow_creative_software": True,
         "allow_screenshot": True,
-        "weights": {"L1": 0.1, "L2": 0.7, "L3": 0.2, "L4": 0.0},
+        "weights": {"L1": 0.1, "L2": 0.65, "L3": 0.25, "L4": 0.0},
         "hard_fail_checks": [
             "VISUAL_TAMPERING_DETECTED"
         ]
@@ -143,6 +143,7 @@ DOC_RISK_PROFILES = {
     # --- Group 3: Transactional (Merged Standard) ---
     "invoice": _TRANSACTIONAL_RULES,
     "receipt": _TRANSACTIONAL_RULES,
+    "payment_receipt": _TRANSACTIONAL_RULES,
 
     # --- Group 4: Legal / Contracts ---
     "contract": _LEGAL_CONTRACT_RULES,

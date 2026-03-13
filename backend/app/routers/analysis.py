@@ -267,6 +267,7 @@ async def analyze_pipeline(
                 "allow_screenshot": profile.get("allow_screenshot", True)
             }
 
+        grounding_info_raw = {}
         grounding_info = {}
         raw_content = l3_data.get("raw_document_content", "")
         
@@ -276,8 +277,10 @@ async def analyze_pipeline(
         dates = l3_data.get("dates") or {}
         payment = l3_data.get("payment_info") or {}
         contact = vendor.get("contact") or {}
+        summon = l3_data.get("summon_details") or {}
+        legal = l3_data.get("legal_details") or {}
 
-        grounding_info = {
+        grounding_info_raw = {
             "vendor_name": vendor.get("name"),
             "vendor_address": vendor.get("address"),
             "total_amount": fins.get("total_amount"),
@@ -292,8 +295,16 @@ async def analyze_pipeline(
                 "bank_name": payment.get("bank_name"),
                 "account_no": payment.get("account_number"),
                 "holder_name": payment.get("account_holder_name")
-            }
+            },
+            # Entities specific to summons
+            "summon_issuing_agency": summon.get("issuing_agency"),
+            # Entities specific to contract
+            "contract_party_a": legal.get("party_a", {}).get("name"),
+            "contract_party_b": legal.get("party_b", {}).get("name")
         }
+
+        # Clean up empty items
+        grounding_info = {k: v for k, v in grounding_info_raw.items() if v}
 
         report = FinalReport(
             request_id = req_id,
@@ -611,7 +622,7 @@ async def generate_document_dashboard(
         "ATS_HACKING_DETECTED_Micro_Font": "Evidence: Suspicious micro-sized fonts (< 2pt) used to manipulate machine indexing.",
         "SCAM_PATTERN_DETECTED": "Social engineering or fraud language patterns identified.",
         "SEMANTIC_PARADOX_DETECTED": "Internal logical contradictions found within the document text.",
-        "MATH_ROW_MISMATCH": "Line item calculation (Qty × Unit) does not match extracted total.",
+        "MATH_ROW_MISMATCH": "Line item calculation (Qty * Unit) does not match extracted total.",
         "MATH_TAX_LOGIC_FAIL": "Statutory tax calculation or subtotal aggregation failed.",
         "MISSING_INVOICE_ID": "Missing unique document identifier (Invoice/Receipt No).",
         "MISSING_CORE_ACCOUNT_ID": "Bank Statement is missing core account identifier.",
