@@ -242,7 +242,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             # ELA Score (Conservative)
             ela_page_score = 0
             # Only trust ELA high score if it's Native Digital and metrics are extreme
-            if is_native_digital and metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
+            if is_native_digital and metrics["max_z_score"] > 3.0 and metrics["suspicious_grids"] > 2:
                 ela_page_score = 40
                 l2_signals.append(f"Page {idx+1}: ELA compression anomalies detected.")
             

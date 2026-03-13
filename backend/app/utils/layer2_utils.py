@@ -60,9 +60,9 @@ def calculate_ela_metrics(diff_img: Image.Image, grid_size: int):
     z_scores = (local_means - global_mean) / global_std
     
     # 3. Decision threshold (Vectorized comparison)
-    # z_score > 4.0: The z-score 4.0 grids only exists with probability of 0.003%, which can be considered as suspicious anomalies (outliers)
+    # z_score > 3.0: The z-score 3.0 grids only exists with probability of 0.3%, which can be considered as suspicious anomalies (outliers)
     # local_mean > 15: High absolute brightness to avoid false positives in dark areas
-    suspicious_mask = (z_scores > 4.0) & (local_means > 15)
+    suspicious_mask = (z_scores > 3.0) & (local_means > 15)
     suspicious_grids = np.sum(suspicious_mask)
     
     # Find the grids with greatest abnormality

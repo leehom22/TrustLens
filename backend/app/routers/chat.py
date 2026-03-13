@@ -313,7 +313,7 @@ def get_mode_config(mode: str, req_id: str):
     
     **Layer 2: Visual Forensics (Hybrid Pixel Analysis)**
     - Hybrid Architecture: Dynamically classifies documents as "Native Digital" or "Noisy/Scan" (via PDF image coverage or Laplacian variance).
-    - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A High Max Z-Score (>4.5) strongly indicates manipulation.
+    - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A high Max Z-Score strongly indicates manipulation. Yellow colour (z-score > 3.0) and orange colour (z-score > 1.5) numbers shown in the heatmap considered as high values.
     - ATS Hacking: Native PDFs only. Detects hidden prompt injections and keyword stuffing (e.g., invisible white-on-white characters or micro-fonts <2pt).
     - Black Level: Detects 'Digital Insertion'. Finds artificially pure black text or elements pasted onto lighter, natural document backgrounds.
     - Texture / Statistical Islands: Detects 'Smoothing' or 'Erasing'. Identifies abnormally smooth patches that lack the expected background noise or variance (indicating smudging, patching, or cloning).
