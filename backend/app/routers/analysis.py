@@ -196,27 +196,29 @@ async def analyze_pipeline(
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
         
-        # Safety: risk_inference might be None
-        l3_inf = l3_data.get("risk_inference") or {}
-        
-        # --- Check 1: Resume Specific Hidden Text (ATS Cheating) ---
-        if detected_profile_key == "resume" and l3_data.get("hidden_text_found"):
-            l3_score = 95
-            l3_status = LayerStatus.HIGH_RISK
-            msg = "Hidden text injection detected (ATS Cheating)."
-            l3_data["risk_note"] = msg
-            l3_risk_signals.append(msg)
+        trace = l3_data.get("forensic_reasoning_trace", {})
 
-        # --- Check 2: Screenshot Check (Generic) ---
+        # --- Check 1: Screenshot Check (Generic) ---
         if l3_data.get("is_screenshot"):
             l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
 
-        # --- Check 3: Urgency Language Check (Scam) ---
-        if l3_inf.get("urgency_language"):
-            if l3_score < 60: l3_score = 60
-            if l3_status == LayerStatus.CLEAN: l3_status = LayerStatus.SUSPICIOUS
-            l3_risk_signals.append("High-pressure urgency language detected (Potential Scam Pattern).")
+        # --- Check 2: Scam Pattern Check ---
+        if "SCAM_PATTERN_DETECTED" in l3_risk_signals:
+            l3_score = max(l3_score, 85)
+            l3_status = LayerStatus.HIGH_RISK
+            scams = trace.get("scam_pattern_analysis", [])
+            for s in scams:
+                l3_risk_signals.append(f"Scam Analysis: {s}")
 
+        # --- Check 3: Semantic Paradox Check ---
+        if "SEMANTIC_PARADOX_DETECTED" in l3_risk_signals:
+            l3_score = max(l3_score, 65)
+            if l3_status == LayerStatus.CLEAN:
+                l3_status = LayerStatus.SUSPICIOUS
+            paradoxes = trace.get("internal_semantic_paradoxes", [])
+            for p in paradoxes:
+                l3_risk_signals.append(f"Logic Anomaly: {p}")
+            
         evidence_chain.append(LayerResult(
             layer_name = "L3_Content", 
             status = l3_status, 
@@ -607,6 +609,8 @@ async def generate_document_dashboard(
         "ATS_HACKING_DETECTED": "Document Integrity: Hidden formatting anomalies identified (ATS Hacking).",
         "ATS_HACKING_DETECTED_White_Text": "Evidence: Invisible white-on-white text layers found in document content.",
         "ATS_HACKING_DETECTED_Micro_Font": "Evidence: Suspicious micro-sized fonts (< 2pt) used to manipulate machine indexing.",
+        "SCAM_PATTERN_DETECTED": "Social engineering or fraud language patterns identified.",
+        "SEMANTIC_PARADOX_DETECTED": "Internal logical contradictions found within the document text.",
         "MATH_ROW_MISMATCH": "Line item calculation (Qty × Unit) does not match extracted total.",
         "MATH_TAX_LOGIC_FAIL": "Statutory tax calculation or subtotal aggregation failed.",
         "MISSING_INVOICE_ID": "Missing unique document identifier (Invoice/Receipt No).",
@@ -671,6 +675,14 @@ async def generate_document_dashboard(
         l3_proofs.append("Multiple inconsistent font types detected across text layout.")
     if vis_elements.get("misaligned_layout"):
         l3_proofs.append("Text bounding box misalignments detected in table or layout.")
+
+    reasoning = l3_details.get("forensic_reasoning_trace", {})
+    paradoxes = reasoning.get("internal_semantic_paradoxes", [])
+    for p in paradoxes:
+        l3_proofs.append(f"Logic Anomaly: {p}")
+    scams = reasoning.get("scam_pattern_analysis", [])
+    for s in scams:
+        l3_proofs.append(f"Scam Pattern: {s}")
 
     # --- L4: Logic Audit Trails ---
     l4_details = l4.get("details", {})

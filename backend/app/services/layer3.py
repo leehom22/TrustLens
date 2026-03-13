@@ -11,23 +11,44 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     extraction_prompt = """
     You are a Forensic Document Analyst. Analyze the document image/PDF and extract structured data with forensic precision.
     
-    Goal 1: Identify Document Type and Extract Key Information into structured data (JSON) as per schema.
-    GOAL 2: Extract the **FULL RAW TEXT** content for later legal analysis.
+    Goal 1: Identify Document Type, Language, and Extract Key Information into structured data (JSON) as per schema.
+    Goal 2: Perform zero-shot forensic reasoning to detect Internal Semantic Paradoxes and Scam Patterns BEFORE extracting data.
+    Goal 3: Extract the **FULL RAW TEXT** content for later legal analysis when applicable.
 
     CRITICAL INSTRUCTION FOR 'RAW TEXT':
-    - **IF** the document is a Contract, Agreement, Terms of Service, or Official Letter:
+    - **IF** the document is a Contract, Agreement, Terms of Service, Summon, Legal Document, or Official Letter:
       -> Extract the **FULL RAW TEXT** into 'raw_document_content'. Include all clauses, fine print.
     - **IF** the document is an Invoice, Receipt, Bank Statement, or Payslip:
-      -> Leave 'raw_document_content' **EMPTY** (null or ""). Focus on 'line_items'.
+      -> Leave 'raw_document_content' **EMPTY** (null or ""). Focus on structured fields.
 
-    CRITICAL INSTRUCTION:
+    MULTI-LANGUAGE STANDARDIZATION (CRITICAL):
+    - Regardless of whether the document is in English, Bahasa Melayu (BM), or Chinese, ALL JSON Keys MUST remain in English as defined below.
+    - Translate specific statutory terms implicitly (e.g., 'Saman' -> summon, 'Jumlah' -> total_amount, 'Cukai' -> tax_amount).
+
+    GENERAL CRITICAL INSTRUCTION:
     1. Distinguish between OBSERVATION (what is printed) and INFERENCE.
     2. For "line_total", extract the visual text AND the numeric value separately.
     3. Treat text lines that share a single amount as a SINGLE transaction. Do not split multi-line descriptions (e.g., "British Gas / MASTERCARD") into two separate line items. Look at the amount column to determine row boundaries.
+
+    COLUMN MAPPING & TAX RULES:
+    1. IF the numeric value appears in a column labeled 'Paid out', 'Debit', or 'Withdrawals' -> You MUST output a NEGATIVE number (e.g., -60.00).
+    2. IF the numeric value appears in a column labeled 'Paid in', 'Credit', or 'Deposit' -> Output a POSITIVE number.
+    3. Visual Layout Priority: The extracted 'value' MUST reflect the column position.
+    4. TAX_EXTRACTION: If a tax percentage is explicitly stated visually (e.g., 'TAX RATE 6%', 'SST 8%'), extract ONLY the numeric value into 'tax_rate_percentage' (e.g., output 6 or 8). Strip the '%' symbol. If no rate is visible, output null.
     
     Return VALID JSON ONLY with this schema:
     {
-        "doc_type": "invoice" | "receipt" | "payment_receipt" | "bank_statement" | "payslip" | "resume" | "certificate" | "contract" | "freelance_contract" | "unknown",
+        "doc_type": "invoice" | "receipt" | "bank_statement" | "payslip" | "resume" | "certificate" | "contract" | "summon" | "legal_document" | "unknown",
+        
+        "forensic_reasoning_trace": {
+            "internal_semantic_paradoxes": [
+                "String. Explicitly list any logical contradictions within the text. E.g., 'Resume states graduation in 2024, but work experience claims full-time Senior Engineer from 2020 to 2023.', 'Contract expiry date is earlier than effective date.' If none, leave empty array []."
+            ],
+            "scam_pattern_analysis": [
+                "String. Explicitly identify social engineering/fraud patterns. E.g., 'Unusual urgency language threatening PDRM arrest or court action within 2 hours', 'Guaranteed high-return claims'. If none, leave empty array []."
+            ]
+        },
+        
         "raw_document_content": "string",
         "recipient": { "name": "string", "address": "string" },
         "vendor_info": { "name": "string", "address": "string", "contact": { "email": "string", "phone": "string", "website": "string" } },
@@ -47,6 +68,29 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             }
         ],
         
+        "summon_details": {
+            "issuing_agency": "string (e.g., PDRM, JPJ, DBKL, MBSA)",
+            "offence_date": "string (YYYY-MM-DD HH:MM)",
+            "offence_code_or_desc": "string",
+            "vehicle_registration_number": "string",
+            "fine_amount": number
+        },
+
+        "legal_details": {
+            "party_a": { "name": "string", "role": "string" },
+            "party_b": { "name": "string", "role": "string" },
+            "effective_date": "string (YYYY-MM-DD)",
+            "expiry_date": "string (YYYY-MM-DD)",
+            "governing_law_jurisdiction": "string"
+        },
+
+        "payslip_details": {
+            "gross_pay": number,
+            "total_deductions": number,
+            "deduction_breakdown": { "epf": number, "socso": number, "eis": number, "pcb_tax": number },
+            "net_pay": number
+        },
+
         "visual_elements": {
             "has_status_bar": boolean,
             "has_browser_chrome": boolean,
@@ -57,17 +101,12 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
 
         "risk_inference": {
             "is_screenshot": boolean,
-            "urgency_language": boolean,
+            "has_scam_pattern": boolean,  // Set to true if scam_pattern_analysis contains urgency threats
+            "has_semantic_paradox": boolean,
             "hidden_text_found": boolean  // True if white-on-white text or tiny keywords found (Resume ATS hacking)
         }
     }
 
-        "COLUMN_MAPPING_RULES": [
-            "IF the numeric value appears in a column labeled 'Paid out', 'Debit', or 'Withdrawals' -> You MUST output a NEGATIVE number (e.g., -60.00).",
-            "IF the numeric value appears in a column labeled 'Paid in', 'Credit', or 'Deposit' -> Output a POSITIVE number.",
-            "Visual Layout Priority: The extracted 'value' MUST reflect the column position.",
-            "TAX_EXTRACTION: If a tax percentage is explicitly stated visually (e.g., 'TAX RATE 6%', 'SST 8%'), extract ONLY the numeric value into 'tax_rate_percentage' (e.g., output 6 or 8). Strip the '%' symbol. If no rate is visible, output null."
-        ]
     """
     
     for attempt in range(2): 
@@ -87,7 +126,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             
             # Metadata injection
             parsed["_meta"] = {
-                "model": "gemini-2.0-flash",
+                "model": "gemini-3-flash-preview",
                 "attempt": attempt + 1,
                 "json_repaired": True if raw_text.strip() != str(parsed) else False
             }
@@ -101,8 +140,13 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
             # 1. Screenshot Logic
             parsed["is_screenshot"] = vis.get("has_status_bar") or vis.get("has_browser_chrome") or inf.get("is_screenshot", False)
             
-            # 2. Hidden Text Logic (for main.py Resume check)
-            parsed["hidden_text_found"] = inf.get("hidden_text_found", False)
+            # 2. Forensic Reasoning Logic
+            parsed["has_scam_pattern"] = inf.get("has_scam_pattern", False)
+            parsed["has_semantic_paradox"] = inf.get("has_semantic_paradox", False)
+            
+            # reasoning = parsed.get("forensic_reasoning_trace", {})
+            # parsed["semantic_paradox_details"] = reasoning.get("internal_semantic_paradoxes", [])
+            # parsed["scam_pattern_details"] = reasoning.get("scam_pattern_analysis", [])
             
             return parsed
         
@@ -114,6 +158,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
     return {
         "doc_type": "unknown", 
         "error": "Extraction failed",
-        "hidden_text_found": False,
+        "has_scam_pattern": False,
+        "has_semantic_paradox": False,
         "is_screenshot": False
     }
