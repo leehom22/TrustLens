@@ -157,6 +157,9 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             # Checking 3: Time Paradox
             c_date = parse_pdf_date(meta.get("/CreationDate"))
             m_date = parse_pdf_date(meta.get("/ModDate"))
+
+            if c_date: details["pdf_creation_date"] = c_date.isoformat()
+            if m_date: details["pdf_mod_date"] = m_date.isoformat()
             
             # Evaluation 3
             if c_date and m_date:

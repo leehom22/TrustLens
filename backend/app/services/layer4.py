@@ -763,6 +763,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                         "Logical error: Contract expires before it takes effect."
                     ))
 
+
     # ================= Rule 9: Universal IC Format Verification =================
     extracted_ics = list(set(data.get("extracted_ic_numbers", [])))
     if extracted_ics:
@@ -782,6 +783,62 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                     f"IC {ic} verified", "Date logic and JPN state code passed."
                 ))
 
+    
+# ================= Rule 10: Cross-Layer Chronology (Meta vs Content) =================
+    l1_meta = data.get("_l1_metadata", {})
+    pdf_c_str = l1_meta.get("pdf_creation_date")
+    pdf_m_str = l1_meta.get("pdf_mod_date")
+    
+    if (pdf_c_str or pdf_m_str) and invoice_date:
+        try:
+            doc_day = invoice_date.date()
+            dates_to_compare = []
+            if pdf_c_str: dates_to_compare.append(datetime.fromisoformat(pdf_c_str).date())
+            if pdf_m_str: dates_to_compare.append(datetime.fromisoformat(pdf_m_str).date())
+            
+            # Time Boundary for last document operation
+            latest_physical_day = max(dates_to_compare)
+            
+            # Delta > 0 ：Transaction date claimed on document later than operational date on metadata
+            delta = (doc_day - latest_physical_day).days
+            
+            # Type 1：Retrospective factual evidence related document (Strict)
+            if doc_type in ["bank_statement", "payslip", "receipt", "payment_receipt"]:
+                if delta > 1:   # Time zone tolerance
+                    l4_signals.append("CROSS_LAYER_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "Cross-Layer Sync", "FAIL", "Physical ModDate >= Transaction Date",
+                        f"File last modified {latest_physical_day} | Records transaction on {doc_day}",
+                        "Critical: Retroactive document was finalized before the alleged transaction occurred."
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "Cross-Layer Sync", "PASS", "Physical ModDate >= Transaction Date",
+                        f"Physical ({latest_physical_day}) >= Doc ({doc_day})",
+                        "Meta-to-Content timeline aligns with physical causality."
+                    ))
+                    
+            # Type 2：Forward-looking / Template type document (Relax, warning only)
+            else:
+                if delta > 30:
+                    l4_signals.append("CROSS_LAYER_TEMPLATE_ANOMALY")
+                    score = max(score, 70)
+                    if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
+                    audit_trails.append(create_audit_record(
+                        "Cross-Layer Sync", "CAUTION", "Physical ModDate vs Document Date",
+                        f"File last modified {latest_physical_day} | Dated {doc_day}",
+                        f"Anomaly: Document is dated {delta} days after the file was last physically touched. Verify template usage."
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "Cross-Layer Sync", "PASS", "Template Lifecycle Check",
+                        f"Gap: {delta} days",
+                        "Within normal template drafting or post-dating window."
+                    ))
+        except ValueError:
+            pass
 
 # ================= Final Output Packaging =================
     details["audit_trails"] = audit_trails
@@ -793,7 +850,8 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         "DATE_FROM_FUTURE",
         "CHRONOLOGY_INCONSISTENCY",
         "SUMMON_TIME_PARADOX",
-        "CONTRACT_TIME_PARADOX"
+        "CONTRACT_TIME_PARADOX",
+        "CROSS_LAYER_TIME_PARADOX"
     ]
     is_critical_paradox = any(sig in l4_signals for sig in critical_time_triggers)
 

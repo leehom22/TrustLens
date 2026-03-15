@@ -230,9 +230,11 @@ async def analyze_pipeline(
         # [Step 5] Layer 4: Logic Audit
         start_l4 = time.perf_counter()   # Start timing for Layer 4
 
-        logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "freelance_contract"]
+        logic_required_types = ["invoice", "receipt", "payment_receipt", "bank_statement", "payslip", "contract", "legal_document", "summon"]
         
         if detected_profile_key in logic_required_types:
+            if l1_res:
+                l3_data["_l1_metadata"] = l1_res.details   # For cross-layer chronology check
             evidence_chain.append(run_layer_4_logic(l3_data))
         else:
             evidence_chain.append(LayerResult(
@@ -646,7 +648,9 @@ async def generate_document_dashboard(
         "MYKAD_INVALID_STATE": "MyKad structural error: Invalid State/Country PB code.",
         "MYKAD_INVALID_DOB": "MyKad structural error: Date of birth is physically impossible.",
         "MYKAD_MINOR_SIGNATORY": "Legal compliance risk: Signatory is a minor (< 18 years old).",
-        "MYKAD_AGE_ANOMALY": "Identity anomaly: Signatory age is unusually high (> 100 years old)."
+        "MYKAD_AGE_ANOMALY": "Identity anomaly: Signatory age is unusually high (> 100 years old).",
+        "CROSS_LAYER_TIME_PARADOX": "Critical Forgery: Physical file was finalized before the alleged transaction occurred.",
+        "CROSS_LAYER_TEMPLATE_ANOMALY": "Warning: Document date significantly exceeds the file's last physical modification date (Template anomaly)."
     }
 
     INTERNAL_SIGNAL_BLACKLIST = {"JSON_REPAIRED"}   # Filter out technical signals that are not meaningful
@@ -677,6 +681,8 @@ async def generate_document_dashboard(
         l1_proofs.append(l1_details["time_paradox"])
     if l1_details.get("structure", {}).get("structure_note"):
         l1_proofs.append(l1_details["structure"]["structure_note"])
+    if l1_details.get("details", {}).get("pdf_creation_date") and l1_details.get("details", {}).get("pdf_mod_date"):
+        l1_proofs.append(f"Created at: {l1_details['pdf_creation_date']} | Modified at: {l1_details['pdf_mod_date']}")
 
     # --- L2: Visual Details ---
     l2_details = l2.get("details", {})
