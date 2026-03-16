@@ -618,6 +618,13 @@ async def generate_document_dashboard(
         "HIGH_METADATA_SOFTWARE_RISK": "Edited with high-risk image manipulation software.",
         "MEDIUM_METADATA_SOFTWARE_RISK": "Processed by consumer-level PDF/Image tool.",
         "TIME_PARADOX_METADATA": "Logical Time Paradox: File created after it was modified.",
+        "STRUCTURE_LOW_DPI_IMAGE": "DPI Forensic: Image resolution is below 150 DPI, indicating a screenshot or web download.",
+        "STRUCTURE_INCREMENTAL_UPDATES": "Document History: Multiple incremental update states detected (Document was edited and re-saved).",
+        "STRUCTURE_FONT_MULTIPLE_SUBSETS": "Trace: Multiple font subsets detected (May indicate localized editing or complex rendering).",
+        "XMP_METADATA_MANIPULATION": "XMP Anomaly: Metadata was modified independently of the document content.",
+        "XMP_SUSPICIOUS_ORIGIN": "XMP Anomaly: PDF was derived directly from an image/screenshot format.",
+        "XMP_HIGH_RISK_CREATOR": "XMP Anomaly: Deep metadata reveals usage of high-risk graphic editing software.",
+        "XMP_EXTENSIVE_EDIT_HISTORY": "XMP Anomaly: Unusually long modification history chain embedded in document.",
         "VISUAL_TAMPERING_DETECTED": "Inconsistent pixel quality indicating localized manipulation.",
         "ATS_HACKING_DETECTED": "Document Integrity: Hidden formatting anomalies identified (ATS Hacking).",
         "ATS_HACKING_DETECTED_White_Text": "Evidence: Invisible white-on-white text layers found in document content.",
@@ -683,6 +690,16 @@ async def generate_document_dashboard(
         l1_proofs.append(l1_details["structure"]["structure_note"])
     if l1_details.get("details", {}).get("pdf_creation_date") and l1_details.get("details", {}).get("pdf_mod_date"):
         l1_proofs.append(f"Created at: {l1_details['pdf_creation_date']} | Modified at: {l1_details['pdf_mod_date']}")
+
+    xmp_data = l1_details.get("xmp_data", {})
+    if xmp_data:
+        l1_proofs.append("--- XMP FORENSIC SIGNALS ---")
+        if xmp_data.get("CreateDate"): l1_proofs.append(f"XMP CreateDate: {xmp_data['CreateDate']}")
+        if xmp_data.get("ModifyDate"): l1_proofs.append(f"XMP ModifyDate: {xmp_data['ModifyDate']}")
+        if xmp_data.get("MetadataDate"): l1_proofs.append(f"XMP MetadataDate: {xmp_data['MetadataDate']}")
+        if xmp_data.get("CreatorTool"): l1_proofs.append(f"XMP Creator: {xmp_data['CreatorTool']}")
+        if xmp_data.get("HistoryEntries"): l1_proofs.append(f"XMP Edit History Entries: {xmp_data['HistoryEntries']}")
+        if xmp_data.get("DerivedFrom"): l1_proofs.append(f"XMP Derived From: {xmp_data['DerivedFrom']}")
 
     # --- L2: Visual Details ---
     l2_details = l2.get("details", {})
