@@ -145,7 +145,6 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
 def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
     details = {}
     score = 0
-    status = LayerStatus.CLEAN
     risk_factors = []   # Explaination Source
 
     try:
@@ -163,7 +162,6 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             # Evaluation 1: Structural Check Result
             if struct.get("risk_signal") == "high":
                 score += 40
-                status = LayerStatus.SUSPICIOUS
                 if struct.get("hidden_data_found"):
                     risk_factors.append("STRUCTURE_HIDDEN_DATA")
                 else:
@@ -202,7 +200,6 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                 found_medium = [t for t in SOFTWARE_RISK_MAP["medium"] if t in full_meta_str]
                 if found_high:
                     score += 35
-                    status = LayerStatus.SUSPICIOUS
                     risk_factors.append("HIGH_METADATA_SOFTWARE_RISK")
                     details["software_risk"] = f"Edited with high-risk image software: {found_high[0]}"
                 elif found_medium:
@@ -226,7 +223,6 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             if c_date and m_date:
                 delta = (c_date - m_date).total_seconds()
                 if delta > 60: 
-                    status = LayerStatus.HIGH_RISK 
                     score = 95
                     msg = f"CRITICAL: Logical Time Paradox. Created {int(delta)}s AFTER Modified."
                     risk_factors.append("TIME_PARADOX_METADATA")
@@ -277,8 +273,6 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                             
                         if xmp_score > 0:
                             score += xmp_score
-                            if status == LayerStatus.CLEAN: 
-                                status = LayerStatus.CAUTION if xmp_score < 30 else LayerStatus.SUSPICIOUS
 
             except Exception as e:
                 pass
@@ -304,7 +298,6 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                         found_high = [t for t in SOFTWARE_RISK_MAP["high"] if t in software]
                         if found_high:
                             score += 40
-                            status = LayerStatus.SUSPICIOUS
                             risk_factors.append(f"Image edited with: {found_high[0]}")
 
     except Exception as e:
@@ -312,6 +305,10 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
 
 
     # =================== Final Output ===================
+    status = LayerStatus.CLEAN
+    if score > 70: status = LayerStatus.HIGH_RISK
+    elif score > 30: status = LayerStatus.SUSPICIOUS
+    
     if risk_factors:
         details["risk_factors"] = "; ".join(risk_factors)
 
