@@ -3,8 +3,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
 
-# Conceptual-like Typescript Interface but in Python, can auto doing type parsing and validation
-# For formatting final response of all analysis into JSON structure
 
 class LayerStatus(str, Enum):
     SKIPPED = "skipped"
@@ -62,3 +60,13 @@ class AnalysisRecord(FinalReport):
 
     # 3. Layer Summary (Frontend Display)
     layer_summaries: Dict[str, str] = Field(default_factory=dict, description="Plain English explanation for each layer")
+
+class BatchTaskResult(BaseModel):
+    doc_id: Optional[str] = None
+    status: str  # "success" | "failed" | "critical_failure"
+    error: Optional[str] = None
+    data: Optional[AnalysisRecord] = None 
+
+class BatchAnalysisResponse(BaseModel):
+    batch_status: str
+    results: List[BatchTaskResult]

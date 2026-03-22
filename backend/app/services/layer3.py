@@ -6,7 +6,7 @@ from ..core.config import logger, GEMINI_API_KEY
 from ..utils.utils import clean_and_repair_json
 import random
 
-async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, Any]:
+async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "unknown") -> Dict[str, Any]:
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     extraction_prompt = """
@@ -128,6 +128,9 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
 
             raw_text = res.text
             parsed = clean_and_repair_json(raw_text)
+
+            if isinstance(parsed, list):
+                parsed = {"items": parsed, "doc_type": "unknown"}
             
             # Metadata injection
             parsed["_meta"] = {
@@ -153,12 +156,21 @@ async def run_layer_3_extraction(file_path: str, mime_type: str) -> Dict[str, An
         
         except Exception as e:
             error_type = type(e).__name__
-            logger.warning(f"L3 Attempt {attempt+1} failed ({error_type}): {e}")
+            logger.warning(f"[req: {req_id}] L3 Attempt {attempt+1} failed ({error_type}): {e}")
             
             if attempt < max_attempts - 1:
                 # Avoid concurrency conflict
                 sleep_time = 0.5 + attempt + random.uniform(0, 0.3)
                 await asyncio.sleep(sleep_time)
+
+        finally:
+            # Remove remote document in Gemini for privacy
+            if file_ref:
+                try:
+                    await client.aio.files.delete(name=file_ref.name)
+                    logger.debug(f"[req: {req_id}] Successfully purged remote file: {file_ref.name}")
+                except Exception as cleanup_err:
+                    logger.warning(f"[req: {req_id}] Failed to delete remote file {file_ref.name}: {cleanup_err}")
             
     # Fallback
     return {

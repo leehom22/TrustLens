@@ -1,4 +1,5 @@
 import os
+import gc
 import uuid
 import tempfile
 import asyncio
@@ -8,6 +9,7 @@ import requests
 import json
 import google.generativeai as genai
 import time
+from typing import List
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
 from fastapi.responses import FileResponse
@@ -19,7 +21,7 @@ from ..utils.utils import upload_evidence_to_storage
 from ..core.auth import get_current_user
 from ..core.config import Config
 from ..core.config import logger, MAX_FILE_SIZE, ALLOWED_MIME_TYPES, EVIDENCE_DIR, DOC_RISK_PROFILES
-from ..utils.schemas import FinalReport, LayerStatus, LayerResult
+from ..utils.schemas import FinalReport, LayerStatus, LayerResult, BatchAnalysisResponse
 from ..services.layer1 import run_layer_1_metadata
 from ..services.layer2 import run_layer_2_ela
 from ..services.layer3 import run_layer_3_extraction
@@ -31,6 +33,7 @@ from ..services.agent import run_agent_analysis
 from ..utils.schemas import FinalReport, AnalysisRecord
 from ..core.firebase import db
 from ..core.generatePdf import generate_analysis_pdf
+
 
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
@@ -44,6 +47,11 @@ raw_analysis_collection = 'upload_files'
 structure_analysis_collection = 'structure_analysis_result'
 
 analysis_router = APIRouter()
+
+# ====== Global Safety Boundary =======
+# Limit to handle 2 heavy files concurrently, as to prevent the OOM from being killed by system
+MAX_CONCURRENT_ANALYSIS = 3
+analysis_semaphore = asyncio.Semaphore(MAX_CONCURRENT_ANALYSIS)
 
 # ======================== Timing and Logging Function =========================
 async def measure_task(layer_name: str, req_id: str, awaitable_task):
@@ -85,7 +93,14 @@ async def analyze_pipeline(
 ) -> AnalysisRecord:    
         
     temp_path = local_path_override
-    downloaded_temp = False 
+    downloaded_temp = False
+
+    # Label as start processing
+    if doc_id:
+        try:
+            db.collection("upload_files").document(doc_id).set({"analysis_status": "PROCESSING"}, merge=True)
+        except Exception as e:
+            logger.warning(f"DB State Update Failed (PROCESSING) for {doc_id}: {e}")
 
     try:
         logger.info(f"🚀 [Analysis Pipeline] Processing {doc_id}...")
@@ -121,7 +136,7 @@ async def analyze_pipeline(
 
         t1 = loop.run_in_executor(None, run_layer_1_metadata, temp_path, verified_content_type)
         t2 = loop.run_in_executor(None, run_layer_2_ela, temp_path, verified_content_type)
-        t3 = run_layer_3_extraction(temp_path, verified_content_type)
+        t3 = run_layer_3_extraction(temp_path, verified_content_type, req_id)
 
         # 3. Wait for all layers to complete and gather results
         l1_res, l2_res, l3_data_raw = await asyncio.gather(
@@ -386,18 +401,28 @@ async def analyze_pipeline(
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
 
+        # Analysis success
+        if doc_id:
+            try:
+                db.collection("upload_files").document(doc_id).set({"analysis_status": "SUCCESS"}, merge=True)
+            except: pass
+
         return final_record
     
     except Exception as e:
         logger.error(f"Pipeline Critical Error: {e}")
-        # Use a safe fallback for Firestore if doc_id exists
+        # Record reason if analysis crashed, to prevent frontend's deadlock
         if doc_id:
             try:
-                db.collection("analysis_results").document(doc_id).set({"status": "error", "error_msg": str(e)}, merge=True)
+                db.collection("upload_files").document(doc_id).set({
+                    "analysis_status": "FAILED", 
+                    "error_msg": str(e)
+                }, merge=True)
             except: pass
         raise e
 
     finally:
+        gc.collect()
         if downloaded_temp and temp_path and os.path.exists(temp_path):
             try: os.remove(temp_path)
             except: pass
@@ -423,59 +448,86 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
 
 
 # ========== API Routing: An endpoint as a tool for the AI Agent =================
-@analysis_router.post("/ai-analyze-document", response_model = AnalysisRecord)
+@analysis_router.post("/ai-analyze-document", response_model = BatchAnalysisResponse)
 async def analyze_document(
     request: Request, 
-    file: UploadFile = File(...), 
-    doc_id: str = Form(...),
+    file: List[UploadFile] = File(...), 
+    doc_id: List[str] = Form(...),
     user_id: str = Form(...)
 ):
-    req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
-    logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
-
-    verified_content_type = file.content_type 
-    # If the guess type different with the file type sent from the user terminal, follow guess type
-    guessed_type, _ = mimetypes.guess_type(file.filename)
-    if guessed_type and guessed_type != verified_content_type:
-        logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
-                    extra={"request_id": req_id})
-        verified_content_type = guessed_type
-
-    # Security check for invalid or unsafe file source
-    if verified_content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}")
-
-    try:
-        ext = os.path.splitext(file.filename)[1]
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, f"{doc_id}{ext}")
-        
-        size = 0
-        with open(temp_path, "wb") as buffer:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > MAX_FILE_SIZE:
-                    raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
-                buffer.write(chunk)
-
-        final_record = await analyze_pipeline(
-            doc_id=doc_id,
-            req_id=req_id,
-            user_id=user_id,
-            file_name=file.filename,
-            original_mime_type=verified_content_type,
-            file_url=None,
-            local_path_override=temp_path
-        )
-        
-        # Cleaning
-        if os.path.exists(temp_path): os.remove(temp_path)
-        return final_record
+    # Safetty Check
+    if len(file) != len(doc_id):
+        raise HTTPException(status_code=400, detail="Mismatch between files and doc_ids count.")
+    if len(file) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 files allowed per batch.")
     
-    except Exception as e:
-        logger.error(f"Analysis failed: {e}")
-        if 'temp_path' in locals() and os.path.exists(temp_path): os.remove(temp_path)
-        raise HTTPException(status_code=500, detail=str(e))    
+    async def process_task(single_file: UploadFile, single_doc_id: str):
+        # Queueing Mechanism: Force to limit CPU/RAM computing amount in a same time
+        async with analysis_semaphore:
+            req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
+            logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": single_file.filename})   # initiate logger
+
+            verified_content_type = single_file.content_type
+            # If the guess type different with the file type sent from the user terminal, follow guess type
+            guessed_type, _ = mimetypes.guess_type(single_file.filename)
+            if guessed_type and guessed_type != verified_content_type:
+                logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
+                            extra={"request_id": req_id})
+                verified_content_type = guessed_type
+
+            # Security check for invalid or unsafe file source
+            if verified_content_type not in ALLOWED_MIME_TYPES:
+                db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
+                return {"doc_id": single_doc_id, "status": "failed", "error": f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}"}
+            
+            temp_path = None
+            try:
+                ext = os.path.splitext(single_file.filename)[1]
+                temp_dir = tempfile.gettempdir()
+                temp_path = os.path.join(temp_dir, f"{single_doc_id}{ext}")
+                
+                size = 0
+                with open(temp_path, "wb") as buffer:
+                    while chunk := await single_file.read(1024 * 1024):
+                        size += len(chunk)
+                        if size > MAX_FILE_SIZE:
+                            raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
+                        buffer.write(chunk)
+
+                # Execute Pipeline
+                final_record = await analyze_pipeline(
+                    doc_id=single_doc_id,
+                    req_id=req_id,
+                    user_id=user_id,
+                    file_name=single_file.filename,
+                    original_mime_type=verified_content_type,
+                    file_url=None,
+                    local_path_override=temp_path
+                )
+                return {"doc_id": single_doc_id, "status": "success", "data": final_record}
+                
+            except Exception as e:
+                logger.error(f"Batch task failed for {single_doc_id}: {e}")
+                return {"doc_id": single_doc_id, "status": "failed", "error": str(e)}
+            finally:
+                # Cleaning
+                if temp_path and os.path.exists(temp_path):
+                    try: os.remove(temp_path)
+                    except: pass
+
+    tasks = [process_task(file[i], doc_id[i]) for i in range(len(file))]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Cleaning and pack up return structure
+    final_response = []
+    for res in results:
+        if isinstance(res, Exception):
+            # Capture underlying system anomalies
+            final_response.append({"status": "critical_failure", "error": str(res)})
+        else:
+            final_response.append(res)
+
+    return {"batch_status": "completed", "results": final_response}
 
 
 

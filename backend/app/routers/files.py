@@ -1,29 +1,48 @@
-from fastapi import APIRouter, status, HTTPException,Form
+from fastapi import APIRouter, status, HTTPException, Form
 from app.models.files import FilesSchema
 from app.models.files import FlagDocumentRequest
 from app.core.firebase import db
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime
+from typing import List
 files_router = APIRouter()
 
 
-# user upload files
+# user upload files (allow multiple files)
 @files_router.post("/upload_files",status_code=status.HTTP_201_CREATED)
-def upload_files(file_data: FilesSchema):
+def upload_files(files_data: List[FilesSchema]):
+
+    if not files_data:
+        raise HTTPException(status_code=400, detail="No file data provided.")
+    if len(files_data) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 files allowed per request.")
+    
     try: 
-        data_to_save = file_data.model_dump()
+        batch = db.batch()
+        collection_ref = db.collection("upload_files")
+        doc_ids = []
         
-        update_time, doc_ref = db.collection("upload_files").add({
-            **data_to_save,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "updatedAt": ''
-        })
+        server_time = firestore.SERVER_TIMESTAMP
+        
+        for file_item in files_data:
+            doc_ref = collection_ref.document()
+            data_to_save = file_item.model_dump()
+            payload = {
+                **data_to_save,
+                "created_at": server_time,
+                "updatedAt": '',
+                "analysis_status": "PENDING" 
+            }
+            batch.set(doc_ref, payload)
+            doc_ids.append(doc_ref.id)
+
+        batch.commit()
             
         return {
             "message": "File successfully uploaded",
-            "id": doc_ref.id,
-            "timestamp": str(update_time)
+            "id": doc_ids,
+            "timestamp": str(server_time)
         }
     
     except Exception as e:
