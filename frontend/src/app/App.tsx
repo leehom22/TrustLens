@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Toaster } from "./components/ui/sonner";
@@ -46,9 +46,14 @@ export default function App() {
   const [guestUrl, setGuestUrl] = useState<string>("")
   const [guestLanguage, setGuestLanguage] = useState<Language>("en")
 
+  // Tracks whether the user was previously authenticated — used to detect sign-out vs initial load
+  const wasLoggedInRef = useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
+        const wasLoggedIn = wasLoggedInRef.current;
+        wasLoggedInRef.current = false;
         setUser(null);
         setExpert(false);
         setCurrentUserId(null);
@@ -56,6 +61,11 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
+        // Only redirect to /analyze if user was previously signed in (sign-out event)
+        // Not on initial page load where user was never logged in
+        if (wasLoggedIn) {
+          navigate("/analyze");
+        }
         return;
       }
 
@@ -80,6 +90,7 @@ export default function App() {
       setExpert(isExpert);
       localStorage.setItem('role', isExpert ? 'expert' : 'user');
       setLoading(false);
+      wasLoggedInRef.current = true; // mark that a user is now logged in
     });
 
     return () => unsubscribe();
@@ -103,20 +114,22 @@ export default function App() {
       setUrl(fileUrl);
 
       if (downloadURL) {
-        const res = await axios.post(`${backendUrl}/files/upload_files`, {
-          "user_id": currentUserId,
-          "fileName": file.name,
-          "fileUrl": downloadURL,
-          'fileSize': file.size,
-          'mimeType': file.type,
-          'flagged': "False",
-          'encryptedKey': bufferToBase64(encryptedFile.key),
-          'iv': bufferToBase64(encryptedFile.iv)
-        })
+        const res = await axios.post(`${backendUrl}/files/upload_files`, [
+          {
+            "user_id": currentUserId,
+            "fileName": file.name,
+            "fileUrl": downloadURL,
+            "fileSize": file.size,
+            "mimeType": file.type,
+            "flagged": "False",
+            "encryptedKey": bufferToBase64(encryptedFile.key),
+            "iv": bufferToBase64(encryptedFile.iv)
+          }
+        ])
 
         if (res.status === 201) {
           setUploadedFile(file);
-          setDocumentId(res.data.id)
+          setDocumentId(res.data.id[0])  // backend returns array of ids
           setAppState("analysis");
           toast.success("File successfully uploaded")
         } else {
