@@ -4,24 +4,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/ta
 import { motion } from "motion/react";
 import { useState } from "react";
 import { VisualManipulation } from "./HeatmapVisualization";
-// import { ai_analysis_format } from "@/app/data/db-ai-analysis";
 import Metadata from "../expert/expertDocumentAnalysis/analysisTab/Metadata";
 import ContentAnalysis from "../expert/expertDocumentAnalysis/analysisTab/ContentAnalysis";
 import LogicalConsistency from "../expert/expertDocumentAnalysis/analysisTab/KeyFindings";
 import { DocumentAnalysisResult, RiskLevelColor } from "@/app/types/db-ai-analysis-type";
 import DocumentFeedback from "./DocumentFeedback";
 import { statusStyles } from "@/lib/utils";
+import type { Language } from "../../App";
+
+const UI_TEXT = {
+  en: {
+    tabs: [
+      { value: "metadata",  label: "Metadata" },
+      { value: "heatmap",   label: "Visuals" },
+      { value: "content",   label: "Semantics" },
+      { value: "findings",  label: "Consistency" },
+    ],
+    requestReview: "Request for a review",
+    giveFeedback:  "Give Feedback",
+    riskBadge: (level: string, score: any) => `Risk Level: ${level} (Risk Score: ${score})`,
+  },
+  ms: {
+    tabs: [
+      { value: "metadata",  label: "Metadata" },
+      { value: "heatmap",   label: "Visual" },
+      { value: "content",   label: "Semantik" },
+      { value: "findings",  label: "Konsistensi" },
+    ],
+    requestReview: "Minta semakan",
+    giveFeedback:  "Beri Maklum Balas",
+    riskBadge: (level: string, score: any) => `Tahap Risiko: ${level} (Skor Risiko: ${score})`,
+  },
+};
 
 interface AnalysisResultProps {
-  setRequestReview: React.Dispatch<React.SetStateAction<boolean>>
-  ai_analysis_format: DocumentAnalysisResult,
-  raw_analysis_id: string
-  doc_type: string,
-
+  setRequestReview: React.Dispatch<React.SetStateAction<boolean>>;
+  ai_analysis_format: DocumentAnalysisResult;
+  raw_analysis_id: string;
+  doc_type: string;
+  language?: Language;
 }
-export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id }: AnalysisResultProps) {
-  //** User side - Document Analysis Result page */
-  const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
+export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id, language = "en" }: AnalysisResultProps) {
+  const t = UI_TEXT[language];
+  const riskLevel = ai_analysis_format?.dashboard_header?.risk_level;
   const riskLevelColor: RiskLevelColor = ai_analysis_format?.dashboard_header?.risk_level_color || 'gray'
 
   const [openFeedback, setOpenFeedback] = useState({
@@ -68,7 +93,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                   : "border-green-600 text-green-600 bg-green-50"
               }`}
           >
-            Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Risk Score: {ai_analysis_format?.dashboard_header?.overall_score})
+            {t.riskBadge(ai_analysis_format?.dashboard_header?.risk_level, ai_analysis_format?.dashboard_header?.overall_score)}
           </Badge>
         </div>
 
@@ -85,12 +110,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
           {/* Scrollable tabs */}
           <div className="overflow-x-auto pb-1 -mb-1 flex-1">
             <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full ">
-              {[
-                { value: 'metadata', label: 'Metadata' },
-                { value: 'heatmap', label: 'Visuals' },
-                { value: 'content', label: 'Semantics' },
-                { value: 'findings', label: 'Consistency' },
-              ].map(({ value, label }) => (
+              {t.tabs.map(({ value, label }) => (
                 <TabsTrigger
                   key={value}
                   value={value}
@@ -109,7 +129,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
             className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
             onClick={() => setRequestReview(true)}
           >
-            Request for a review
+            {t.requestReview}
           </button>
         </div>
 
@@ -124,7 +144,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                 className="text-red-600 border rounded-lg border-red-600 p-2 px-4 cursor-pointer text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                 onClick={() => setOpenFeedback(prev => ({ ...prev, metadata: true }))}
               >
-                Give Feedback
+                {t.giveFeedback}
               </button>
             </div>
           )}
@@ -149,7 +169,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                 className="text-red-600 border rounded-lg border-red-600 p-2 px-4 cursor-pointer text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                 onClick={() => setOpenFeedback(prev => ({ ...prev, heatmap: true }))}
               >
-                Give Feedback
+                {t.giveFeedback}
               </button>
             </div>
           )}
@@ -173,7 +193,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                 className="text-red-600 border rounded-lg border-red-600 p-2 px-4 cursor-pointer text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                 onClick={() => setOpenFeedback(prev => ({ ...prev, contentAnalysis: true }))}
               >
-                Give Feedback
+                {t.giveFeedback}
               </button>
             </div>
           )}
@@ -201,7 +221,7 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
                 className="text-red-600 border rounded-lg border-red-600 p-2 px-4 cursor-pointer text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                 onClick={() => setOpenFeedback(prev => ({ ...prev, findings: true }))}
               >
-                Give Feedback
+                {t.giveFeedback}
               </button>
             </div>
           )}

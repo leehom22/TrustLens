@@ -84,12 +84,12 @@ function Navigation() {
         <div className="flex items-center gap-4">
           <a
             href="/login"
-            className="hidden md:inline-flex text-[14px] font-medium text-white/70 hover:text-white transition-colors"
+            className="hidden lg:inline-flex items-center justify-center px-5 h-[44px] text-[14px] font-semibold text-white/80 hover:text-white border border-white/20 rounded-full hover:border-white/40 transition-all"
           >
             Log In
           </a>
           <a
-            href="/login"
+            href="/analyze"
             className="inline-flex items-center justify-center px-6 h-[44px] text-[14px] font-bold text-[#0B0F19] bg-white rounded-full hover:bg-white/90 transition-all shadow-lg"
           >
             Get Started
@@ -131,10 +131,16 @@ function Navigation() {
           </nav>
           <div className="absolute bottom-10 left-8 right-8 flex flex-col gap-3">
             <a
-              href="/login"
+              href="/analyze"
               className="w-full block text-center bg-white text-[#0B0F19] py-4 rounded-full font-bold"
             >
               Get Started
+            </a>
+            <a
+              href="/login"
+              className="w-full block text-center border border-white/30 text-white py-4 rounded-full font-semibold hover:bg-white/10 transition-all"
+            >
+              Log In
             </a>
           </div>
         </div>
@@ -183,7 +189,7 @@ function HeroSection() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <a
-              href="/login"
+              href="/analyze"
               className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)]"
             >
               Start Analyzing Now <ArrowRight size={20} />
@@ -640,7 +646,7 @@ function PreFooterCTA() {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="/login"
+            href="/analyze"
             className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)]"
           >
             Get Started Free <ArrowRight size={20} />

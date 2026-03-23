@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Toaster } from "./components/ui/sonner";
@@ -23,6 +23,7 @@ import ReviewDocumentList from "./pages/expert/ReviewDocumentList";
 import { bufferToBase64, encryptFile } from "@/lib/encrypt";
 
 type AppState = "upload" | "analysis";
+export type Language = "en" | "ms";
 
 export default function App() {
   const navigate = useNavigate();
@@ -34,14 +35,25 @@ export default function App() {
   const [expert, setExpert] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState<string>("")
-  const [documentId, setDocumentId] = useState <string | null> (null)
+  const [documentId, setDocumentId] = useState<string | null>(null)
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>("en")
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   const [fileUploadLoading, setFileUploadLoading] = useState(false)
-  // Reset to upload page when user logs in or changes
+
+  // ─── Guest (unauthenticated) state ───────────────────────────────────────
+  const [guestAppState, setGuestAppState] = useState<AppState>("upload")
+  const [guestFile, setGuestFile] = useState<File | null>(null)
+  const [guestUrl, setGuestUrl] = useState<string>("")
+  const [guestLanguage, setGuestLanguage] = useState<Language>("en")
+
+  // Tracks whether the user was previously authenticated — used to detect sign-out vs initial load
+  const wasLoggedInRef = useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // 1. Handle Logout / No User
       if (!currentUser) {
+        const wasLoggedIn = wasLoggedInRef.current;
+        wasLoggedInRef.current = false;
         setUser(null);
         setExpert(false);
         setCurrentUserId(null);
@@ -49,16 +61,14 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
-        
-        // --- CHANGE MADE HERE ---
-        // Removed: navigate('/login'); 
-        // Why: This was forcing a redirect to login on page load, blocking the Landing Page.
-        // The Sidebar's handleSignOut handles the manual redirect to /login.
-        
+        // Only redirect to /analyze if user was previously signed in (sign-out event)
+        // Not on initial page load where user was never logged in
+        if (wasLoggedIn) {
+          navigate("/analyze");
+        }
         return;
       }
 
-      // 2. Fetch User Claims (Role)
       let isExpert = false;
       try {
         const idTokenResult = await currentUser.getIdTokenResult();
@@ -67,70 +77,59 @@ export default function App() {
         console.error("Error fetching claims:", error);
       }
 
-      // 3. Handle Login/User Change Logic
       if (currentUser.uid !== currentUserId) {
-        // Only reset the app flow if they AREN'T an expert 
-        // Experts usually land on a different view (Review/Dashboard)
         if (!isExpert) {
           setAppState("upload");
           setUploadedFile(null);
           setResetKey(prev => prev + 1);
         }
-
         setCurrentUserId(currentUser.uid);
       }
 
-      // 4. Update Final States
       setUser(currentUser);
       setExpert(isExpert);
       localStorage.setItem('role', isExpert ? 'expert' : 'user');
       setLoading(false);
+      wasLoggedInRef.current = true; // mark that a user is now logged in
     });
 
     return () => unsubscribe();
-  }, [currentUserId, navigate]); // Added navigate to dependency array
+  }, [currentUserId, navigate]);
 
-  const handleFileUpload = async (file: File) => {
-    // //! Development 
-    // setUploadedFile(file);
-    // setAppState("analysis");
-    // return 
-      localStorage.removeItem('latest_analysis');
-      localStorage.removeItem('latest_analysis_header');
-    
+  // ─── Authenticated user upload ────────────────────────────────────────────
+  const handleFileUpload = async (file: File, language: Language) => {
+    setSelectedLanguage(language);
+    localStorage.removeItem('latest_analysis');
+    localStorage.removeItem('latest_analysis_header');
 
-    if (!file) return
+    if (!file) return;
     const storageRef = ref(storage, `documents/${currentUserId}/${file.name}`)
 
     try {
-      // 2. Upload the file
       setFileUploadLoading(true)
-      // const snapshot = await uploadBytes(storageRef, file);
-      // ! Update: Encrypt document in firebase storage 
-       const encryptedFile = await encryptFile(file);
+      const encryptedFile = await encryptFile(file);
       const snapshot = await uploadBytes(storageRef, encryptedFile.encryptedBlob);
-
-      // 3. Get the public download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
       const fileUrl = URL.createObjectURL(file)
       setUrl(fileUrl);
-      // console.log(`=======Upload successful! - ${downloadURL}=======`);
-      if (downloadURL) {
-        console.log("==========The key and iv is: ",bufferToBase64(encryptedFile.key), bufferToBase64(encryptedFile.iv))
-        const res = await axios.post(`${backendUrl}/files/upload_files`,{
-          "user_id":currentUserId,
-          "fileName":file.name,
-          "fileUrl":downloadURL,
-          'fileSize':file.size,
-          'mimeType':file.type,
-          'flagged': "False",
-          'encryptedKey': bufferToBase64(encryptedFile.key), // store encrypted key to firestore
-          'iv': bufferToBase64(encryptedFile.iv) // store encrypted key to firestore
-        })
 
-        if(res.status === 201){
+      if (downloadURL) {
+        const res = await axios.post(`${backendUrl}/files/upload_files`, [
+          {
+            "user_id": currentUserId,
+            "fileName": file.name,
+            "fileUrl": downloadURL,
+            "fileSize": file.size,
+            "mimeType": file.type,
+            "flagged": "False",
+            "encryptedKey": bufferToBase64(encryptedFile.key),
+            "iv": bufferToBase64(encryptedFile.iv)
+          }
+        ])
+
+        if (res.status === 201) {
           setUploadedFile(file);
-          setDocumentId(res.data.id)
+          setDocumentId(res.data.id[0])  // backend returns array of ids
           setAppState("analysis");
           toast.success("File successfully uploaded")
         } else {
@@ -145,6 +144,17 @@ export default function App() {
     }
   };
 
+  // ─── Guest upload (no Firebase, no DB) ───────────────────────────────────
+  const handleGuestFileUpload = (file: File, language: Language) => {
+    localStorage.removeItem('latest_analysis');
+    localStorage.removeItem('latest_analysis_header');
+    const fileUrl = URL.createObjectURL(file);
+    setGuestFile(file);
+    setGuestUrl(fileUrl);
+    setGuestLanguage(language);
+    setGuestAppState("analysis");
+  };
+
   const handleBack = () => {
     localStorage.removeItem('latest_analysis')
     localStorage.removeItem('latest_analysis_header')
@@ -152,97 +162,134 @@ export default function App() {
     setUploadedFile(null);
   };
 
+  const handleGuestBack = () => {
+    localStorage.removeItem('latest_analysis')
+    localStorage.removeItem('latest_analysis_header')
+    setGuestAppState("upload");
+    setGuestFile(null);
+  };
+
   return (
     <ThemeProvider>
-  {/* Added bg-white dark:bg-slate-900 for the root container */}
-  <div className="flex min-h-screen w-full overflow-x-hidden bg-white dark:bg-slate-900 transition-colors duration-300">
-    
-    {/* Sidebar only appears if user is authenticated */}
-    {user && (
-      <div className="md:sticky md:inset-y-0 md:left-0 z-50 md:flex md:w-72 flex-col border-r border-gray-200 dark:border-slate-700">
-        <Sidebar user={user} />
-      </div>
-    )}
+      <div className="flex min-h-screen w-full overflow-x-hidden bg-white dark:bg-slate-900 transition-colors duration-300">
 
-    {/* Updated main background logic: 
-        If user exists, it uses a slightly off-white (gray-50) or deep slate (slate-800) */}
-    <main className={`flex-1 w-full min-w-0 transition-colors duration-300 ${
-      user ? "bg-gray-50 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
-    }`}>
-      
-      <div className={user ? "p-4 md:p-7 w-full max-w-7xl mx-auto" : "w-full"}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
+        {user && (
+          <div className="md:sticky md:inset-y-0 md:left-0 z-50 md:flex md:w-72 flex-col border-r border-gray-200 dark:border-slate-700">
+            <Sidebar user={user} />
+          </div>
+        )}
 
-          {/* Conditional Home Logic */}
-          <Route
-            path="/"
-            element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
-          />
+        <main className={`flex-1 w-full min-w-0 transition-colors duration-300 ${user ? "bg-gray-50 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
+          }`}>
 
-          {/* Protected Routes */}
-          {user && (
-            <>
+          <div className={user ? "p-4 md:p-7 w-full max-w-7xl mx-auto" : "w-full"}>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<LoginPage />} />
+
+              {/* Conditional Home Logic */}
               <Route
-                path="/upload-document"
+                path="/"
+                element={!user ? <LandingPage /> : <Navigate to={expert ? "/expert-dashboard" : "/upload-document"} />}
+              />
+
+              {/* ── Guest Analysis Route (no login required) ── */}
+              <Route
+                path="/analyze"
                 element={
-                  <div className="w-full h-full min-h-[calc(100vh-4rem)]">
-                    {fileUploadLoading && (
-                      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-                        <div className="flex flex-col items-center gap-4">
-                          <Loader2 className="animate-spin text-primary" size={50} />
-                          <p className="text-lg font-medium animate-pulse text-slate-900 dark:text-slate-100">
-                            Uploading Document...
-                          </p>
-                        </div>
+                  user
+                    ? <Navigate to="/upload-document" /> // logged-in users use the real flow
+                    : (
+                      <div className="w-full min-h-screen">
+                        {guestAppState === "upload" && (
+                          <DocumentUploader
+                            onFileUpload={handleGuestFileUpload}
+                            isGuest
+                          />
+                        )}
+                        {guestAppState === "analysis" && guestFile && (
+                          <AnalysisInterface
+                            fileName={guestFile.name}
+                            onBack={handleGuestBack}
+                            userEmail=""
+                            documentUrl={guestUrl}
+                            fileType={guestFile.type}
+                            file={guestFile}
+                            documentId=""
+                            userId=""
+                            language={guestLanguage}
+                            isGuest
+                          />
+                        )}
                       </div>
-                    )}
-                    
-                    {!fileUploadLoading && appState === "upload" && (
-                      <DocumentUploader onFileUpload={handleFileUpload} />
-                    )}
-                    
-                    {!fileUploadLoading && appState === "analysis" && uploadedFile && (
-                      <AnalysisInterface
-                        fileName={uploadedFile.name}
-                        onBack={handleBack}
-                        userEmail={user.email || "user@example.com"}
-                        documentUrl={url}
-                        fileType={uploadedFile.type}
-                        file={uploadedFile}
-                        documentId={documentId!}
-                        userId={currentUserId!}
-                      />
-                    )}
-                  </div>
+                    )
                 }
               />
-              
-              {expert ? (
+
+              {/* Protected Routes */}
+              {user && (
                 <>
-                  <Route path="/review-document-list" element={<ReviewDocumentList/>} />
-                  <Route path="/expert-dashboard" element={<ExpertDashboardPage />} />
-                  <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
-                </>
-              ) : (
-                <>
-                  <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
+                  <Route
+                    path="/upload-document"
+                    element={
+                      <div className="w-full h-full min-h-[calc(100vh-4rem)]">
+                        {fileUploadLoading && (
+                          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                            <div className="flex flex-col items-center gap-4">
+                              <Loader2 className="animate-spin text-primary" size={50} />
+                              <p className="text-lg font-medium animate-pulse text-slate-900 dark:text-slate-100">
+                                Uploading Document...
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {!fileUploadLoading && appState === "upload" && (
+                          <DocumentUploader onFileUpload={handleFileUpload} />
+                        )}
+
+                        {!fileUploadLoading && appState === "analysis" && uploadedFile && (
+                          <AnalysisInterface
+                            fileName={uploadedFile.name}
+                            onBack={handleBack}
+                            userEmail={user.email || "user@example.com"}
+                            documentUrl={url}
+                            fileType={uploadedFile.type}
+                            file={uploadedFile}
+                            documentId={documentId!}
+                            userId={currentUserId!}
+                            language={selectedLanguage}
+                            isGuest={false}
+                          />
+                        )}
+                      </div>
+                    }
+                  />
+
+                  {expert ? (
+                    <>
+                      <Route path="/review-document-list" element={<ReviewDocumentList />} />
+                      <Route path="/expert-dashboard" element={<ExpertDashboardPage />} />
+                      <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!} />} />
+                    </>
+                  ) : (
+                    <>
+                      <Route path="/history" element={<HistoryPage userId={currentUserId!} />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
 
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
 
-        <Toaster />
-        <ToastContainer />
+            <Toaster />
+            <ToastContainer />
+          </div>
+        </main>
       </div>
-    </main>
-  </div>
-</ThemeProvider>
+    </ThemeProvider>
   );
 }
