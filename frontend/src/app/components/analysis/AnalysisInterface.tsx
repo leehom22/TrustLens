@@ -335,13 +335,14 @@ export function AnalysisInterface({
 
             {/* Analysis Column */}
             <div className="lg:col-span-7 order-1 lg:order-2">
-              {stage === "analyzing" && <AnalysisProcess />}
+              {stage === "analyzing" && <AnalysisProcess language={language} />}
               {stage === "complete" && (
                 <AnalysisResults
                   setRequestReview={handleRequestReview}
                   ai_analysis_format={ai_analysis!}
                   doc_type={ai_analysis_header?.doc_type!}
                   raw_analysis_id={ai_analysis_header?.raw_analysis_id!}
+                  language={language}
                 />
               )}
             </div>
