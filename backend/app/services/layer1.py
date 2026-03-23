@@ -59,7 +59,8 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
         "hidden_data_found": False,
         "low_dpi_detected": False,
         "font_multiple_subsets": False,
-        "risk_signal": "none"
+        "risk_signal": "none",
+        "structure_notes": []
     }
     
     try:
@@ -73,9 +74,10 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
             if eof_count > 1:
                 result["has_incremental_updates"] = True
                 # Note: Increment updates may be legal such as digital signature updates
-                result["structure_note"] = "File contains history of modifications (Incremental Updates)."
+                result["structure_notes"].append({"code": "INCREMENTAL_UPDATES"})
             elif eof_count == 0:
                 result["risk_signal"] = "high"
+                result["structure_notes"].append({"code": "CORRUPTED_EOF"})
                 result["structure_note"] = "CRITICAL: No EOF marker found. File structure is corrupted or strictly truncated."
             
             # 2. Injection / Hidden Payload => Malicious tempering / changes / hacker
@@ -87,10 +89,7 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
                     result["hidden_data_found"] = True
                     result["risk_signal"] = "high"
                     result["hidden_data_size"] = trailing_bytes
-                    result["structure_note"] = (
-                        f"CRITICAL: Found {trailing_bytes} bytes of hidden data after EOF. "
-                        "Note: High probability of injection, but requires cross-layer semantic check."
-                    )
+                    result["structure_notes"].append({"code": "HIDDEN_DATA", "params": {"bytes": trailing_bytes}})
 
         # 2. Object-Level Analysis (Image DPI, Fonts Only)
         if reader and reader.pages:
@@ -120,8 +119,8 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
             # A. Low DPI Forensic
             if low_dpi_count > 0:
                 result["low_dpi_detected"] = True
-                result["structure_note"].append(f"DPI ANOMALY: Found {low_dpi_count} image(s) with < 150 DPI. Highly indicative of a screenshot or web compression.")
-
+                result["structure_notes"].append({"code": "LOW_DPI_IMAGE", "params": {"count": low_dpi_count}})
+                
             # B. Font Subset Anomaly
             base_fonts = {}
             for f in font_names:
@@ -130,7 +129,7 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
                     core_font = match.group(1)
                     if core_font in base_fonts and base_fonts[core_font] != f:
                         result["font_multiple_subsets"] = True
-                        result["structure_note"].append(f"FONT TRACE: Multiple subsets of '{core_font}' detected (Possible localized editing).")
+                        result["structure_notes"].append({"code": "FONT_SUBSET_ANOMALY", "params": {"font": core_font}})
                         break
                     base_fonts[core_font] = f
 
@@ -201,11 +200,11 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                 if found_high:
                     score += 35
                     risk_factors.append("HIGH_METADATA_SOFTWARE_RISK")
-                    details["software_risk"] = f"Edited with high-risk image software: {found_high[0]}"
+                    details["software_risk"] = {"code": "HIGH_RISK_SOFTWARE", "params": {"tool": found_high[0]}}
                 elif found_medium:
                     score += 15
                     risk_factors.append("MEDIUM_METADATA_SOFTWARE_RISK")
-                    details["software_risk"] = f"Processed by consumer tool: {found_medium[0]}"
+                    details["software_risk"] = {"code": "MEDIUM_RISK_SOFTWARE", "params": {"tool": found_medium[0]}}
             
             # Evaluation 1 + 2: Contextualize (Risk Increases when both incremental updates and tools exist)
             if (struct.get("has_incremental_updates") or struct.get("font_multiple_subsets")) and (found_high or found_medium):
@@ -224,9 +223,8 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                 delta = (c_date - m_date).total_seconds()
                 if delta > 60: 
                     score = 95
-                    msg = f"CRITICAL: Logical Time Paradox. Created {int(delta)}s AFTER Modified."
                     risk_factors.append("TIME_PARADOX_METADATA")
-                    details["time_paradox"] = msg
+                    details["time_paradox"] = {"code": "TIME_PARADOX_DELTA", "params": {"delta": int(delta)}}
 
         # ================= Checking 4: Deep XMP Forensic Graph =================
             try:
@@ -287,7 +285,7 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                 if not exif:
                     # EXIF may be lost in social media sharing and screenshot
                     score += 10 
-                    risk_factors.append("Metadata missing (Context: Web/Screenshot)")
+                    details["structure"] = {"structure_notes": [{"code": "NO_EXIF"}]}
 
                 else:
                     # Checking & Evaluation 2: Checking tools from EXIF
@@ -298,7 +296,8 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
                         found_high = [t for t in SOFTWARE_RISK_MAP["high"] if t in software]
                         if found_high:
                             score += 40
-                            risk_factors.append(f"Image edited with: {found_high[0]}")
+                            risk_factors.append("HIGH_METADATA_SOFTWARE_RISK")
+                            details["software_risk"] = {"code": "HIGH_RISK_SOFTWARE", "params": {"tool": found_high[0]}}
 
     except Exception as e:
         return LayerResult(layer_name="L1_Metadata", status=LayerStatus.ERROR, score=0, details={"error": str(e)})

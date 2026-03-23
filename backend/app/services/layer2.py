@@ -140,7 +140,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 # Threshold: > 80-100 implies noise/scan. < 80 implies clean digital.
                 is_native_digital = lap_var < 100 
             
-            mode_str = "Native Digital" if is_native_digital else "Noisy/Scan"
+            mode_str = "NATIVE" if is_native_digital else "NOISY"
             
             # ================= ALGORITHM WEIGHTS =================
             # Define confidence weights based on mode

@@ -24,7 +24,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
 
     MULTI-LANGUAGE STANDARDIZATION (CRITICAL):
     - Regardless of whether the document is in English, Bahasa Melayu (BM), or Chinese, ALL JSON Keys MUST remain in English as defined below.
-    - Translate specific statutory terms implicitly (e.g., 'Saman' -> summon, 'Jumlah' -> total_amount, 'Cukai' -> tax_amount).
+    - FOR `internal_semantic_paradoxes` and `scam_pattern_analysis`, YOU MUST PROVIDE A BILINGUAL DICTIONARY {"en": "...", "ms": "..."} inside the array!
 
     GENERAL CRITICAL INSTRUCTION:
     1. Distinguish between OBSERVATION (what is printed) and INFERENCE.
@@ -43,10 +43,16 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
         
         "forensic_reasoning_trace": {
             "internal_semantic_paradoxes": [
-                "String. Explicitly list any logical contradictions within the text. E.g., 'Resume states graduation in 2024, but work experience claims full-time Senior Engineer from 2020 to 2023.', 'Contract expiry date is earlier than effective date.' If none, leave empty array []."
+                {
+                    "en": "String in English. Explain logical contradictions (e.g. graduate 2024 but works 2020-2023).",
+                    "ms": "String in Malay translation."
+                }
             ],
             "scam_pattern_analysis": [
-                "String. Explicitly identify social engineering/fraud patterns. E.g., 'Unusual urgency language threatening PDRM arrest or court action within 2 hours', 'Guaranteed high-return claims'. If none, leave empty array []."
+                {
+                    "en": "String in English. Identify fraud patterns (e.g. urgent threats).",
+                    "ms": "String in Malay translation."
+                }
             ]
         },
         

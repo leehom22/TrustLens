@@ -1,0 +1,443 @@
+# =============== Function for Restructuring Data (Frontend Display Structure) ==============
+
+@analysis_router.post("/ai-restructure-data")
+async def generate_document_dashboard(
+    documentId: str = Form(...),
+    document_raw_data: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    PURE DATA RESTRUCTURING ENGINE
+    
+    STRICT RULES:
+    1. NO decision logic - only format existing data
+    2. NO recalculation of risk scores or levels
+    3. NO generation of new text - only use existing fields
+    4. NO mapping of risk levels to different values
+    5. NO creation of verdicts or recommendations
+    
+    This endpoint ONLY restructures the existing analysis data
+    into a dashboard-friendly format.
+    """
+    
+    start_restructure = time.perf_counter()
+
+    # -----------------------------
+    # 1️. Parse Raw Analysis JSON
+    # -----------------------------
+    try:
+        raw_json = json.loads(document_raw_data)
+    except Exception:
+        return {
+            "success": False,
+            "error": "Invalid JSON in document_raw_data"
+        }
+
+    raw_analysis_id = raw_json.get("request_id", "unknown")
+    
+    # -----------------------------
+    # 2. Extract Core Data (NO TRANSFORMATION)
+    # -----------------------------
+    
+    # Extract evidence chain
+    evidence_chain = raw_json.get("evidence_chain", [])
+    
+    # Helper function to find layer by name
+    def find_layer(layer_name):
+        return next((l for l in evidence_chain if l.get("layer_name") == layer_name), {})
+    
+    # Get individual layers - preserve exact layer names from source
+    l1 = find_layer("L1_Metadata")
+    l2 = find_layer("L2_Visual")
+    l3 = find_layer("L3_Content")
+    l4 = find_layer("L4_Logic")
+    
+    # -----------------------------
+    # 3. Extract ALL fields as-is
+    # -----------------------------
+    
+    # Risk data - use EXACT values from source
+    overall_score = raw_json.get("overall_risk_score")
+    risk_level = raw_json.get("risk_level")
+    doc_type = raw_json.get("doc_type", "unknown")
+    
+    # Agent outputs - use EXACT text from source
+    agent_summary = raw_json.get("agent_summary", "")
+    
+    # Layer summaries - use EXACT text from source if available
+    layer_summaries = raw_json.get("layer_summaries", {})
+    
+    # Grounding results - use EXACT data from source
+    grounding_result = raw_json.get("grounding_result", {})
+    grounding_notes = grounding_result.get("notes", "")
+    
+    # Sources - preserve original structure, don't transform
+    sources = grounding_result.get("sources", [])
+    
+    # -----------------------------
+    # 4. Extract Evidence URLs
+    # -----------------------------
+    evidence_urls = []
+    
+    # Try multiple possible locations where evidence URLs might exist
+    # This is data location mapping, NOT decision logic
+    if l2.get("visual_evidence_url"):
+        evidence_urls.append(l2["visual_evidence_url"])
+    
+    l2_details = l2.get("details", {})
+    all_pages = l2_details.get("all_pages", [])
+    for page in all_pages:
+        url = page.get("url")
+        if url and url not in evidence_urls:
+            evidence_urls.append(url)
+    
+    # -----------------------------
+    # 5. Extract ATS Hacking Data
+    # -----------------------------
+    ats_hacking = l2.get("ATS_Hacking")
+    ats_hacking_details = None
+    
+    if l2_details.get("ats_hacking_details"):
+        ats_hacking_details = l2_details["ats_hacking_details"]
+    
+    # -----------------------------
+    # 6. Status Mapping
+    # -----------------------------
+    # This is purely presentational - maps internal status to UI display values
+    # Does NOT change risk assessment, only how it's displayed
+    def map_status_to_ui(status_str):
+        if not status_str:
+            return "SKIPPED", "gray"
+        
+        # Direct mapping table - 1:1 relationship, no interpretation
+        status_map = {
+            "clean": ("PASS", "green"),
+            "suspicious": ("WARNING", "yellow"),
+            "high_risk": ("FAIL", "red"),
+            "error": ("FAIL", "red"),
+            "skipped": ("SKIPPED", "gray")
+        }
+        
+        return status_map.get(status_str.lower(), ("SKIPPED", "gray"))
+    
+    # Map each layer's status - preserves original assessment, only changes display format
+    l1_status, l1_color = map_status_to_ui(l1.get("status"))
+    l2_status, l2_color = map_status_to_ui(l2.get("status"))
+    l3_status, l3_color = map_status_to_ui(l3.get("status"))
+    l4_status, l4_color = map_status_to_ui(l4.get("status"))
+    
+    # -----------------------------
+    # 7. Extract Technical Proofs
+    # -----------------------------
+    
+    # ------------ Handle Risk Signals with Semantic Translation -------------
+    SIGNAL_TRANSLATION_MAP = {
+        "STRUCTURE_HIDDEN_DATA": "Hidden data payload detected after file EOF.",
+        "STRUCTURE_CORRUPTED_EOF": "Corrupted or strictly truncated file structure.",
+        "HIGH_METADATA_SOFTWARE_RISK": "Edited with high-risk image manipulation software.",
+        "MEDIUM_METADATA_SOFTWARE_RISK": "Processed by consumer-level PDF/Image tool.",
+        "TIME_PARADOX_METADATA": "Logical Time Paradox: File created after it was modified.",
+        "STRUCTURE_LOW_DPI_IMAGE": "DPI Forensic: Image resolution is below 150 DPI, indicating a screenshot or web download.",
+        "STRUCTURE_INCREMENTAL_UPDATES": "Document History: Multiple incremental update states detected (Document was edited and re-saved).",
+        "STRUCTURE_FONT_MULTIPLE_SUBSETS": "Trace: Multiple font subsets detected (May indicate localized editing or complex rendering).",
+        "XMP_METADATA_MANIPULATION": "XMP Anomaly: Metadata was modified independently of the document content.",
+        "XMP_SUSPICIOUS_ORIGIN": "XMP Anomaly: PDF was derived directly from an image/screenshot format.",
+        "XMP_HIGH_RISK_CREATOR": "XMP Anomaly: Deep metadata reveals usage of high-risk graphic editing software.",
+        "XMP_EXTENSIVE_EDIT_HISTORY": "XMP Anomaly: Unusually long modification history chain embedded in document.",
+        "VISUAL_TAMPERING_DETECTED": "Inconsistent pixel quality indicating localized manipulation.",
+        "ATS_HACKING_DETECTED": "Document Integrity: Hidden formatting anomalies identified (ATS Hacking).",
+        "ATS_HACKING_DETECTED_White_Text": "Evidence: Invisible white-on-white text layers found in document content.",
+        "ATS_HACKING_DETECTED_Micro_Font": "Evidence: Suspicious micro-sized fonts (< 2pt) used to manipulate machine indexing.",
+        "SCAM_PATTERN_DETECTED": "Social engineering or fraud language patterns identified.",
+        "SEMANTIC_PARADOX_DETECTED": "Internal logical contradictions found within the document text.",
+        "MATH_ROW_MISMATCH": "Line item calculation (Qty * Unit) does not match extracted total.",
+        "MATH_TAX_LOGIC_FAIL": "Statutory tax calculation or subtotal aggregation failed.",
+        "MISSING_INVOICE_ID": "Missing unique document identifier (Invoice/Receipt No).",
+        "MISSING_CORE_ACCOUNT_ID": "Bank Statement is missing core account identifier.",
+        "MISSING_PAYMENT_ROUTE": "Invoice is missing bank account details for payment routing.",
+        "MISSING_PAYMENT_PROOF": "Missing payment verification data (Account or Ref ID).",
+        "BENEFICIARY_MISMATCH": "Account holder name does not match the vendor name.",
+        "TIME_PARADOX_LOGIC": "Logical Error: Due Date is earlier than Document Issue Date.",
+        "ID_DATE_TIME_PARADOX": "Impossible chronography: Transaction ID generated before document existed.",
+        "ID_DATE_LAG_SUSPICIOUS": "Suspicious lag between transaction ID and receipt generation.",
+        "ID_DATE_MISMATCH_STRICT": "Transaction ID belongs to a completely different day.",
+        "LONG_ENTRY_DELAY": "Unusual processing delay extending beyond normal administrative window.",
+        "DATE_FROM_FUTURE": "Transaction date is in the future relative to analysis time.",
+        "CHRONOLOGY_INCONSISTENCY": "Sequential order of transactions is corrupted (Time Jump).",
+        "BALANCE_RECONCILIATION_FAIL": "Opening Balance + Cash Flows does not equal Closing Balance.",
+        "MATH_DEDUCTION_MISMATCH": "Payslip deductions breakdown does not sum up to the total deductions.",
+        "MATH_NET_PAY_MISMATCH": "Payslip Net Pay calculation (Gross - Deductions) is incorrect.",
+        "INVALID_ISSUING_AGENCY": "Document issuing agency is not recognized as a valid Malaysian authority.",
+        "SUMMON_TIME_PARADOX": "Impossible timeline: Offence occurred after the summon was issued or due.",
+        "ENTITY_SYMMETRY_VIOLATION": "High Risk: Contract appears to be self-dealing or circular (Party A matches Party B).",
+        "CONTRACT_TIME_PARADOX": "Logical error: Contract expires before it takes effect.",
+        "MYKAD_INVALID_STATE": "MyKad structural error: Invalid State/Country PB code.",
+        "MYKAD_INVALID_DOB": "MyKad structural error: Date of birth is physically impossible.",
+        "MYKAD_MINOR_SIGNATORY": "Legal compliance risk: Signatory is a minor (< 18 years old).",
+        "MYKAD_AGE_ANOMALY": "Identity anomaly: Signatory age is unusually high (> 100 years old).",
+        "CROSS_LAYER_TIME_PARADOX": "Critical Forgery: Physical file was finalized before the alleged transaction occurred.",
+        "CROSS_LAYER_TEMPLATE_ANOMALY": "Warning: Document date significantly exceeds the file's last physical modification date (Template anomaly)."
+    }
+
+    INTERNAL_SIGNAL_BLACKLIST = {"JSON_REPAIRED"}   # Filter out technical signals that are not meaningful
+
+    def format_proofs(signals_list):
+        if not signals_list:
+            return []
+        return [
+            SIGNAL_TRANSLATION_MAP.get(sig, sig) 
+            for sig in signals_list 
+            if sig not in INTERNAL_SIGNAL_BLACKLIST
+        ]
+
+    l1_proofs = format_proofs(l1.get("risk_signals", []))
+    l2_proofs = format_proofs(l2.get("risk_signals", []))
+    l3_proofs = format_proofs(l3.get("risk_signals", []))
+    l4_proofs = format_proofs(l4.get("risk_signals", []))
+
+    # -------------- Data Enrichment from Layer Details ----------------
+
+    # --- L1: Metadata Details ---
+    l1_details = l1.get("details", {})
+    if l1_details.get("producer_raw"):
+        l1_proofs.append(f"Document Generator: {l1_details['producer_raw']}")
+    if l1_details.get("software_risk"):
+        l1_proofs.append(l1_details["software_risk"])
+    if l1_details.get("time_paradox"):
+        l1_proofs.append(l1_details["time_paradox"])
+    if l1_details.get("structure", {}).get("structure_note"):
+        l1_proofs.append(l1_details["structure"]["structure_note"])
+    if l1_details.get("details", {}).get("pdf_creation_date") and l1_details.get("details", {}).get("pdf_mod_date"):
+        l1_proofs.append(f"Created at: {l1_details['pdf_creation_date']} | Modified at: {l1_details['pdf_mod_date']}")
+
+    xmp_data = l1_details.get("xmp_data", {})
+    if xmp_data:
+        l1_proofs.append("--- XMP FORENSIC SIGNALS ---")
+        if xmp_data.get("CreateDate"): l1_proofs.append(f"XMP CreateDate: {xmp_data['CreateDate']}")
+        if xmp_data.get("ModifyDate"): l1_proofs.append(f"XMP ModifyDate: {xmp_data['ModifyDate']}")
+        if xmp_data.get("MetadataDate"): l1_proofs.append(f"XMP MetadataDate: {xmp_data['MetadataDate']}")
+        if xmp_data.get("CreatorTool"): l1_proofs.append(f"XMP Creator: {xmp_data['CreatorTool']}")
+        if xmp_data.get("HistoryEntries"): l1_proofs.append(f"XMP Edit History Entries: {xmp_data['HistoryEntries']}")
+        if xmp_data.get("DerivedFrom"): l1_proofs.append(f"XMP Derived From: {xmp_data['DerivedFrom']}")
+
+    # --- L2: Visual Details ---
+    l2_details = l2.get("details", {})
+    if l2_details.get("mode"):
+        l2_proofs.append(f"Visual Analysis Mode: {l2_details['mode']}")
+    
+    worst_metrics = l2_details.get("worst_page_details", {}).get("metrics", {})
+    if worst_metrics.get("max_z_score"):
+        z_score = worst_metrics["max_z_score"]
+        if z_score > 0:
+            l2_proofs.append(f"Peak ELA Anomaly (Z-Score): {z_score:.2f}")
+
+    # --- L3: Content Details ---
+    l3_details = l3.get("details", {})
+    vis_elements = l3_details.get("visual_elements", {})
+    if vis_elements.get("mixed_fonts"):
+        l3_proofs.append("Multiple inconsistent font types detected across text layout.")
+    if vis_elements.get("misaligned_layout"):
+        l3_proofs.append("Text bounding box misalignments detected in table or layout.")
+
+    reasoning = l3_details.get("forensic_reasoning_trace", {})
+    paradoxes = reasoning.get("internal_semantic_paradoxes", [])
+    for p in paradoxes:
+        l3_proofs.append(f"Logic Anomaly: {p}")
+    scams = reasoning.get("scam_pattern_analysis", [])
+    for s in scams:
+        l3_proofs.append(f"Scam Pattern: {s}")
+
+    # --- L4: Logic Audit Trails ---
+    l4_details = l4.get("details", {})
+    audit_trails = l4_details.get("audit_trails", [])
+    
+    # Extract up to 4 FAILs for L4 proofs, with detailed formatting
+    fails = [t for t in audit_trails if t.get("status") == "FAIL"]
+    for f in fails[:4]:
+        # Concatenation Format: "[Row 1 Math] 5.0 * 10.0 = 50.00 (Extracted: 60.00)"
+        check_name = f.get('check_name', 'Audit')
+        visual = f.get('visual_feedback', '')
+        reason = f.get('reason', '')
+        # For Rule 6-9，take info from reasons
+        # Filter rendundant "Unexplained discrepancy" in Rule 2
+        if reason and reason not in ["Unexplained discrepancy"]:
+            proof_str = f"[{check_name}] {visual} - {reason}"
+        else:
+            proof_str = f"[{check_name}] {visual}"
+            
+        if proof_str not in l4_proofs:
+            l4_proofs.append(proof_str)
+            
+    # If no FAILs, then show PASS proofs to provide positive evidence and balance the narrative
+    if not fails:
+        passes = [t for t in audit_trails if t.get("status") == "PASS"]
+        for p in passes[:2]:
+            proof_str = f"Verified: {p.get('check_name', 'Audit')} - {p.get('reason', 'OK')}"
+            if proof_str not in l4_proofs:
+                l4_proofs.append(proof_str)
+
+    # Crop proofs to max 6 per layer for UI display
+    l1_proofs = list(dict.fromkeys(l1_proofs))[:5]
+    l2_proofs = list(dict.fromkeys(l2_proofs))[:5]
+    l3_proofs = list(dict.fromkeys(l3_proofs))[:5]
+    l4_proofs = list(dict.fromkeys(l4_proofs))[:5]
+    
+    # -----------------------------
+    # 8. Build Layer Results
+    # -----------------------------
+    layer_results = [
+        {
+            "layer_id": "L1",
+            "layer_title": "Metadata Forensics",  # Fixed display title
+            "status": l1_status,
+            "status_color": l1_color,
+            "icon": "file-text",
+            "score": l1.get("score", 0),
+            "ai_analysis": layer_summaries.get("L1_Metadata", "No AI summary available."),
+            "technical_proofs": l1_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        },
+        {
+            "layer_id": "L2",
+            "layer_title": "Visual Forensics",
+            "status": l2_status,
+            "status_color": l2_color,
+            "icon": "eye",
+            "score": l2.get("score", 0),
+            "ai_analysis": layer_summaries.get("L2_Visual", "No AI summary available."),
+            "technical_proofs": l2_proofs,
+            "has_visual_evidence": len(evidence_urls) > 0,
+            "evidence_image_url": evidence_urls,
+            "ATS_hacking": ats_hacking if ats_hacking else "None"
+        },
+        {
+            "layer_id": "L3",
+            "layer_title": "Content Extraction",
+            "status": l3_status,
+            "status_color": l3_color,
+            "icon": "file-digit",
+            "score": l3.get("score", 0),
+            "ai_analysis": layer_summaries.get("L3_Content", "No AI summary available."),
+            "technical_proofs": l3_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        },
+        {
+            "layer_id": "L4",
+            "layer_title": "Logic Audit",
+            "status": l4_status,
+            "status_color": l4_color,
+            "icon": "calculator",
+            "score": l4.get("score", 0),
+            "ai_analysis": layer_summaries.get("L4_Logic", "No AI summary available."),
+            "technical_proofs": l4_proofs,
+            "has_visual_evidence": False,
+            "evidence_image_url": []
+        }
+    ]
+    
+    # Add ATS hacking data if present
+    if ats_hacking:
+        layer_results[1]["ATS_hacking"] = ats_hacking
+    if ats_hacking_details:
+        layer_results[1]["ats_hacking_details"] = ats_hacking_details
+    
+    # -----------------------------
+    # 9. Build Dashboard Header
+    # -----------------------------
+    risk_upper = str(risk_level).upper()
+    
+    title_map = {
+        "CRITICAL": "Critical Risk Detected",
+        "HIGH_RISK": "High Risk Detected",
+        "SUSPICIOUS": "Suspicious Elements Found",
+        "CAUTION": "Caution Advised",
+        "SAFE": "Document Verified",
+        "CLEAN": "Document Verified"
+    }
+
+    # Risk level color mapping - purely presentational, no semantic change
+    color_map = {
+        "SAFE": "green",
+        "CAUTION": "yellow",
+        "SUSPICIOUS": "orange",
+        "CRITICAL": "red",
+        "HIGH_RISK": "red"
+    }
+    
+    dashboard_header = {
+        "overall_score": overall_score,
+        "risk_level": risk_level,
+        "risk_level_color": color_map.get(str(risk_level).upper(), "gray"),
+        "verdict_title": title_map.get(risk_upper, "Analysis Complete"),
+        "ai_executive_summary": agent_summary,
+        "grounding_search_reference": grounding_notes,
+        "doc_type": doc_type,
+        "next_step_recommendation": raw_json.get("final_recommendation", "Review document findings manually."),
+        "sources": sources  # EXACT structure from source
+    }
+    
+    # -----------------------------
+    # 10. Build Final Dashboard
+    # -----------------------------
+    dashboard = {
+        "ui_render_mode": "dashboard_v2",
+        "document_id": raw_analysis_id,
+        "processed_at": datetime.utcnow().isoformat(),
+        "dashboard_header": dashboard_header,
+        "layer_results": layer_results
+    }
+
+    restructure_duration_ms = int((time.perf_counter() - start_restructure) * 1000)
+    logger.info(f"[AI_Restructure] executed in {restructure_duration_ms}ms", extra={
+        "json_fields": {
+            "event_type": "latency_metric",
+            "document_id": documentId,
+            "raw_analysis_id": raw_analysis_id,
+            "layer": "AI_Restructure",
+            "duration_ms": restructure_duration_ms,
+            "status": "SUCCESS"
+        }
+    })
+    
+    # -----------------------------
+    # 11. Fetch Additional Metadata
+    # -----------------------------
+    # This is adding context, NOT changing the analysis
+    try:
+        doc_ref = db.collection("analysis_results").document(raw_analysis_id)
+        doc_snap = doc_ref.get()
+        if doc_snap.exists:
+            doc_data = doc_snap.to_dict()
+            # Only add fields that don't conflict with existing data
+            if not doc_type or doc_type == "unknown":
+                dashboard["dashboard_header"]["doc_type"] = doc_data.get("doc_type", "unknown")
+    except Exception as e:
+        print(f"Warning: Could not fetch additional metadata: {e}")
+    
+    # -----------------------------
+    # 12. Save to Database
+    # -----------------------------
+    db_payload = {
+        "documentId": documentId,
+        "raw_analysis_id": raw_analysis_id,
+        "doc_type": doc_type,
+        "analysis_content": dashboard,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    try:
+        db.collection("structure_analysis_result").add(db_payload)
+        
+        upload_document_db = db.collection('upload_files').document(documentId).get()
+        if upload_document_db.exists:
+            db.collection('upload_files').document(documentId).update({
+                "risk_level": risk_level,
+                "risk_level_color": dashboard_header["risk_level_color"],
+                "overall_score": overall_score
+            })
+    except Exception as e:
+        print(f"Warning: Firestore save error: {e}")
+    
+    return db_payload
