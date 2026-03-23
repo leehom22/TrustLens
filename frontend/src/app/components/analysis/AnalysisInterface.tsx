@@ -125,23 +125,23 @@ export function AnalysisInterface({
 
     try {
       const formData = new FormData();
+      // Backend expects file as a List[UploadFile] — always append as 'file'
       formData.append('file', file);
       // Pass language to backend so it can tailor output language
       formData.append('language', language);
-
-      // Only send DB-related fields for authenticated users
+      // user_id is always required by backend — use "guest" for unauthenticated users
+      formData.append('user_id', isGuest ? 'guest' : userId);
+      // doc_id is a list field — send empty string for guests (backend pads it automatically)
       if (!isGuest) {
         formData.append('doc_id', documentId);
-        formData.append('user_id', userId);
       }
 
       const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, formData);
 
       if (aiAnalysis.status === 200) {
         formData.append('document_raw_data', JSON.stringify(aiAnalysis.data));
-        if (!isGuest) {
-          formData.append('documentId', documentId);
-        }
+        // documentId is required by backend — send empty string for guests
+        formData.append('documentId', isGuest ? '' : documentId);
 
         const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },

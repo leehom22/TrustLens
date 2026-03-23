@@ -198,12 +198,28 @@ def fetch_relevant_lessons(doc_type: str, flagged_layers: List[str], vendor_name
 
 
 
-async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
+async def run_agent_analysis(report: FinalReport, language: str = "en") -> Dict[str, Any]:
 
     # Executes the AI investigation. Returns a Dictionary of AI findings (NOT the full AnalysisRecord yet).
 
     req_id = report.request_id
     logger.info(f"Agent: Starting Grounding Investigation", extra={"request_id": req_id})
+
+    # ── Language instruction injected at runtime ──────────────────────────────
+    if language == "ms":
+        language_instruction = (
+            "\n\n--- LANGUAGE REQUIREMENT ---\n"
+            "You MUST write ALL output fields entirely in Bahasa Malaysia. "
+            "This includes: agent_summary, grounding_result.notes, all layer_summaries values, "
+            "and next_step_recommendation. "
+            "Do NOT mix English and Bahasa Malaysia. Technical terms (e.g. ELA, metadata, PDF) "
+            "may remain in their original form as they have no standard Malay equivalent."
+        )
+    else:
+        language_instruction = (
+            "\n\n--- LANGUAGE REQUIREMENT ---\n"
+            "You MUST write ALL output fields in English."
+        )
 
     # Indicate current flagged layers
     flagged_layers = []
@@ -265,7 +281,7 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
             model='gemini-2.5-pro',
             contents=user_prompt,
             config=types.GenerateContentConfig(
-                system_instruction=AGENT_SYSTEM_INSTRUCTION,
+                system_instruction=AGENT_SYSTEM_INSTRUCTION + language_instruction,
                 tools=[types.Tool(google_search=types.GoogleSearch())],
                 # response_mime_type="application/json"
             )
@@ -275,12 +291,12 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
         
         # Safety check for output format
         defaults = {
-            "agent_summary": "AI Analysis failed to generate summary.",
+            "agent_summary": "Analisis AI gagal menghasilkan ringkasan." if language == "ms" else "AI Analysis failed to generate summary.",
             "verification_status": "UNVERIFIED",
-            "grounding_score": 0, # Default to 0 risk if AI fails, let Tech Score rule
-            "grounding_result": {"error": "Parsing error"},
+            "grounding_score": 0,
+            "grounding_result": {"error": "Ralat penghuraian." if language == "ms" else "Parsing error"},
             "layer_summaries": {},
-            "next_step_recommendation": "Review document findings manually."
+            "next_step_recommendation": "Semak penemuan dokumen secara manual." if language == "ms" else "Review document findings manually."
         }
         
         # Combining output with default format
@@ -294,11 +310,11 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Agent Logic Failed: {e}")
         return {
-            "agent_summary": "Automated forensic analysis complete. AI Grounding service unavailable.",
+            "agent_summary": "Analisis forensik automatik selesai. Perkhidmatan AI Grounding tidak tersedia." if language == "ms" else "Automated forensic analysis complete. AI Grounding service unavailable.",
             "verification_status": "UNVERIFIED",
             "grounding_score": 0,
             "grounding_result": {"error": str(e)},
             "layer_summaries": {},
             "active_lessons_applied": [],
-            "next_step_recommendation": "Review document findings manually."
+            "next_step_recommendation": "Semak penemuan dokumen secara manual." if language == "ms" else "Review document findings manually."
         }

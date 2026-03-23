@@ -89,7 +89,8 @@ async def analyze_pipeline(
     file_name: str, 
     original_mime_type: str, 
     local_path_override: str = None,
-    file_url: str = None
+    file_url: str = None,
+    language: str = "en"
 ) -> AnalysisRecord:    
         
     temp_path = local_path_override
@@ -342,7 +343,7 @@ async def analyze_pipeline(
         # [Step 8] AI Agent Investigation
         start_agent = time.perf_counter()
 
-        ai_res_raw = await run_agent_analysis(report)
+        ai_res_raw = await run_agent_analysis(report, language=language)
         ai_results = ai_res_raw if ai_res_raw is not None else {}
 
         agent_duration_ms = int((time.perf_counter() - start_agent) * 1000)
@@ -452,10 +453,15 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
 async def analyze_document(
     request: Request, 
     file: List[UploadFile] = File(...), 
-    doc_id: List[str] = Form(...),
-    user_id: str = Form(...)
+    doc_id: List[str] = Form(default=[]),
+    user_id: str = Form(default="guest"),
+    language: str = Form(default="en")
 ):
-    # Safetty Check
+    # For guest users, doc_id list will be empty — pad it with empty strings to match file count
+    if not doc_id:
+        doc_id = [""] * len(file)
+
+    # Safety checks
     if len(file) != len(doc_id):
         raise HTTPException(status_code=400, detail="Mismatch between files and doc_ids count.")
     if len(file) > 3:
@@ -477,7 +483,9 @@ async def analyze_document(
 
             # Security check for invalid or unsafe file source
             if verified_content_type not in ALLOWED_MIME_TYPES:
-                db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
+                # Only write to DB if this is an authenticated user with a real doc_id
+                if single_doc_id:
+                    db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
                 return {"doc_id": single_doc_id, "status": "failed", "error": f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}"}
             
             temp_path = None
@@ -502,7 +510,8 @@ async def analyze_document(
                     file_name=single_file.filename,
                     original_mime_type=verified_content_type,
                     file_url=None,
-                    local_path_override=temp_path
+                    local_path_override=temp_path,
+                    language=language
                 )
                 return {"doc_id": single_doc_id, "status": "success", "data": final_record}
                 
@@ -535,9 +544,10 @@ async def analyze_document(
 
 @analysis_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
-    documentId: str = Form(...),
+    documentId: str = Form(default=""),
     document_raw_data: str = Form(...),
     file: UploadFile = File(...),
+    language: str = Form(default="en"),
 ):
     """
     PURE DATA RESTRUCTURING ENGINE
@@ -664,7 +674,7 @@ async def generate_document_dashboard(
     # -----------------------------
     
     # ------------ Handle Risk Signals with Semantic Translation -------------
-    SIGNAL_TRANSLATION_MAP = {
+    SIGNAL_TRANSLATION_MAP_EN = {
         "STRUCTURE_HIDDEN_DATA": "Hidden data payload detected after file EOF.",
         "STRUCTURE_CORRUPTED_EOF": "Corrupted or strictly truncated file structure.",
         "HIGH_METADATA_SOFTWARE_RISK": "Edited with high-risk image manipulation software.",
@@ -711,6 +721,56 @@ async def generate_document_dashboard(
         "CROSS_LAYER_TIME_PARADOX": "Critical Forgery: Physical file was finalized before the alleged transaction occurred.",
         "CROSS_LAYER_TEMPLATE_ANOMALY": "Warning: Document date significantly exceeds the file's last physical modification date (Template anomaly)."
     }
+
+    SIGNAL_TRANSLATION_MAP_MS = {
+        "STRUCTURE_HIDDEN_DATA": "Data tersembunyi dikesan selepas penghujung fail (EOF).",
+        "STRUCTURE_CORRUPTED_EOF": "Struktur fail rosak atau dipotong secara paksa.",
+        "HIGH_METADATA_SOFTWARE_RISK": "Diedit menggunakan perisian manipulasi imej berisiko tinggi.",
+        "MEDIUM_METADATA_SOFTWARE_RISK": "Diproses menggunakan alat PDF/Imej peringkat pengguna.",
+        "TIME_PARADOX_METADATA": "Paradoks Masa: Fail dicipta selepas tarikh pengubahsuaian.",
+        "STRUCTURE_LOW_DPI_IMAGE": "Forensik DPI: Resolusi imej di bawah 150 DPI, menunjukkan tangkapan skrin atau muat turun web.",
+        "STRUCTURE_INCREMENTAL_UPDATES": "Sejarah Dokumen: Pelbagai keadaan kemas kini ditemui (Dokumen telah diedit dan disimpan semula).",
+        "STRUCTURE_FONT_MULTIPLE_SUBSETS": "Kesan: Pelbagai subset fon dikesan (mungkin menunjukkan pengeditan setempat).",
+        "XMP_METADATA_MANIPULATION": "Anomali XMP: Metadata diubah secara bebas daripada kandungan dokumen.",
+        "XMP_SUSPICIOUS_ORIGIN": "Anomali XMP: PDF diperoleh terus daripada format imej/tangkapan skrin.",
+        "XMP_HIGH_RISK_CREATOR": "Anomali XMP: Metadata mendalam mendedahkan penggunaan perisian pengeditan grafik berisiko tinggi.",
+        "XMP_EXTENSIVE_EDIT_HISTORY": "Anomali XMP: Rantaian sejarah pengubahsuaian yang luar biasa panjang.",
+        "VISUAL_TAMPERING_DETECTED": "Kualiti piksel tidak konsisten menunjukkan manipulasi setempat.",
+        "ATS_HACKING_DETECTED": "Integriti Dokumen: Anomali pemformatan tersembunyi dikesan (ATS Hacking).",
+        "ATS_HACKING_DETECTED_White_Text": "Bukti: Lapisan teks putih-atas-putih yang tidak kelihatan ditemui dalam dokumen.",
+        "ATS_HACKING_DETECTED_Micro_Font": "Bukti: Fon bersaiz mikro (< 2pt) yang mencurigakan digunakan untuk memanipulasi pengindeksan mesin.",
+        "SCAM_PATTERN_DETECTED": "Corak bahasa penipuan atau rekayasa sosial dikesan.",
+        "SEMANTIC_PARADOX_DETECTED": "Percanggahan logik dalaman ditemui dalam teks dokumen.",
+        "MATH_ROW_MISMATCH": "Pengiraan item baris (Kuantiti * Harga Unit) tidak sepadan dengan jumlah yang diekstrak.",
+        "MATH_TAX_LOGIC_FAIL": "Pengiraan cukai berkanun atau pengagregatan subjumlah gagal.",
+        "MISSING_INVOICE_ID": "Pengecam dokumen unik tiada (No. Invois/Resit).",
+        "MISSING_CORE_ACCOUNT_ID": "Penyata Bank tiada pengecam akaun utama.",
+        "MISSING_PAYMENT_ROUTE": "Invois tiada maklumat akaun bank untuk laluan pembayaran.",
+        "MISSING_PAYMENT_PROOF": "Data pengesahan pembayaran tiada (Akaun atau ID Rujukan).",
+        "BENEFICIARY_MISMATCH": "Nama pemilik akaun tidak sepadan dengan nama vendor.",
+        "TIME_PARADOX_LOGIC": "Ralat Logik: Tarikh akhir lebih awal daripada tarikh pengeluaran dokumen.",
+        "ID_DATE_TIME_PARADOX": "Kronografi mustahil: ID transaksi dijana sebelum dokumen wujud.",
+        "ID_DATE_LAG_SUSPICIOUS": "Kelewatan mencurigakan antara ID transaksi dan penjanaan resit.",
+        "ID_DATE_MISMATCH_STRICT": "ID transaksi merujuk kepada hari yang berbeza sama sekali.",
+        "LONG_ENTRY_DELAY": "Kelewatan pemprosesan luar biasa melebihi tetingkap pentadbiran normal.",
+        "DATE_FROM_FUTURE": "Tarikh transaksi adalah pada masa hadapan berbanding masa analisis.",
+        "CHRONOLOGY_INCONSISTENCY": "Susunan kronologi transaksi rosak (Lompatan Masa).",
+        "BALANCE_RECONCILIATION_FAIL": "Baki Pembukaan + Aliran Tunai tidak sama dengan Baki Penutupan.",
+        "MATH_DEDUCTION_MISMATCH": "Pecahan potongan slip gaji tidak berjumlah kepada jumlah potongan.",
+        "MATH_NET_PAY_MISMATCH": "Pengiraan Gaji Bersih slip gaji (Kasar - Potongan) tidak betul.",
+        "INVALID_ISSUING_AGENCY": "Agensi pengeluar dokumen tidak diiktiraf sebagai pihak berkuasa Malaysia yang sah.",
+        "SUMMON_TIME_PARADOX": "Garis masa mustahil: Kesalahan berlaku selepas saman dikeluarkan atau tarikh akhir.",
+        "ENTITY_SYMMETRY_VIOLATION": "Risiko Tinggi: Kontrak kelihatan berurusan sendiri (Pihak A sepadan dengan Pihak B).",
+        "CONTRACT_TIME_PARADOX": "Ralat logik: Kontrak tamat tempoh sebelum berkuat kuasa.",
+        "MYKAD_INVALID_STATE": "Ralat struktur MyKad: Kod PB Negeri/Negara tidak sah.",
+        "MYKAD_INVALID_DOB": "Ralat struktur MyKad: Tarikh lahir mustahil secara fizikal.",
+        "MYKAD_MINOR_SIGNATORY": "Risiko pematuhan undang-undang: Penandatangan adalah kanak-kanak (< 18 tahun).",
+        "MYKAD_AGE_ANOMALY": "Anomali identiti: Umur penandatangan luar biasa tinggi (> 100 tahun).",
+        "CROSS_LAYER_TIME_PARADOX": "Pemalsuan Kritikal: Fail fizikal disiapkan sebelum transaksi yang didakwa berlaku.",
+        "CROSS_LAYER_TEMPLATE_ANOMALY": "Amaran: Tarikh dokumen jauh melebihi tarikh pengubahsuaian fizikal fail terakhir (Anomali templat)."
+    }
+
+    SIGNAL_TRANSLATION_MAP = SIGNAL_TRANSLATION_MAP_MS if language == "ms" else SIGNAL_TRANSLATION_MAP_EN
 
     INTERNAL_SIGNAL_BLACKLIST = {"JSON_REPAIRED"}   # Filter out technical signals that are not meaningful
 
@@ -821,24 +881,24 @@ async def generate_document_dashboard(
     layer_results = [
         {
             "layer_id": "L1",
-            "layer_title": "Metadata Forensics",  # Fixed display title
+            "layer_title": "Forensik Metadata" if language == "ms" else "Metadata Forensics",
             "status": l1_status,
             "status_color": l1_color,
             "icon": "file-text",
             "score": l1.get("score", 0),
-            "ai_analysis": layer_summaries.get("L1_Metadata", "No AI summary available."),
+            "ai_analysis": layer_summaries.get("L1_Metadata", "Tiada ringkasan AI tersedia." if language == "ms" else "No AI summary available."),
             "technical_proofs": l1_proofs,
             "has_visual_evidence": False,
             "evidence_image_url": []
         },
         {
             "layer_id": "L2",
-            "layer_title": "Visual Forensics",
+            "layer_title": "Forensik Visual" if language == "ms" else "Visual Forensics",
             "status": l2_status,
             "status_color": l2_color,
             "icon": "eye",
             "score": l2.get("score", 0),
-            "ai_analysis": layer_summaries.get("L2_Visual", "No AI summary available."),
+            "ai_analysis": layer_summaries.get("L2_Visual", "Tiada ringkasan AI tersedia." if language == "ms" else "No AI summary available."),
             "technical_proofs": l2_proofs,
             "has_visual_evidence": len(evidence_urls) > 0,
             "evidence_image_url": evidence_urls,
@@ -846,24 +906,24 @@ async def generate_document_dashboard(
         },
         {
             "layer_id": "L3",
-            "layer_title": "Content Extraction",
+            "layer_title": "Pengekstrakan Kandungan" if language == "ms" else "Content Extraction",
             "status": l3_status,
             "status_color": l3_color,
             "icon": "file-digit",
             "score": l3.get("score", 0),
-            "ai_analysis": layer_summaries.get("L3_Content", "No AI summary available."),
+            "ai_analysis": layer_summaries.get("L3_Content", "Tiada ringkasan AI tersedia." if language == "ms" else "No AI summary available."),
             "technical_proofs": l3_proofs,
             "has_visual_evidence": False,
             "evidence_image_url": []
         },
         {
             "layer_id": "L4",
-            "layer_title": "Logic Audit",
+            "layer_title": "Audit Logik" if language == "ms" else "Logic Audit",
             "status": l4_status,
             "status_color": l4_color,
             "icon": "calculator",
             "score": l4.get("score", 0),
-            "ai_analysis": layer_summaries.get("L4_Logic", "No AI summary available."),
+            "ai_analysis": layer_summaries.get("L4_Logic", "Tiada ringkasan AI tersedia." if language == "ms" else "No AI summary available."),
             "technical_proofs": l4_proofs,
             "has_visual_evidence": False,
             "evidence_image_url": []
@@ -882,13 +942,17 @@ async def generate_document_dashboard(
     risk_upper = str(risk_level).upper()
     
     title_map = {
-        "CRITICAL": "Critical Risk Detected",
-        "HIGH_RISK": "High Risk Detected",
-        "SUSPICIOUS": "Suspicious Elements Found",
-        "CAUTION": "Caution Advised",
-        "SAFE": "Document Verified",
-        "CLEAN": "Document Verified"
+        "CRITICAL":  "Risiko Kritikal Dikesan"       if language == "ms" else "Critical Risk Detected",
+        "HIGH_RISK": "Risiko Tinggi Dikesan"          if language == "ms" else "High Risk Detected",
+        "SUSPICIOUS":"Elemen Mencurigakan Ditemui"    if language == "ms" else "Suspicious Elements Found",
+        "CAUTION":   "Berhati-hati Disarankan"        if language == "ms" else "Caution Advised",
+        "SAFE":      "Dokumen Disahkan"               if language == "ms" else "Document Verified",
+        "CLEAN":     "Dokumen Disahkan"               if language == "ms" else "Document Verified",
     }
+
+    no_summary_fallback   = "Tiada ringkasan AI tersedia."    if language == "ms" else "No AI summary available."
+    no_rec_fallback       = "Semak penemuan dokumen secara manual." if language == "ms" else "Review document findings manually."
+    analysis_complete_fallback = "Analisis Selesai"           if language == "ms" else "Analysis Complete"
 
     # Risk level color mapping - purely presentational, no semantic change
     color_map = {
@@ -903,12 +967,12 @@ async def generate_document_dashboard(
         "overall_score": overall_score,
         "risk_level": risk_level,
         "risk_level_color": color_map.get(str(risk_level).upper(), "gray"),
-        "verdict_title": title_map.get(risk_upper, "Analysis Complete"),
-        "ai_executive_summary": agent_summary,
+        "verdict_title": title_map.get(risk_upper, analysis_complete_fallback),
+        "ai_executive_summary": agent_summary if agent_summary else no_summary_fallback,
         "grounding_search_reference": grounding_notes,
         "doc_type": doc_type,
-        "next_step_recommendation": raw_json.get("final_recommendation", "Review document findings manually."),
-        "sources": sources  # EXACT structure from source
+        "next_step_recommendation": raw_json.get("final_recommendation", no_rec_fallback),
+        "sources": sources
     }
     
     # -----------------------------
