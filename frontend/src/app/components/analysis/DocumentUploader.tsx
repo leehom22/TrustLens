@@ -87,7 +87,7 @@ function LanguageModal({ fileName, onConfirm, onCancel }: LanguageModalProps) {
                 : "border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-500/50 bg-white dark:bg-slate-800/50"
             }`}
           >
-            <span className="text-3xl">MY</span>
+            <span className="text-3xl">BM</span>
             <div className="text-center">
               <p className={`font-semibold text-sm ${selected === "ms" ? "text-blue-600 dark:text-blue-400" : "text-slate-700 dark:text-slate-300"}`}>
                 Bahasa Malaysia
