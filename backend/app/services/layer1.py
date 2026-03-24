@@ -78,7 +78,6 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
             elif eof_count == 0:
                 result["risk_signal"] = "high"
                 result["structure_notes"].append({"code": "CORRUPTED_EOF"})
-                result["structure_note"] = "CRITICAL: No EOF marker found. File structure is corrupted or strictly truncated."
             
             # 2. Injection / Hidden Payload => Malicious tempering / changes / hacker
             last_eof_index = content.rfind(b'%%EOF')
@@ -136,7 +135,6 @@ def analyze_pdf_structure(file_path: str, reader=None) -> Dict[str, Any]:
     except Exception as e:
         result["error"] = str(e)
     
-    result["structure_note"] = " | ".join(result["structure_note"])
     return result
 
 
@@ -193,7 +191,7 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
             found_medium = []
             
             # Evaluation 2: High Risk Tools and Medium Risk Tools
-            is_whitelisted = any(safe in full_meta_str for safe in SOFTWARE_WHITELIST)
+            is_whitelisted = any(re.search(rf'\b{re.escape(safe)}\b', full_meta_str) for safe in SOFTWARE_WHITELIST)
             if not is_whitelisted:
                 found_high = [t for t in SOFTWARE_RISK_MAP["high"] if t in full_meta_str]
                 found_medium = [t for t in SOFTWARE_RISK_MAP["medium"] if t in full_meta_str]
@@ -280,7 +278,7 @@ def run_layer_1_metadata(file_path: str, file_type: str) -> LayerResult:
 
             # Checking & Evaluation 1: EXIF
             with Image.open(file_path) as img:
-                exif = img._getexif()
+                exif = img.getexif()
                 
                 if not exif:
                     # EXIF may be lost in social media sharing and screenshot

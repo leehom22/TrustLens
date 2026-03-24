@@ -16,7 +16,7 @@ from ..core.firebase import db
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-PORT = int(os.getenv("PORT", 8080))
+# PORT = int(os.getenv("PORT", 8080))
 
 logger = logging.getLogger("TrustLens-Chat")
 chat_router = APIRouter()

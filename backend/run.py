@@ -2,7 +2,7 @@ import uvicorn
 import sys
 import os
 
-PORT = int(os.getenv("PORT", 8080))
+PORT = int(os.getenv("PORT", 8000))
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))

@@ -7,11 +7,11 @@ from ..core.config import logger
 # ------ Import for AI and DB connection ---------
 from ..core.firebase import db
 
-analysis_router = APIRouter()
+restructure_router = APIRouter()
 
 # =============== Function for Restructuring Data (Frontend Display Structure) ==============
 
-@analysis_router.post("/ai-restructure-data")
+@restructure_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
     documentId: str = Form(...),
     document_raw_data: str = Form(...),
@@ -24,9 +24,39 @@ async def generate_document_dashboard(
     # -----------------------------
     # 1. Parse Raw Analysis JSON
     # -----------------------------
+    """
     try:
         raw_json = json.loads(document_raw_data)
     except Exception:
+        return {"success": False, "error": "Invalid JSON in document_raw_data"}
+    """
+
+    try:
+        raw_json = json.loads(document_raw_data)
+        def unwrap_payload(payload):
+            if isinstance(payload, dict):
+                # Return if successfully access
+                if "evidence_chain" in payload: 
+                    return payload
+                # Iterate through all values in the dict
+                for key, value in payload.items():
+                    unwrapped = unwrap_payload(value)
+                    if isinstance(unwrapped, dict) and "evidence_chain" in unwrapped:
+                        return unwrapped
+                        
+            elif isinstance(payload, list):
+                # Iterate through all elements in the list
+                for item in payload:
+                    unwrapped = unwrap_payload(item)
+                    if isinstance(unwrapped, dict) and "evidence_chain" in unwrapped:
+                        return unwrapped
+                        
+            return payload
+        
+        raw_json = unwrap_payload(raw_json)
+        
+    except Exception as e:
+        logger.error(f"JSON Parsing Error: {e}")
         return {"success": False, "error": "Invalid JSON in document_raw_data"}
 
     raw_analysis_id = raw_json.get("request_id", "unknown")
@@ -81,6 +111,8 @@ async def generate_document_dashboard(
             "XMP_EXTENSIVE_EDIT_HISTORY": "XMP Anomaly: Unusually long modification history chain embedded in document.",
             "VISUAL_TAMPERING_DETECTED": "Inconsistent pixel quality indicating localized manipulation.",
             "ATS_HACKING_DETECTED": "Document Integrity: Hidden formatting anomalies identified (ATS Hacking).",
+            "ATS_HACKING_DETECTED_White_Text": "Evidence: Invisible white-on-white text layers found in document content.",
+            "ATS_HACKING_DETECTED_Micro_Font": "Evidence: Suspicious micro-sized fonts (< 2pt) used to manipulate machine indexing.",
             "SCAM_PATTERN_DETECTED": "Social engineering or fraud language patterns identified.",
             "SEMANTIC_PARADOX_DETECTED": "Internal logical contradictions found within the document text.",
             "FORMAT_VIOLATION_SCREENSHOT": "Format Violation: Screenshot detected instead of original document.",
@@ -254,6 +286,8 @@ async def generate_document_dashboard(
             "XMP_EXTENSIVE_EDIT_HISTORY": "Anomali XMP: Sejarah pengubahsuaian yang terlalu panjang.",
             "VISUAL_TAMPERING_DETECTED": "Kualiti piksel tidak konsisten menunjukkan manipulasi setempat.",
             "ATS_HACKING_DETECTED": "Integriti Dokumen: Anomali pemformatan tersembunyi dikenal pasti (ATS Hacking).",
+            "ATS_HACKING_DETECTED_White_Text": "Bukti: Lapisan teks putih-atas-putih tersembunyi ditemui dalam kandungan dokumen.",
+            "ATS_HACKING_DETECTED_Micro_Font": "Bukti: Fon bersaiz mikro mencurigakan (< 2pt) digunakan untuk memanipulasi pengindeksan.",
             "SCAM_PATTERN_DETECTED": "Corak kejuruteraan sosial atau penipuan dikenal pasti.",
             "SEMANTIC_PARADOX_DETECTED": "Percanggahan logik dalaman ditemui dalam teks dokumen.",
             "FORMAT_VIOLATION_SCREENSHOT": "Pelanggaran Format: Tangkapan skrin dikesan, bukan dokumen asal.",
@@ -655,4 +689,10 @@ async def generate_document_dashboard(
     # -----------------------------
     # Front-end requests "ms", we return i18n_payload["ms"]
     selected_view = i18n_payload.get(language, i18n_payload["en"])
-    return {"success": True, "data": selected_view}
+    return {
+        "success": True,
+        "documentId": documentId,
+        "raw_analysis_id": raw_analysis_id,
+        "doc_type": raw_json.get("doc_type", "unknown"),
+        "analysis_content": selected_view
+    }

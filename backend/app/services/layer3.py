@@ -147,9 +147,11 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
             
             if "doc_type" not in parsed: parsed["doc_type"] = "unknown"
             
+            target_dict = parsed["items"][0] if "items" in parsed and len(parsed["items"]) > 0 else parsed
+            
             # [COMPATIBILITY FIX]: Flatten keys for main.py
-            vis = parsed.get("visual_elements", {})
-            inf = parsed.get("risk_inference", {})
+            vis = target_dict.get("visual_elements", {})
+            inf = target_dict.get("risk_inference", {})
             
             # 1. Screenshot Logic
             parsed["is_screenshot"] = vis.get("has_status_bar") or vis.get("has_browser_chrome") or inf.get("is_screenshot", False)

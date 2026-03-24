@@ -20,7 +20,7 @@ from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
-from .routers.restructuring_data import analysis_router
+from .routers.restructuring_data import restructure_router
 from .routers.annotate import annotate_router
 
 # ------- Import internal modules ------
@@ -31,7 +31,7 @@ from .core.config import EVIDENCE_DIR
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
 
-PORT = int(os.getenv("PORT", 8080))
+PORT = int(os.getenv("PORT", 8000))
 print(f"The port is {PORT}")
 # An endpoint for frontend to access the saved heatmap
 app.mount("/evidence", StaticFiles(directory=EVIDENCE_DIR), name="evidence")
@@ -83,6 +83,12 @@ app.include_router(
     analysis_router,
     prefix="/analysis",
     tags=["Analysis"]
+)
+
+app.include_router(
+    restructure_router, 
+    prefix="/analysis", 
+    tags=["Restructure"]
 )
 
 app.include_router(
