@@ -1,3 +1,17 @@
+/**
+ * HistoryPage.tsx
+ *
+ * Displays a searchable, filterable, sortable table of all previously analysed documents
+ * for the authenticated user. Each row links to the full analysis result via
+ * /review-document-analysis/:docId.
+ *
+ * Language toggle (EN ↔ BM):
+ *   A toggle button in the header lets the user choose which language to view
+ *   their analysis results in. The selected language is passed as a URL query
+ *   param (?lang=en or ?lang=ms) when navigating to the detail view, so the
+ *   HistoryDocumentAnalysis page can forward it to /get-doc-analysis.
+ */
+
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search,
@@ -11,13 +25,15 @@ import {
   MoreVertical,
   Loader2,
   RotateCcw,
-  Trash
+  Trash,
+  Globe,
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { formatDateTime, statusStyles } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { RiskLevel, RiskLevelColor } from '../types/db-ai-analysis-type';
+import type { Language } from '../App';
 
 interface Files {
   id: string,
@@ -49,6 +65,13 @@ const HistoryPage = (props: { userId: string }) => {
     key: 'created_at',
     direction: 'desc' as 'asc' | 'desc'
   });
+
+  /**
+   * Display language for analysis results.
+   * Toggled via the EN/BM button in the page header.
+   * Passed as a query param when navigating to a detail view.
+   */
+  const [displayLanguage, setDisplayLanguage] = useState<Language>('en');
 
   const userId = props.userId
   const navigate = useNavigate()
@@ -144,10 +167,13 @@ const HistoryPage = (props: { userId: string }) => {
     fetchingFiles()
   }, [userId])
 
-  // --- Action Handler (Placeholder) ---
+  /**
+   * Navigates to the full analysis detail page for a given document.
+   * Passes the currently selected display language as a URL query param
+   * so HistoryDocumentAnalysis can forward it to /get-doc-analysis.
+   */
   const handleViewReport = (docId: string) => {
-    // In the future, you will use: navigate(`/analysis/${docId}`);
-    navigate(`/review-document-analysis/${docId}`)
+    navigate(`/review-document-analysis/${docId}?lang=${displayLanguage}`)
   };
 
   const handleDeleteDocument = async (docId: string, docName: string) => {
@@ -193,11 +219,26 @@ const HistoryPage = (props: { userId: string }) => {
             {/* --- Page Header --- */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
               <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Analysis History</h1>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                  {displayLanguage === 'ms' ? 'Sejarah Analisis' : 'Analysis History'}
+                </h1>
                 <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  Archive of all documents processed by TrustLens.
+                  {displayLanguage === 'ms'
+                    ? 'Arkib semua dokumen yang diproses oleh TrustLens.'
+                    : 'Archive of all documents processed by TrustLens.'}
                 </p>
               </div>
+
+              {/* Language toggle — switches the language used when viewing analysis results */}
+              <button
+                onClick={() => setDisplayLanguage(prev => prev === 'en' ? 'ms' : 'en')}
+                className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                title={displayLanguage === 'en' ? 'Switch to Bahasa Malaysia' : 'Tukar ke Bahasa Inggeris'}
+              >
+                <Globe size={16} />
+                {/* Show the TARGET language (what we switch TO) */}
+                {displayLanguage === 'en' ? 'BM' : 'EN'}
+              </button>
             </div>
 
             {/* --- Search & Filter Bar --- */}
@@ -240,10 +281,12 @@ const HistoryPage = (props: { userId: string }) => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">
-                      Analysis History
+                      {displayLanguage === 'ms' ? 'Sejarah Analisis' : 'Analysis History'}
                     </h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      Archive of all documents processed by TrustLens.
+                      {displayLanguage === 'ms'
+                        ? 'Arkib semua dokumen yang diproses oleh TrustLens.'
+                        : 'Archive of all documents processed by TrustLens.'}
                     </p>
                   </div>
                   <button
@@ -251,7 +294,7 @@ const HistoryPage = (props: { userId: string }) => {
                     className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors self-start sm:self-auto"
                   >
                     <RotateCcw size={16} />
-                    Reset Filters
+                    {displayLanguage === 'ms' ? 'Set Semula Penapis' : 'Reset Filters'}
                   </button>
                 </div>
               </div>
