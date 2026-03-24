@@ -131,6 +131,7 @@ const HistoryPage = (props: { userId: string }) => {
     try {
       // console.log("the user id is ", userId)
       const res = await axios.get(`${backendUrl}/files/get_uploaded_files/${userId}`);
+      // console.log("file: ",res.data.data)
       if (res.data.success) setHistoryFiles(res.data.data)
 
     } catch (error) {

@@ -30,6 +30,21 @@ class Config:
             raise ValueError("No GEMINI_API_KEY found in environment variables")
         pass
         
+ 
+# Thresholds
+HIGH_TRACK_INITIAL_SCORE    = 90   # AI score required to enter HIGH track
+HIGH_TRACK_REPORT_THRESHOLD = 10   # reports needed before HIGH-track re-analysis
+HIGH_TRACK_REANALYSIS_SCORE = 90   # fresh Gemini score required at re-analysis
+HIGH_TRACK_AVG_SCORE        = 95   # weighted average across all reports required
+ 
+LOW_TRACK_REPORT_THRESHOLD  = 50   # reports needed before LOW-track re-analysis
+LOW_TRACK_REANALYSIS_SCORE  = 80
+LOW_TRACK_AVG_SCORE         = 85
+ 
+NATIONAL_ALERT_STATE_COUNT  = 3    # distinct states for national alert flag
+# ! Default = 20, Testing = 5 
+VELOCITY_SPIKE_THRESHOLD    = 5  # reports/hour that triggers manipulation hold
+ 
 
 # Safety Limitation
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB

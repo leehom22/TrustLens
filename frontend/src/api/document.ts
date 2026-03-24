@@ -3,6 +3,7 @@ import axios from "axios"
 import { generateAnnotatedPDF } from "./documentPdf"
 import { generateAnnotatedImage } from "./documentImages"
 import { toast } from "react-toastify"
+import { SpamReviewInterface } from "@/app/types/type"
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL
 
@@ -160,3 +161,42 @@ export const sendReviewEmailToUser = async (
     return { success: false };
   }
 }
+
+export const handleConfirmReview = async (documentId: string, flaggedReason: string, setRequestReview: React.Dispatch<React.SetStateAction<boolean>>) => {
+    try {
+      const res = await setFileAsFlagged(documentId, flaggedReason)
+
+      if (res.success) {
+        toast.success("Successfully request for review")
+        setRequestReview(false)
+      } else {
+        toast.error("Failed to request for review. Please try again later")
+      }
+    } catch (error) {
+      console.log("Error request for a review: ", error)
+    }
+  }
+
+export const handleConfirmSpam = async (confirmSpamReview:SpamReviewInterface,setConfirmSpam:(value: React.SetStateAction<boolean>) => void, documentId: string) => {
+    try {
+      const {state,phone,comment} = confirmSpamReview
+      if(state === null){
+        return toast.warn("Please select your current state")
+      }
+      console.log("spam review: ",confirmSpamReview)
+      // docId, phone, state
+      const response = await axios.post(`${backendUrl}/scam-alert/report`,{
+        documentId,phone,comment,state
+      })
+      const result = response.data 
+      console.log("spam report response: ",result)
+      if(result.report_id){
+        toast.success("Successfully report as spam")
+        setConfirmSpam(false)
+      } else {
+        toast.error("Failed to request for review. Please try again later")
+      }
+    } catch (error) {
+      console.log("Error report document as spam: ", error)
+    }
+  }

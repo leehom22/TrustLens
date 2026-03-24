@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Loader2, Badge, FileText, Download, AlertCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, Badge, FileText, Download, AlertCircle, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { useEffect, useState } from "react";
 import axios from 'axios'
@@ -11,11 +11,14 @@ import LogicalConsistency from "../components/expert/expertDocumentAnalysis/anal
 import AiAssistant from "../components/analysis/AiAssistant";
 import DocumentViewer from "../components/analysis/DocumentViewer";
 import { useNavigate, useParams } from "react-router-dom";
-import { handlePdfDownload, setFileAsFlagged } from "@/api/document";
+import { handleConfirmReview, handleConfirmSpam, handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import DocumentFeedback from "../components/analysis/DocumentFeedback";
 import { statusStyles } from "@/lib/utils";
 import { decryptFile, getAccessibleDocumentUrl } from "@/lib/encrypt";
+import RequestReview from "../components/modal/RequestReview";
+import { SpamReviewInterface } from "../types/type";
+import ConfirmSpam from "../components/modal/ConfirmSpam";
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -45,6 +48,12 @@ export function HistoryDocumentAnalysis() {
     const [riskLevelColor, setRiskLevelColor] = useState<RiskLevelColor>('gray')
     const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
     const [overallScore, setOverallScore] = useState<number>(0)
+    const [confirmSpamReview, setConfirmSpamReview] = useState<SpamReviewInterface>({
+        comment:'',
+        state:null,
+        phone:null
+      })
+    const [confirmSpam, setConfirmSpam] = useState<boolean>(false)
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
@@ -102,7 +111,7 @@ export function HistoryDocumentAnalysis() {
 
                 // console.log("Decrypted key:", accessibleUrl);
 
-                // ✅ Now update state once
+                // Now update state once
                 setSelectedDocument({
                     ...documentData,
                     fileUrl: accessibleUrl || documentData.fileUrl,
@@ -117,21 +126,6 @@ export function HistoryDocumentAnalysis() {
             setLoadingData(false);
         }
     };
-
-    const handleConfirmReview = async () => {
-        try {
-            const res = await setFileAsFlagged(docId!, flaggedReason)
-
-            if (res.success) {
-                setRequestReview(false)
-                toast.success("Successfully request for review")
-            } else {
-                toast.error("Failed to request for review. Please try again later")
-            }
-        } catch (error) {
-            console.log("Error request for a review: ", error)
-        }
-    }
 
     useEffect(() => {
         // console.log("the Document Id is :", docId)
@@ -253,17 +247,6 @@ export function HistoryDocumentAnalysis() {
                                         </div>
                                     </div>
 
-                                    {/* Badge */}
-                                    {/* <Badge
-                                        variant="outline"
-                                        className={`self-start flex-shrink-0 text-xs sm:text-sm font-semibold ${riskLevel === "CRITICAL" ? "text-red-600 bg-red-50"
-                                                : riskLevel === "SUSPICIOUS" ? "text-orange-600 "
-                                                    : riskLevel === "CAUTION" ? "text-yellow-700 "
-                                                        : "text-green-600 "
-                                            }`}
-                                    >
-                                        {ai_analysis_format?.dashboard_header?.risk_level}
-                                    </Badge> */}
                                     <div>Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} (Risk Score: {overallScore})</div>
                                 </div>
 
@@ -276,10 +259,37 @@ export function HistoryDocumentAnalysis() {
                             <Tabs defaultValue="metadata" className="w-full">
 
                                 {/* Action buttons + scrollable tab list */}
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                                <div className="flex flex-col  gap-4 mb-4">
+                                    {/* Buttons */}
+                                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                        <button
+                                            className={`py-1.5 px-3 border rounded-lg text-xs sm:text-sm whitespace-nowrap ${selectedDocument?.flagged === false
+                                                ? 'border-red-500 text-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20'
+                                                : 'border-gray-400 text-gray-400 cursor-not-allowed'
+                                                } transition-colors flex justify-center gap-1 items-center`}
+                                            onClick={() => setRequestReview(true)}
+                                            disabled={selectedDocument?.flagged!}
+                                        >
+                                            <Search color="red" size={14}/> <p>Review</p> 
+                                        </button>
+                                        <button
+                                            className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                                            onClick={() => setConfirmSpam(true)}
+                                        >
+                                            Spam
+                                        </button>
+                                        <button
+                                            className="flex items-center gap-1.5 py-1.5 px-3 border rounded-lg border-gray-400 text-gray-600 dark:text-slate-300 text-xs sm:text-sm whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                            onClick={() => handlePdfDownload(selectedDocument?.id!, structure_analysis_id, selectedDocument?.fileName!, 'user')}
+                                        >
+                                            <Download size={15} />
+                                            <span className="hidden sm:inline">Download</span>
+                                            <span className="sm:hidden">PDF</span>
+                                        </button>
+                                    </div>
                                     {/* Scrollable tabs */}
                                     <div className="overflow-x-auto pb-1 -mb-1 flex-1">
-                                        <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full sm:min-w-0">
+                                        <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full ">
                                             {[
                                                 { value: 'metadata', label: 'Metadata' },
                                                 { value: 'heatmap', label: 'Visuals' },
@@ -290,35 +300,13 @@ export function HistoryDocumentAnalysis() {
                                                     key={value}
                                                     value={value}
                                                     className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
-                        data-[state=active]:text-blue-600 data-[state=active]:font-bold
-                        dark:text-slate-400 dark:data-[state=active]:text-blue-400"
+                                    data-[state=active]:text-blue-600 data-[state=active]:font-bold
+                                    dark:text-slate-400 dark:data-[state=active]:text-blue-400"
                                                 >
                                                     {label}
                                                 </TabsTrigger>
                                             ))}
                                         </TabsList>
-                                    </div>
-
-                                    {/* Buttons */}
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                        <button
-                                            className={`py-1.5 px-3 border rounded-lg text-xs sm:text-sm whitespace-nowrap ${selectedDocument?.flagged === false
-                                                ? 'border-red-500 text-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20'
-                                                : 'border-gray-400 text-gray-400 cursor-not-allowed'
-                                                } transition-colors`}
-                                            onClick={() => setRequestReview(true)}
-                                            disabled={selectedDocument?.flagged!}
-                                        >
-                                            Request Review
-                                        </button>
-                                        <button
-                                            className="flex items-center gap-1.5 py-1.5 px-3 border rounded-lg border-gray-400 text-gray-600 dark:text-slate-300 text-xs sm:text-sm whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                            onClick={() => handlePdfDownload(selectedDocument?.id!, structure_analysis_id, selectedDocument?.fileName!, 'user')}
-                                        >
-                                            <Download size={15} />
-                                            <span className="hidden sm:inline">Download</span>
-                                            <span className="sm:hidden">PDF</span>
-                                        </button>
                                     </div>
                                 </div>
 
@@ -396,56 +384,22 @@ export function HistoryDocumentAnalysis() {
 
                     {/* Request Review Modal */}
                     {requestReview && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <div
-                                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                                onClick={() => setRequestReview(false)}
-                            />
-                            <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
-                                <div className="mb-5">
-                                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-                                        Request Forensic Review
-                                    </h3>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mt-1">
-                                        This document will be prioritized for manual verification by our forensic team.
-                                    </p>
-                                </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <label
-                                        htmlFor="review-reason"
-                                        className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-                                    >
-                                        Reason for manual review
-                                    </label>
-                                    <textarea
-                                        id="review-reason"
-                                        rows={4}
-                                        placeholder="Briefly describe why this document requires human oversight..."
-                                        onChange={(e) => setflaggedReason(e.target.value)}
-                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-                                    />
-                                </div>
-
-                                <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                                    <Button
-                                        variant="ghost"
-                                        className="flex-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-gray-300 dark:border-slate-600"
-                                        onClick={() => setRequestReview(false)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all active:scale-95"
-                                        onClick={handleConfirmReview}
-                                    >
-                                        Confirm Request
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
+                        <RequestReview
+                            handleConfirmReview={() => handleConfirmReview(docId!,flaggedReason,setRequestReview)}
+                            setRequestReview={setRequestReview}
+                            setflaggedReason={setflaggedReason}
+                        />
                     )}
-
+                    {
+                        confirmSpam && (
+                            <ConfirmSpam
+                                confirmSpamReview={confirmSpamReview}
+                                handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam,docId!)}
+                                setConfirmSpam={setConfirmSpam}
+                                setConfirmSpamReview={setConfirmSpamReview}
+                            />
+                        )
+                    }
                 </div>
             )}
         </>

@@ -21,6 +21,9 @@ import { Loader2 } from "lucide-react";
 import { HistoryDocumentAnalysis } from "./pages/HistoryDocumentAnalysis";
 import ReviewDocumentList from "./pages/expert/ReviewDocumentList";
 import { bufferToBase64, encryptFile } from "@/lib/encrypt";
+import AlertDocument from "./pages/ScamAlertPage";
+import ScamManagementList from "./pages/expert/ScamManagementList";
+import ScamManagement from "./pages/expert/ScamManagement";
 
 type AppState = "upload" | "analysis";
 
@@ -35,6 +38,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState<string>("")
   const [documentId, setDocumentId] = useState <string | null> (null)
+  const [masterDocId, setMasterDocId] = useState <string | null> (null)
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   const [fileUploadLoading, setFileUploadLoading] = useState(false)
   // Reset to upload page when user logs in or changes
@@ -49,11 +53,6 @@ export default function App() {
         setUploadedFile(null);
         localStorage.removeItem('role');
         setLoading(false);
-        
-        // --- CHANGE MADE HERE ---
-        // Removed: navigate('/login'); 
-        // Why: This was forcing a redirect to login on page load, blocking the Landing Page.
-        // The Sidebar's handleSignOut handles the manual redirect to /login.
         
         return;
       }
@@ -114,23 +113,32 @@ export default function App() {
       const downloadURL = await getDownloadURL(snapshot.ref);
       const fileUrl = URL.createObjectURL(file)
       setUrl(fileUrl);
-      // console.log(`=======Upload successful! - ${downloadURL}=======`);
+      
+      const formData = new FormData()
+      formData.append("file", file); 
+
+      // 2. Add the metadata fields individually
+      formData.append("user_id", currentUserId!);
+      formData.append("fileName", file.name);
+      formData.append("fileUrl", downloadURL);
+      formData.append("fileSize", file.size.toString()); // FormData only accepts strings/blobs
+      formData.append("mimeType", file.type);
+      formData.append("flagged", "False");
+      formData.append("encryptedKey", bufferToBase64(encryptedFile.key));
+      formData.append("iv", bufferToBase64(encryptedFile.iv));
+
       if (downloadURL) {
         console.log("==========The key and iv is: ",bufferToBase64(encryptedFile.key), bufferToBase64(encryptedFile.iv))
-        const res = await axios.post(`${backendUrl}/files/upload_files`,{
-          "user_id":currentUserId,
-          "fileName":file.name,
-          "fileUrl":downloadURL,
-          'fileSize':file.size,
-          'mimeType':file.type,
-          'flagged': "False",
-          'encryptedKey': bufferToBase64(encryptedFile.key), // store encrypted key to firestore
-          'iv': bufferToBase64(encryptedFile.iv) // store encrypted key to firestore
+        const res = await axios.post(`${backendUrl}/files/upload_files`,formData,{
+          headers:{
+            "Content-Type":"multipart/form-data"
+          }
         })
 
         if(res.status === 201){
           setUploadedFile(file);
           setDocumentId(res.data.id)
+          setMasterDocId(res.data.masterDocId)
           setAppState("analysis");
           toast.success("File successfully uploaded")
         } else {
@@ -203,7 +211,7 @@ export default function App() {
                       <DocumentUploader onFileUpload={handleFileUpload} />
                     )}
                     
-                    {!fileUploadLoading && appState === "analysis" && uploadedFile && (
+                    {!fileUploadLoading && appState === "analysis" && uploadedFile && masterDocId &&(
                       <AnalysisInterface
                         fileName={uploadedFile.name}
                         onBack={handleBack}
@@ -213,6 +221,7 @@ export default function App() {
                         file={uploadedFile}
                         documentId={documentId!}
                         userId={currentUserId!}
+                        masterDocId={masterDocId!}
                       />
                     )}
                   </div>
@@ -224,12 +233,15 @@ export default function App() {
                   <Route path="/review-document-list" element={<ReviewDocumentList/>} />
                   <Route path="/expert-dashboard" element={<ExpertDashboardPage />} />
                   <Route path="/review-document/:docId" element={<DocumentAnalysis userId={currentUserId!}/>} />
+                  <Route path="/scam-alert-list" element={<ScamManagementList/>} />
+                  <Route path="/scam-alert/:docId/:adminQId" element={<ScamManagement userId={currentUserId!}/>} /> {/*adminQId = adminQueueId , docId = masterDocId */}
                 </>
               ) : (
                 <>
                   <Route path="/history" element={<HistoryPage userId={currentUserId!}/>} />
                   <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} />
+                  <Route path="/review-document-analysis/:docId" element={<HistoryDocumentAnalysis />} /> 
+                  <Route path="/alert" element={<AlertDocument />} />
                 </>
               )}
             </>

@@ -1,21 +1,88 @@
-from fastapi import APIRouter, status, HTTPException,Form
+from fastapi import APIRouter, status, HTTPException,Form, UploadFile, File
 from app.models.files import FilesSchema
-from app.models.files import FlagDocumentRequest
+from app.models.files import FlagDocumentRequest, SpamDocumentRequest
+from app.utils.scam_alert import sha256_hex,perceptual_hash, utcnow
+from app.models.scam_alert import find_duplicate,create_doc
 from app.core.firebase import db
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime
+import base64
+
 files_router = APIRouter()
 
 
 # user upload files
 @files_router.post("/upload_files",status_code=status.HTTP_201_CREATED)
-def upload_files(file_data: FilesSchema):
+async def upload_files(
+    user_id: str = Form(...),
+    fileName: str = Form(...),
+    fileUrl: str = Form(...),
+    fileSize: int = Form(...),
+    mimeType: str = Form(...),
+    flagged: bool = Form(False),
+    encryptedKey: str = Form(...),
+    iv: str = Form(...),
+    file: UploadFile = File(...)
+):
     try: 
-        data_to_save = file_data.model_dump()
+        if not fileName:
+            raise HTTPException(400,"No file provided")
+        
+        # create sha details of the document 
+        raw = await file.read()
+        file_sha256 = sha256_hex(raw)
+        phash       = perceptual_hash(raw)
+        
+        # ── Deduplication check ───────────────────────────────────────────────────
+        existing = find_duplicate(file_sha256, phash)
+        if existing:
+            master_docId = existing["id"]
+            print("Same document has been uploaded before. The document will not be saved in the 'documents collection")
+        else:
+            # Save documents into /documents collection 
+            doc_data = {
+                "filename":         fileName,
+                "ai_analysis_id": '', # update in analysis.py
+                "file_hash":        file_sha256,
+                "perceptual_hash":  phash,
+                "fileUrl":   fileUrl,
+        
+                "document_type":    mimeType,
+                "threat_category":  "Unknown",
+                "ai_confidence":    0, # update in analysis.py
+                "scam_indicators":  [],
+                "redacted_preview": "",
+                "gemini_reasoning": "", # update in analysis.py
+        
+                "track":            None,
+                "status":           "PENDING",
+                "report_count":     0,
+                "avg_report_score": 0.0,
+                "states_reported":  [],
+                "is_national":      False,
+        
+                "first_flagged":    utcnow(),
+                "last_seen":        utcnow(),
+                "published_at":     None,
+                "created_at":       utcnow(),
+            }
+            master_docId = create_doc(doc_data)
+        
+        file_data = {
+            "user_id" : user_id,
+            "master_doc_id":master_docId,
+            "fileName": fileName,
+            "fileUrl" : fileUrl,
+            "fileSize": fileSize,
+            "mimeType": mimeType,
+            "flagged": flagged,
+            "encryptedKey":encryptedKey,
+            "iv":iv,
+        }
         
         update_time, doc_ref = db.collection("upload_files").add({
-            **data_to_save,
+            **file_data,
             "created_at": firestore.SERVER_TIMESTAMP,
             "updatedAt": ''
         })
@@ -23,6 +90,7 @@ def upload_files(file_data: FilesSchema):
         return {
             "message": "File successfully uploaded",
             "id": doc_ref.id,
+            "masterDocId":master_docId,
             "timestamp": str(update_time)
         }
     
@@ -195,6 +263,20 @@ def set_file_as_flagged(request: FlagDocumentRequest):
             "message": "Document flagged successfully"
         }
 
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error flagging document: {str(e)}"
+        )
+        
+@files_router.post('/set_spam_document')
+def set_file_as_spam(request: SpamDocumentRequest):
+    try:
+        
+        return {
+            "success": True,
+            "message": "Document flagged successfully"
+        }
     except Exception as e:
         raise HTTPException(
             status_code=500,

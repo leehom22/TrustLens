@@ -7,11 +7,14 @@ import { createClient, LiveTranscriptionEvents, type LiveClient } from "@deepgra
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import DocumentViewer from "./DocumentViewer";
 import AiAssistant from "./AiAssistant";
-import { setFileAsFlagged } from "@/api/document";
+import { handleConfirmReview, handleConfirmSpam, setFileAsFlagged } from "@/api/document";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { DocumentAnalysisOverallResult, DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
 import { useNavigate } from "react-router-dom";
+import RequestReview from "../modal/RequestReview";
+import ConfirmSpam from "../modal/ConfirmSpam";
+import { SpamReviewInterface } from "@/app/types/type";
 
 interface AnalysisInterfaceProps {
   fileName: string;
@@ -22,17 +25,25 @@ interface AnalysisInterfaceProps {
   documentId: string
   file: File
   userId: string
+  masterDocId: string
 }
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
-export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType, documentId, file, userId }: AnalysisInterfaceProps) {
+export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fileType, documentId, file, userId, masterDocId }: AnalysisInterfaceProps) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [allAnalysisComplete, setAllAnalysisComplete] = useState(false);
+  // Modal State
   const [requestReview, setRequestReview] = useState<boolean>(false)
+  const [confirmSpamReview, setConfirmSpamReview] = useState<SpamReviewInterface>({
+    comment:'',
+    state:null
+  })
+  const [confirmSpam, setConfirmSpam] = useState<boolean>(false)
   const [flaggedReason, setflaggedReason] = useState<string>('')
+  // Ai Analysis
   const [ai_analysis, setAi_analysis] = useState<DocumentAnalysisResult | null>(null)
   const [ai_analysis_header, setAi_analysis_header] = useState<DocumentAnalysisOverallResult | null>(null)
   const [rawAnalysisData, setRawAnalysisData] = useState(null)
@@ -120,8 +131,9 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       formData.append('file', file)
       formData.append('doc_id', documentId)
       formData.append('user_id', userId)
+      formData.append('masterDocId',masterDocId)
       // console.log("The file is :", file)
-
+      console.log("masterDocId: ",masterDocId)
       // 2. Initial Forensic Analysis
       const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, formData);
 
@@ -194,21 +206,6 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
       return
     }
   };
-
-  const handleConfirmReview = async () => {
-    try {
-      const res = await setFileAsFlagged(documentId, flaggedReason)
-
-      if (res.success) {
-        toast.success("Successfully request for review")
-        setRequestReview(false)
-      } else {
-        toast.error("Failed to request for review. Please try again later")
-      }
-    } catch (error) {
-      console.log("Error request for a review: ", error)
-    }
-  }
 
   const sendEmailNotification = async (email: string) => {
     if (!email) return;
@@ -310,6 +307,7 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
                   ai_analysis_format={ai_analysis!}
                   doc_type={ai_analysis_header?.doc_type!}
                   raw_analysis_id={ai_analysis_header?.raw_analysis_id!}
+                  setConfirmSpam={setConfirmSpam}
                 />
               )}
             </div>
@@ -354,62 +352,22 @@ export function AnalysisInterface({ fileName, onBack, userEmail, documentUrl, fi
 
       {/* Request Review Modal */}
       {requestReview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setRequestReview(false)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
-            {/* Header */}
-            <div className="mb-5">
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-                Request Forensic Review
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mt-1">
-                This document will be prioritized for manual verification by our forensic team.
-              </p>
-            </div>
-
-            {/* Textarea */}
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="review-reason"
-                className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-              >
-                Reason for manual review
-              </label>
-              <textarea
-                id="review-reason"
-                rows={4}
-                placeholder="Briefly describe why this document requires human oversight..."
-                onChange={(e) => setflaggedReason(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 mt-6">
-              <Button
-                variant="ghost"
-                className="flex-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-gray-300 dark:border-slate-600"
-                onClick={() => setRequestReview(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all active:scale-95"
-                onClick={handleConfirmReview}
-              >
-                Confirm Request
-              </Button>
-            </div>
-          </div>
-        </div>
+        <RequestReview
+          handleConfirmReview={() => handleConfirmReview(documentId,flaggedReason,setRequestReview)}
+          setRequestReview={setRequestReview}
+          setflaggedReason={setflaggedReason}
+        />
       )}
-
+      {
+        confirmSpam && (
+          <ConfirmSpam
+            handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam)}
+            setConfirmSpamReview={setConfirmSpamReview}
+            setConfirmSpam={setConfirmSpam}
+            confirmSpamReview={confirmSpamReview}
+          />
+        )
+      }
     </div>
   );
 }

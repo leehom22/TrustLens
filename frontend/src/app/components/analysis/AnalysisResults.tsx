@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, AlertCircle, Search } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { motion } from "motion/react";
@@ -17,9 +17,10 @@ interface AnalysisResultProps {
   ai_analysis_format: DocumentAnalysisResult,
   raw_analysis_id: string
   doc_type: string,
+  setConfirmSpam: React.Dispatch<React.SetStateAction<boolean>>
 
 }
-export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id }: AnalysisResultProps) {
+export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id, setConfirmSpam }: AnalysisResultProps) {
   //** User side - Document Analysis Result page */
   const riskLevel = ai_analysis_format?.dashboard_header?.risk_level; // low, medium, high
   const riskLevelColor: RiskLevelColor = ai_analysis_format?.dashboard_header?.risk_level_color || 'gray'
@@ -105,12 +106,20 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
           </div>
 
           {/* Request Review button */}
-          <button
-            className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-            onClick={() => setRequestReview(true)}
-          >
-            Request for a review
-          </button>
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <button
+              className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors flex gap-1 justify-center items-center"
+              onClick={() => setRequestReview(true)}
+            >
+              <Search color="red" size={14}/> <p>Review</p> 
+            </button>
+            <button
+              className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              onClick={() => setConfirmSpam(true)}
+            >
+              Confirm Spam
+            </button>
+          </div>
         </div>
 
         {/* Helper to render a tab content + feedback */}

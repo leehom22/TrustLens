@@ -2,7 +2,7 @@ import { useState, useEffect, ReactNode } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, onAuthStateChanged, User } from "firebase/auth";
 import { Button } from "@/app/components/ui/button";
-import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock, BadgeAlert, Menu, X } from "lucide-react";
+import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock, BadgeAlert, Menu, X, TriangleAlert } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import logo from '../images/logo.jpg'
@@ -40,10 +40,12 @@ const Sidebar = ({ user }: SidebarProps) => {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: <LayoutDashboard />, requiredRole: "user" },
-    { name: "Dashboard", path: "/admin-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
     { name: "Upload", path: "/upload-document", icon: <FileScan />, requiredRole: "user" },
     { name: "History", path: "/history", icon: <FileClock />, requiredRole: "user" },
+    { name: "Scam Alert", path: "/alert", icon: <TriangleAlert color="red"/>, requiredRole: "user" },
+    { name: "Dashboard", path: "/admin-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
     { name: "Review", path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
+    { name: "Scam Alert", path: "/scam-alert-list", icon: <TriangleAlert color="red"/>, requiredRole: "expert" },
   ];
 
   const filteredItems = navItems.filter(

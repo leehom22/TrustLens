@@ -6,7 +6,6 @@ import mimetypes
 import shutil
 import requests
 import json
-import google.generativeai as genai
 import time
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Request, File, UploadFile, Form
@@ -31,7 +30,7 @@ from ..services.agent import run_agent_analysis
 from ..utils.schemas import FinalReport, AnalysisRecord
 from ..core.firebase import db
 from ..core.generatePdf import generate_analysis_pdf
-
+from app.models.scam_alert import DOCS_COL_NAME
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -75,6 +74,7 @@ async def measure_task(layer_name: str, req_id: str, awaitable_task):
 
 # ======================== Pipeline Execution =========================
 async def analyze_pipeline(
+    masterDocId: str,
     doc_id: str, 
     req_id: str,
     user_id: str, 
@@ -367,6 +367,11 @@ async def analyze_pipeline(
         # [Step 11] Session Memory
         try:
             db.collection("analysis_results").document(req_id).set(final_record.dict())
+            print("masterDocId: ",masterDocId)
+            # save the ai_analysis to the master_document_collection
+            db.collection(DOCS_COL_NAME).document(masterDocId).update({
+                "ai_analysis_id" : req_id
+            })
             logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
@@ -413,7 +418,8 @@ async def analyze_document(
     request: Request, 
     file: UploadFile = File(...), 
     doc_id: str = Form(...),
-    user_id: str = Form(...)
+    user_id: str = Form(...),
+    masterDocId: str = Form(...)
 ):
     req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
     logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": file.filename})   # initiate logger
@@ -444,6 +450,7 @@ async def analyze_document(
                 buffer.write(chunk)
 
         final_record = await analyze_pipeline(
+            masterDocId = masterDocId,
             doc_id=doc_id,
             req_id=req_id,
             user_id=user_id,
@@ -471,6 +478,7 @@ async def generate_document_dashboard(
     documentId: str = Form(...),
     document_raw_data: str = Form(...),
     file: UploadFile = File(...),
+    masterDocId: str = Form(...)
 ):
     """
     PURE DATA RESTRUCTURING ENGINE
@@ -526,6 +534,8 @@ async def generate_document_dashboard(
     overall_score = raw_json.get("overall_risk_score")
     risk_level = raw_json.get("risk_level")
     doc_type = raw_json.get("doc_type", "unknown")
+    
+    
     
     # Agent outputs - use EXACT text from source
     agent_summary = raw_json.get("agent_summary", "")
@@ -846,6 +856,12 @@ async def generate_document_dashboard(
     try:
         db.collection("structure_analysis_result").add(db_payload)
         
+        print("masterDocId: ",masterDocId)
+        # save the ai_analysis to the master_document_collection
+        db.collection(DOCS_COL_NAME).document(masterDocId).update({
+            "ai_confidence" : overall_score,
+            "gemini_reasoning":agent_summary
+        })
         upload_document_db = db.collection('upload_files').document(documentId).get()
         if upload_document_db.exists:
             db.collection('upload_files').document(documentId).update({

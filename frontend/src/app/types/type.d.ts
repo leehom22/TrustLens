@@ -64,3 +64,11 @@ export interface DocumentKeyFindings {
   description: string,
   severity: string
 }
+
+export type MalaysiaState = "Johor" | "Kedah" | "Kelantan" | "Melaka" | "Negeri Sembilan" | "Pahang" | "Perak" | "Perlis" | "Pulau Pinang" | "Sabah" | "Sarawak" | "Selangor" | "Terengganu" | "Kuala Lumpur" | "Labuan" | "Putrajaya";
+  
+export interface SpamReviewInterface {
+  comment: string,
+  state: MalaysiaState | null
+  phone: string | null
+}
