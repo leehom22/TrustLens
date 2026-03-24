@@ -614,7 +614,10 @@ async def download_analysis_report(
 
             # Get content with current chosen language
             i18n_content = doc_data.get("i18n_content", {})
-            analysis_content = i18n_content.get(language, i18n_content.get("en", {}))
+            if i18n_content:
+                analysis_content = i18n_content.get(language, i18n_content.get("en", {}))
+            else:
+                analysis_content = doc_data.get("analysis_content", {})
             
             if not analysis_content:
                 return {"success": False, "message": "Failed to parse language content"}

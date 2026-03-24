@@ -500,7 +500,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             status = LayerStatus.HIGH_RISK
             audit_trails.append(create_audit_record(
                 "REAL_WORLD_SANITY", "FAIL", 
-                f"future_violation.date() > {real_now_date}", "TRANSACTION_IN_FUTURE"
+                f"{future_violation.date()} > {real_now_date}", "TRANSACTION_IN_FUTURE"
             ))
 
         # --- Chronology Consistency ---

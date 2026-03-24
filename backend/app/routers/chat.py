@@ -27,7 +27,7 @@ class ChatRequest(BaseModel):
     req_id: str = Field(..., description="Request ID")
     user_query: str = Field(..., description="The user's question")
     mode: str = Field(default="forensic_analyst", description="Active Persona Mode")
-    user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'"),
+    user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'")
     language: str = Field(default="en", description="Current UI language: 'en' or 'ms'")
 
 class ChatResponse(BaseModel):

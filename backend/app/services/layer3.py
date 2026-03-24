@@ -58,7 +58,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
         
         "raw_document_content": "string",
         "recipient": { "name": "string", "address": "string" },
-        "extracted_ic_numbers": ["string"]
+        "extracted_ic_numbers": ["string"]，
         "vendor_info": { "name": "string", "address": "string", "contact": { "email": "string", "phone": "string", "website": "string" } },
         "payment_info": { "bank_name": "string", "account_number": "string", "account_holder_name": "string", "sort_code_or_swift": "string" },
         "invoice_number": "string" or null,
