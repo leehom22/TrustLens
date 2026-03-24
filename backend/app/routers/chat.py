@@ -27,7 +27,8 @@ class ChatRequest(BaseModel):
     req_id: str = Field(..., description="Request ID")
     user_query: str = Field(..., description="The user's question")
     mode: str = Field(default="forensic_analyst", description="Active Persona Mode")
-    user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'")
+    user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'"),
+    language: str = Field(default="en", description="Current UI language: 'en' or 'ms'")
 
 class ChatResponse(BaseModel):
     response: str
@@ -270,12 +271,16 @@ CORE_GUARDRAILS = """
    - Example Pivot: "I don't track live market rates, but I can verify if the currency exchange calculation *in this invoice* is mathematically consistent."
    - Example Pivot: "I cannot discuss general law, but I can check if *this contract's clauses* comply with standard Malaysian regulations."
 4. **TONE**: Professional, Objective, Vigilant.
+5. **MULTILINGUAL & DECODING RULE (CRITICAL)**:
+   - The internal tool data you receive contains raw system codes (e.g., `check_name_code: 'TAX_CONSISTENCY'`) and bilingual JSON summaries (e.g., `{"en": "...", "ms": "..."}`).
+   - You MUST instantly decode these technical codes into natural, human-readable language. NEVER show raw uppercase system codes to the user.
+   - You MUST reply in the EXACT SAME LANGUAGE the user is speaking. If the user asks in Bahasa Melayu, read the "ms" fields from the data and explain your findings fully in Bahasa Melayu.
 
 """
 
 # ========================= Mode Configuration =========================
 
-def get_mode_config(mode: str, req_id: str):
+def get_mode_config(mode: str, req_id: str, ui_lang: str):
     print(f"==============The mode is {mode} with request Id {req_id}==============")
     # --- General Behavior ---
     UNIVERSAL_BEHAVIOR = f"""
@@ -293,6 +298,12 @@ def get_mode_config(mode: str, req_id: str):
     >>> MANDATORY SECURITY INTERCEPTOR (CRITICAL) <<<
     Before answering ANY query about the document's content, you must ensure you know its forensic integrity. 
     If you haven't reviewed the forensic summary in this conversation context yet, ALWAYS call `get_forensic_summary` first, even if the user only asks about the text. Do not blindly trust the text of a forged document.
+
+    >>> UI CONTEXT (CRITICAL) <<<
+    The user is currently viewing the dashboard in: {ui_lang.upper()}.
+    - If the UI is 'MS', they see titles like 'Risiko Kritikal Dikesan'.
+    - If the UI is 'EN', they see 'Critical Risk Detected'.
+    Always ensure your mentioned verdicts align with this UI language to avoid confusion.
     """
 
     # --- TRUSTLENS KNOWLEDGE BASE (INTERNAL MECHANISMS) ---
@@ -561,7 +572,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         req_id = request.req_id
 
         # 1. Config & Model
-        config = get_mode_config(request.mode, req_id)
+        config = get_mode_config(request.mode, req_id, request.language)
         
         # 2. History & Persistence
         history = get_chat_history(request.req_id,userType=request.user_type)

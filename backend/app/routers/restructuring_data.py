@@ -543,14 +543,14 @@ async def generate_document_dashboard(
                 "layer_id": "L1", "layer_title": t("LAYER_L1_TITLE"),
                 "status": l1_status, "status_color": l1_color, "icon": "file-text",
                 "score": l1.get("score", 0), "technical_proofs": cleanup(l1_proofs),
-                "ai_analysis": raw_json.get("layer_summaries", {}).get("L1_Metadata", ""),
+                "ai_analysis": get_ai_summary("L1_Metadata"),
                 "has_visual_evidence": False, "evidence_image_url": []
             },
             {
                 "layer_id": "L2", "layer_title": t("LAYER_L2_TITLE"),
                 "status": l2_status, "status_color": l2_color, "icon": "eye",
                 "score": l2.get("score", 0), "technical_proofs": cleanup(l2_proofs),
-                "ai_analysis": raw_json.get("layer_summaries", {}).get("L2_Visual", ""),
+                "ai_analysis": get_ai_summary("L2_Visual"),
                 "has_visual_evidence": len(evidence_urls) > 0, "evidence_image_url": evidence_urls,
                 "ATS_hacking": ats_hacking if ats_hacking else "None"
             },
@@ -558,14 +558,14 @@ async def generate_document_dashboard(
                 "layer_id": "L3", "layer_title": t("LAYER_L3_TITLE"),
                 "status": l3_status, "status_color": l3_color, "icon": "file-digit",
                 "score": l3.get("score", 0), "technical_proofs": cleanup(l3_proofs),
-                "ai_analysis": raw_json.get("layer_summaries", {}).get("L3_Content", ""),
+                "ai_analysis": get_ai_summary("L3_Content"),
                 "has_visual_evidence": False, "evidence_image_url": []
             },
             {
                 "layer_id": "L4", "layer_title": t("LAYER_L4_TITLE"),
                 "status": l4_status, "status_color": l4_color, "icon": "calculator",
                 "score": l4.get("score", 0), "technical_proofs": cleanup(l4_proofs),
-                "ai_analysis": raw_json.get("layer_summaries", {}).get("L4_Logic", ""),
+                "ai_analysis": get_ai_summary("L4_Logic"),
                 "has_visual_evidence": False, "evidence_image_url": []
             }
         ]

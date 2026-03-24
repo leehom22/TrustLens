@@ -452,10 +452,14 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
 async def analyze_document(
     request: Request, 
     file: List[UploadFile] = File(...), 
-    doc_id: List[str] = Form(...),
-    user_id: str = Form(...)
+    doc_id: List[str] = Form(default=[]),
+    user_id: str = Form(default="guest")
 ):
-    # Safetty Check
+    # For guest users, doc_id list will be empty — pad it with empty strings to match file count
+    if not doc_id:
+        doc_id = [""] * len(file)
+
+    # Safety checks
     if len(file) != len(doc_id):
         raise HTTPException(status_code=400, detail="Mismatch between files and doc_ids count.")
     if len(file) > 3:
@@ -477,7 +481,9 @@ async def analyze_document(
 
             # Security check for invalid or unsafe file source
             if verified_content_type not in ALLOWED_MIME_TYPES:
-                db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
+                # Only write to DB if this is an authenticated user with a real doc_id
+                if single_doc_id:
+                    db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
                 return {"doc_id": single_doc_id, "status": "failed", "error": f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}"}
             
             temp_path = None
@@ -532,7 +538,7 @@ async def analyze_document(
 
 # ============= Get Doc Analysis at Frontend for History Chat Display =============
 @analysis_router.post("/get-doc-analysis")
-async def get_document_analysis(docId: str = Form(...)):
+async def get_document_analysis(docId: str = Form(...), language: str = Form("en")):
     try:
         # 1. Correctly define the query
         query = db.collection(structure_analysis_collection).where("documentId", "==", docId)
@@ -545,9 +551,20 @@ async def get_document_analysis(docId: str = Form(...)):
             # Get the first document found
             doc_snap = docs[0]
             doc_data = doc_snap.to_dict()
+
+            i18n_content = doc_data.get("i18n_content")
             
-            # 4. Correctly attach the document ID to the data
-            doc_data['id'] = doc_snap.id
+            if i18n_content:
+                # Retrieve data with correspond language, English as default
+                selected_view = i18n_content.get(language, i18n_content.get("en", {}))
+            else:
+                # Retrieve analysis_content or old data if data generated before i18n refactor
+                selected_view = doc_data.get("analysis_content", doc_data)
+            
+            # 4. Attach necessary top-level metadata with id
+            selected_view['id'] = doc_snap.id
+            selected_view['documentId'] = doc_data.get('documentId', docId)
+            selected_view['doc_type'] = doc_data.get('doc_type', 'unknown')
             
             return {"success": True, "data": doc_data}
         
@@ -558,7 +575,8 @@ async def get_document_analysis(docId: str = Form(...)):
         # Use a logger in production instead of print
         print(f"Error occurred while fetching document analysis: {e}")
         return {"success": False, "error": str(e)}
-    
+
+
 @analysis_router.post("/download-analysis-report")
 async def download_analysis_report(
     doc_id: str = Form(...),
