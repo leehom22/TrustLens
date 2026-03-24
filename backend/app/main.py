@@ -20,6 +20,7 @@ from .routers.files import files_router
 from .routers.speech import router as speech_router
 from .routers.chat import chat_router
 from .routers.analysis import analysis_router
+from .routers.restructuring_data import analysis_router
 from .routers.annotate import annotate_router
 
 # ------- Import internal modules ------
