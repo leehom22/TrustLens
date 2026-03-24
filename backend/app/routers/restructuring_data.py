@@ -585,6 +585,12 @@ async def generate_document_dashboard(
         if not agent_dict: agent_summary = t("NO_AI_SUMMARY")
         elif isinstance(agent_dict, dict): agent_summary = agent_dict.get(target_lang, agent_dict.get("en", t("NO_AI_SUMMARY")))
         else: agent_summary = str(agent_dict)
+
+        notes_dict = raw_json.get("grounding_result", {}).get("notes", {})
+        if isinstance(notes_dict, dict):
+            grounding_ref = notes_dict.get(target_lang, notes_dict.get("en", ""))
+        else:
+            grounding_ref = str(notes_dict)
             
         next_step = raw_json.get("final_recommendation")
         if not next_step: next_step = t("REVIEW_MANUALLY")
@@ -601,7 +607,7 @@ async def generate_document_dashboard(
                 "risk_level_color": color_map.get(str(risk_level).upper(), "gray"),
                 "verdict_title": verdict_title,
                 "ai_executive_summary": agent_summary,
-                "grounding_search_reference": raw_json.get("grounding_result", {}).get("notes", ""),
+                "grounding_search_reference": grounding_ref,
                 "doc_type": raw_json.get("doc_type", "unknown"),
                 "next_step_recommendation": next_step,
                 "sources": raw_json.get("grounding_result", {}).get("sources", [])

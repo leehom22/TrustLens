@@ -608,7 +608,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                     else:
                         audit_trails.append(create_audit_record(
                             "DEDUCTION_MATH", "PASS", 
-                            f"{calc_deduct:.2f} == {total_deduct:.2f}", "MATH_MATCH"
+                            f"{calc_deduct:.2f} == {total_deduct:.2f}", "MATCH"
                         ))
 
             # 6.2 Net Pay Math
@@ -624,7 +624,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                         f"{gross:.2f} - {total_deduct:.2f} != {net_pay:.2f}", "MATH_INCONSISTENCIES_DETECTED"
                     ))
                 else:
-                    audit_trails.append(create_audit_record("NET_PAY_MATH", "PASS", f"{net_pay:.2f}", "MATH_MATCH"))
+                    audit_trails.append(create_audit_record("NET_PAY_MATH", "PASS", f"{net_pay:.2f}", "MATCH"))
 
 
     # ================= Rule 7: Summon Integrity =================
