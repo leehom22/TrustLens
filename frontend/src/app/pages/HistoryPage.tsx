@@ -1,39 +1,10 @@
-/**
- * HistoryPage.tsx
- *
- * Displays a searchable, filterable, sortable table of all previously analysed documents
- * for the authenticated user. Each row links to the full analysis result via
- * /review-document-analysis/:docId.
- *
- * Language toggle (EN ↔ BM):
- *   A toggle button in the header lets the user choose which language to view
- *   their analysis results in. The selected language is passed as a URL query
- *   param (?lang=en or ?lang=ms) when navigating to the detail view, so the
- *   HistoryDocumentAnalysis page can forward it to /get-doc-analysis.
- */
-
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Search,
-  Filter,
-  FileText,
-  Eye,
-  Download,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  MoreVertical,
-  Loader2,
-  RotateCcw,
-  Trash,
-} from 'lucide-react';
+import { Search, Filter, FileText, Eye, Calendar, ChevronLeft, ChevronRight, Loader2, RotateCcw, Trash } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { formatDateTime, statusStyles } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { RiskLevel, RiskLevelColor } from '../types/db-ai-analysis-type';
 import { useLanguage } from '../components/LanguageProvider';
-import { LanguageToggleButton } from '../components/LanguageToggleButton';
 
 interface Files {
   id: string,
@@ -41,369 +12,327 @@ interface Files {
   fileUrl: string
   fileSize: number
   created_at: string
-  overall_score: number
+  risk_score: number
   risk_level: RiskLevel
   risk_level_color: RiskLevelColor
-  analyzedBy: string
+  analysis_status: string
+  flagged: boolean
 }
 
-type RiskLevelFilter = RiskLevel | "All"
-
-const RISK_PRIORITY: Record<string, number> = {
-  'CRITICAL': 3,
-  'SUSPICIOUS': 2,
-  'CAUTION': 1,
-  'SAFE': 0,
+// Internal Helper
+const formatDateTime = (dateString: string) => {
+  if (!dateString) return "N/A";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 };
 
-const HistoryPage = (props: { userId: string }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>('All');
-  const [loading, setLoading] = useState(true)
-  const [historyFiles, setHistoryFiles] = useState<Files[]>([])
-  const [sortConfig, setSortConfig] = useState({
-    key: 'created_at',
-    direction: 'desc' as 'asc' | 'desc'
-  });
+const HistoryPage = ({ userId }: { userId: string }) => {
+  const [historyFiles, setHistoryFiles] = useState<Files[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'highest_risk'>('newest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+  const navigate = useNavigate();
+  const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
-  // Global language from LanguageProvider — persists across all pages
   const { language } = useLanguage();
 
-  const userId = props.userId
-  const navigate = useNavigate()
-  const backendUrl = import.meta.env.VITE_BACKEND_URL
-  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<boolean>(false)
-  const [deleteDocLoading, setDeleteDocLoading] = useState<boolean>(false)
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10; // Adjust as needed
+  const t = {
+    en: {
+      title: 'Analysis History',
+      subtitle: 'View and manage your previously analyzed documents',
+      searchPlaceholder: 'Search documents...',
+      filterAll: 'All Status',
+      filterCritical: 'Critical Risk',
+      filterSafe: 'Safe',
+      filterSuspicious: 'Suspicious',
+      filterPending: 'Pending',
+      filterFailed: 'Failed',
+      sortNewest: 'Newest First',
+      sortOldest: 'Oldest First',
+      sortHighestRisk: 'Highest Risk',
+      colDocName: 'Document Name',
+      colDate: 'Upload Date',
+      colStatus: 'Status / Risk',
+      colScore: 'Score',
+      colAction: 'Action',
+      btnView: 'View Report',
+      btnRetry: 'Retry',
+      btnDelete: 'Delete',
+      noDocs: 'No documents found matching your criteria.'
+    },
+    ms: {
+      title: 'Sejarah Analisis',
+      subtitle: 'Lihat dan urus dokumen yang telah dianalisis',
+      searchPlaceholder: 'Cari dokumen...',
+      filterAll: 'Semua Status',
+      filterCritical: 'Risiko Kritikal',
+      filterSafe: 'Selamat',
+      filterSuspicious: 'Mencurigakan',
+      filterPending: 'Menunggu',
+      filterFailed: 'Gagal',
+      sortNewest: 'Paling Baru',
+      sortOldest: 'Paling Lama',
+      sortHighestRisk: 'Risiko Tertinggi',
+      colDocName: 'Nama Dokumen',
+      colDate: 'Tarikh Muat Naik',
+      colStatus: 'Status / Risiko',
+      colScore: 'Skor',
+      colAction: 'Tindakan',
+      btnView: 'Lihat Laporan',
+      btnRetry: 'Cuba Semula',
+      btnDelete: 'Padam',
+      noDocs: 'Tiada dokumen yang sepadan ditemui.'
+    }
+  }[language];
 
-  // Reset to page 1 whenever filters or search change
+  const fetchHistoryFiles = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get(`${backendUrl}/files/get_history_files/${userId}`);
+      
+      // CRASH FIX: Guarantee we only set an array to state
+      let validData: Files[] = [];
+      if (Array.isArray(res.data)) {
+          validData = res.data;
+      } else if (res.data && Array.isArray(res.data.data)) {
+          validData = res.data.data;
+      }
+      
+      setHistoryFiles(validData);
+    } catch (error) {
+      console.log('Error fetching history: ', error);
+      toast.error('Failed to load history data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, riskFilter, sortConfig]);
+    fetchHistoryFiles();
+  }, [userId]);
 
-  // Add toggle sort function
-  const toggleSort = (key: string) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
-    }));
+  const handleDelete = async (docId: string) => {
+    if (!window.confirm("Are you sure you want to delete this document?")) return;
+    try {
+      const formData = new FormData();
+      formData.append("doc_id", docId);
+      const res = await axios.post(`${backendUrl}/files/delete_selected_files`, formData);
+      if (res.data.success) {
+        toast.success("Document deleted successfully");
+        fetchHistoryFiles();
+      }
+    } catch (error) {
+      toast.error("Failed to delete document");
+    }
   };
 
-  // Add reset function
-  const handleReset = () => {
-    setSearchTerm("");
-    setRiskFilter("All");
-    setSortConfig({ key: 'created_at', direction: 'desc' });
+  const handleRetry = async (docId: string) => {
+    toast.info("Retrying analysis...");
+    try {
+      await axios.post(`${backendUrl}/analysis/trigger/${docId}`);
+      toast.success("Analysis triggered. Check back later.");
+      fetchHistoryFiles();
+    } catch (error) {
+      toast.error("Failed to trigger analysis.");
+    }
   };
 
-  // Update your filteredData logic to include sorting
-  const filteredData = useMemo(() => {
-    // First, filter by search term and risk level
-    let filtered = historyFiles.filter((doc) => {
-      const matchesSearch = doc.fileName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesRisk = riskFilter === "All" || doc.risk_level === riskFilter;
-      return matchesSearch && matchesRisk;
-    });
+  const filteredAndSortedFiles = useMemo(() => {
+    // Extra safety guard just in case state gets corrupted
+    if (!Array.isArray(historyFiles)) return [];
 
-    // Then, sort the filtered results
-    filtered.sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof Files];
-      let bValue: any = b[sortConfig.key as keyof Files];
-
-      if (sortConfig.key === 'risk_level') {
-        // We compare the numeric weights instead of the strings
-        aValue = RISK_PRIORITY[aValue as string] ?? -1;
-        bValue = RISK_PRIORITY[bValue as string] ?? -1;
-      }
-      // -------------------------------------
-
-      // Handle date sorting
-      else if (sortConfig.key === 'created_at') {
-        aValue = new Date(aValue).getTime();
-        bValue = new Date(bValue).getTime();
-      }
-
-      // Handle numeric sorting
-      else if (sortConfig.key === 'overall_score' || sortConfig.key === 'fileSize') {
-        aValue = Number(aValue || 0);
-        bValue = Number(bValue || 0);
-      }
-
-      // Standard comparison
-      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    let result = [...historyFiles];
+    
+    if (searchQuery) {
+      result = result.filter(file => (file.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    
+    if (statusFilter !== 'ALL') {
+      if (statusFilter === 'PENDING') result = result.filter(file => file.analysis_status === 'PENDING' || file.analysis_status === 'PROCESSING');
+      else if (statusFilter === 'FAILED') result = result.filter(file => file.analysis_status === 'FAILED');
+      else result = result.filter(file => file.risk_level?.toUpperCase() === statusFilter && file.analysis_status !== 'FAILED' && file.analysis_status !== 'PENDING');
+    }
+    
+    result.sort((a, b) => {
+      if (sortOrder === 'newest') return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      if (sortOrder === 'oldest') return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      if (sortOrder === 'highest_risk') return (b.risk_score || 0) - (a.risk_score || 0);
       return 0;
     });
+    
+    return result;
+  }, [historyFiles, searchQuery, statusFilter, sortOrder]);
 
-    return filtered;
-  }, [historyFiles, searchTerm, riskFilter, sortConfig]);
+  const totalPages = Math.ceil(filteredAndSortedFiles.length / itemsPerPage);
+  const currentData = filteredAndSortedFiles.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredData.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredData, currentPage]);
-
-  const fetchingFiles = async () => {
-    try {
-      // console.log("the user id is ", userId)
-      const res = await axios.get(`${backendUrl}/files/get_uploaded_files/${userId}`);
-      if (res.data.success) setHistoryFiles(res.data.data)
-
-    } catch (error) {
-      toast.error("Failed to fetch files")
-      console.log("Failed to fetch files: ", error)
-    } finally {
-      setLoading(false)
+  const getStatusBadge = (file: Files) => {
+    if (file.analysis_status === "FAILED") {
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800">Failed</span>;
     }
-  }
-  useEffect(() => {
-    fetchingFiles()
-  }, [userId])
-
-  /**
-   * Navigates to the full analysis detail page for a given document.
-   * Passes the currently selected display language as a URL query param
-   * so HistoryDocumentAnalysis can forward it to /get-doc-analysis.
-   */
-  const handleViewReport = (docId: string) => {
-    navigate(`/review-document-analysis/${docId}?lang=${language}`)
+    if (file.analysis_status === "PENDING" || file.analysis_status === "PROCESSING") {
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</span>;
+    }
+    
+    let colorClass = "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+    if (file.risk_level === 'CRITICAL') colorClass = "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+    if (file.risk_level === 'SUSPICIOUS') colorClass = "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
+    if (file.risk_level === 'CAUTION') colorClass = "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
+    
+    return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${colorClass}`}>{file.risk_level || 'SAFE'}</span>;
   };
-
-  const handleDeleteDocument = async (docId: string, docName: string) => {
-    setConfirmDeleteDoc(true)
-    if (confirmDeleteDoc) {
-      try {
-        setDeleteDocLoading(true)
-        const formData = new FormData()
-        formData.append('doc_id', docId)
-        // console.log("The document id is:", docId)
-        const res = await axios.post(`${backendUrl}/files/delete_selected_files`, formData)
-        const result = res.data
-
-        if (result.success) {
-          toast.success("Successfully delete document")
-          await fetchingFiles()
-        } else {
-          toast.error("Failed to delete document")
-        }
-      } catch (error) {
-        console.log("Failed to delete document: ", error)
-      } finally {
-        setDeleteDocLoading(false)
-      }
-    }
-  }
 
   return (
     <>
-      {deleteDocLoading === true ? (
-        <div className="fixed inset-0 z-[100] flex flex-col gap-4 justify-center items-center backdrop-blur-[2px] transition-opacity duration-300 w-full">
-          <div className="p-6 flex flex-col items-center">
-            <Loader2 className="animate-spin text-blue-600 dark:text-blue-400" size={48} />
-            <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Deleting Document...
-            </p>
-          </div>
+      {loading ? (
+        <div className="w-full h-[60vh] flex flex-col items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+          <p className="text-slate-500 font-medium">Loading history...</p>
         </div>
       ) : (
-        <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 min-h-screen font-sans transition-colors duration-200 w-full">
-          <div className="max-w-7xl mx-auto">
+        <div className="w-full min-h-screen bg-slate-50 dark:bg-slate-900 p-4 md:p-8 font-sans transition-colors duration-300">
+          <div className="max-w-7xl mx-auto space-y-6">
 
-            {/* --- Page Header --- */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
               <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                  {language === 'ms' ? 'Sejarah Analisis' : 'Analysis History'}
-                </h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  {language === 'ms'
-                    ? 'Arkib semua dokumen yang diproses oleh TrustLens.'
-                    : 'Archive of all documents processed by TrustLens.'}
-                </p>
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">{t.title}</h1>
+                <p className="text-slate-500 dark:text-slate-400 mt-1">{t.subtitle}</p>
               </div>
-
-              {/* Language toggle — uses global LanguageProvider, persists across all pages */}
-              <LanguageToggleButton variant="default" className="self-start sm:self-auto" />
             </div>
 
-            {/* --- Search & Filter Bar --- */}
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 mb-6 flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
-              {/* Search Input */}
-              <div className="relative w-full sm:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row gap-4 transition-colors">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Search by filename..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  placeholder={t.searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                 />
               </div>
 
-              {/* Filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Filter size={16} className="text-slate-400 flex-shrink-0" />
-                <span className="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter by Risk:</span>
+              <div className="flex gap-3">
                 <select
-                  value={riskFilter}
-                  onChange={(e) => setRiskFilter(e.target.value)}
-                  className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
                 >
-                  <option value="All">All Levels</option>
-                  <option value="CRITICAL">CRITICAL</option>
-                  <option value="SUSPICIOUS">SUSPICIOUS</option>
-                  <option value="CAUTION">CAUTION</option>
-                  <option value="SAFE">SAFE</option>
+                  <option value="ALL">{t.filterAll}</option>
+                  <option value="CRITICAL">{t.filterCritical}</option>
+                  <option value="SUSPICIOUS">{t.filterSuspicious}</option>
+                  <option value="SAFE">{t.filterSafe}</option>
+                  <option value="PENDING">{t.filterPending}</option>
+                  <option value="FAILED">{t.filterFailed}</option>
+                </select>
+
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
+                >
+                  <option value="newest">{t.sortNewest}</option>
+                  <option value="oldest">{t.sortOldest}</option>
+                  <option value="highest_risk">{t.sortHighestRisk}</option>
                 </select>
               </div>
             </div>
 
-            {/* --- Data Table --- */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-
-              {/* Header Section */}
-              <div className="p-4 md:p-6 border-b border-slate-200 dark:border-slate-800">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">
-                      {language === 'ms' ? 'Sejarah Analisis' : 'Analysis History'}
-                    </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      {language === 'ms'
-                        ? 'Arkib semua dokumen yang diproses oleh TrustLens.'
-                        : 'Archive of all documents processed by TrustLens.'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleReset}
-                    className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors self-start sm:self-auto"
-                  >
-                    <RotateCcw size={16} />
-                    {language === 'ms' ? 'Set Semula Penapis' : 'Reset Filters'}
-                  </button>
-                </div>
-              </div>
-
-              {/* ── DESKTOP TABLE (md+) ── */}
-              <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
+              <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50">
-                    <tr className="border-b border-slate-200 dark:border-slate-800">
-                      {[
-                        { label: 'Document Name', key: 'fileName' },
-                        { label: 'Date Analyzed', key: 'created_at' },
-                        { label: 'Risk Level', key: 'risk_level' },
-                        { label: 'Risk Score', key: 'overall_score' },
-                        { label: 'File Size', key: 'fileSize' },
-                      ].map(({ label, key }) => (
-                        <th
-                          key={key}
-                          onClick={() => toggleSort(key)}
-                          className="p-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors select-none"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            {label}
-                            {sortConfig.key === key && (
-                              <span className="text-xs">
-                                {sortConfig.direction === 'desc' ? '▼' : '▲'}
-                              </span>
-                            )}
-                          </div>
-                        </th>
-                      ))}
-                      <th className="p-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">
-                        Actions
-                      </th>
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+                      <th className="p-5">{t.colDocName}</th>
+                      <th className="p-5">{t.colDate}</th>
+                      <th className="p-5">{t.colStatus}</th>
+                      <th className="p-5">{t.colScore}</th>
+                      <th className="p-5 text-right">{t.colAction}</th>
                     </tr>
                   </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                    {currentData.length > 0 ? (
+                      currentData.map((file) => {
+                        const isProcessed = file.analysis_status !== "FAILED" && file.analysis_status !== "PENDING" && file.analysis_status !== "PROCESSING";
 
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {loading ? (
-                      [...Array(5)].map((_, i) => (
-                        <tr key={`skeleton-${i}`} className="animate-pulse">
-                          <td className="p-4"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4" /></td>
-                          <td className="p-4"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2" /></td>
-                          <td className="p-4"><div className="h-6 bg-slate-200 dark:bg-slate-700 rounded-full w-16" /></td>
-                          <td className="p-4"><div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-24" /></td>
-                          <td className="p-4"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-12" /></td>
-                          <td className="p-4"><div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-20 ml-auto" /></td>
-                        </tr>
-                      ))
-                    ) : paginatedData.length > 0 ? (
-                      paginatedData.map((doc) => (
-                        <tr
-                          key={doc.id}
-                          className="group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
-                        >
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-shrink-0 p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-                                <FileText size={18} />
+                        return (
+                          <tr key={file.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                            <td className="p-5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 border border-blue-100 dark:border-blue-800/50">
+                                  <FileText size={18} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-1">{file.fileName || 'Untitled Document'}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{((file.fileSize || 0) / 1024 / 1024).toFixed(2)} MB</p>
+                                </div>
                               </div>
-                              <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
-                                {doc.fileName}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                              <Calendar size={14} className="flex-shrink-0" />
-                              <span>{formatDateTime(doc.created_at)}</span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}`}>
-                              {doc.risk_level || "Low"}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              <span className="w-6 text-sm font-bold text-slate-700 dark:text-slate-300">
-                                {doc.overall_score || 0}
-                              </span>
-                              <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full transition-all duration-500 ${doc.overall_score > 70 ? 'bg-red-500'
-                                      : doc.overall_score > 40 ? 'bg-yellow-500'
-                                        : doc.overall_score > 0 ? 'bg-green-500'
-                                          : 'bg-slate-400'
-                                    }`}
-                                  style={{ width: `${doc.overall_score || 0}%` }}
-                                />
+                            </td>
+                            <td className="p-5">
+                              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                                <Calendar size={14} className="opacity-70" />
+                                {formatDateTime(file.created_at)}
                               </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-xs font-mono text-slate-500 dark:text-slate-400">
-                            {(doc.fileSize / 1024).toFixed(1)} KB
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex justify-end items-center gap-3">
-                              <button
-                                onClick={() => handleViewReport(doc.id)}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
-                              >
-                                <Eye size={14} />
-                                View
-                              </button>
-                              <button
-                                className="cursor-pointer p-1 hover:opacity-70 transition-opacity"
-                                onClick={() => handleDeleteDocument(doc.id, doc.fileName)}
-                              >
-                                <Trash color="red" size={20} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="p-5">
+                              {getStatusBadge(file)}
+                            </td>
+                            <td className="p-5">
+                              {isProcessed ? (
+                                  <div className="flex items-center gap-2">
+                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300 w-6">{file.risk_score || 0}</span>
+                                      <div className="w-20 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                      <div
+                                          className={`h-full ${(file.risk_score || 0) > 70 ? 'bg-red-500' : (file.risk_score || 0) > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                          style={{ width: `${file.risk_score || 0}%` }}
+                                      />
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <span className="text-sm text-slate-400">-</span>
+                              )}
+                            </td>
+                            <td className="p-5 text-right">
+                              <div className="flex justify-end gap-2">
+                                {isProcessed && (
+                                  <button
+                                    onClick={() => navigate(`/review-document-analysis/${file.id}`)}
+                                    className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors border border-transparent hover:border-blue-200 dark:hover:border-blue-800"
+                                    title={t.btnView}
+                                  >
+                                    <Eye size={18} />
+                                  </button>
+                                )}
+                                {file.analysis_status === "FAILED" && (
+                                  <button
+                                    onClick={() => handleRetry(file.id)}
+                                    className="p-2 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                                    title={t.btnRetry}
+                                  >
+                                    <RotateCcw size={18} />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDelete(file.id)}
+                                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                  title={t.btnDelete}
+                                >
+                                  <Trash size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="p-12">
-                          <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
-                            <Search size={32} strokeWidth={1.5} />
-                            <p className="text-sm font-medium">No documents found matching your filters.</p>
+                        <td colSpan={5} className="p-16 text-center text-slate-500 dark:text-slate-400">
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <Search className="w-10 h-10 opacity-20" />
+                            <p className="text-sm">{t.noDocs}</p>
                           </div>
                         </td>
                       </tr>
@@ -411,134 +340,21 @@ const HistoryPage = (props: { userId: string }) => {
                   </tbody>
                 </table>
               </div>
-
-              {/* ── MOBILE CARD LIST (< md) ── */}
-              <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-                {loading ? (
-                  [...Array(4)].map((_, i) => (
-                    <div key={`m-skeleton-${i}`} className="p-4 animate-pulse space-y-3">
-                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3" />
-                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
-                      <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-full" />
-                    </div>
-                  ))
-                ) : paginatedData.length > 0 ? (
-                  paginatedData.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="p-4 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
-                    >
-                      {/* Card Top: icon + name + badge */}
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex-shrink-0 p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-                            <FileText size={16} />
-                          </div>
-                          <span className="font-medium text-slate-800 dark:text-slate-200 text-sm truncate">
-                            {doc.fileName}
-                          </span>
-                        </div>
-                        <span className={`flex-shrink-0 px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}`}>
-                          {doc.risk_level || "Low"}
-                        </span>
-                      </div>
-
-                      {/* Card Meta */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mb-3">
-                        <div className="flex items-center gap-1">
-                          <Calendar size={12} />
-                          <span>{formatDateTime(doc.created_at)}</span>
-                        </div>
-                        <span>{(doc.fileSize / 1024).toFixed(1)} KB</span>
-                      </div>
-
-                      {/* Risk Score Bar */}
-                      <div className="flex items-center gap-2 mb-4">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-6">
-                          {doc.overall_score || 0}
-                        </span>
-                        <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${doc.overall_score > 70 ? 'bg-red-500'
-                                : doc.overall_score > 40 ? 'bg-yellow-500'
-                                  : doc.overall_score > 0 ? 'bg-green-500'
-                                    : 'bg-slate-400'
-                              }`}
-                            style={{ width: `${doc.overall_score || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-slate-400">risk score</span>
-                      </div>
-
-                      {/* Card Actions */}
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleViewReport(doc.id)}
-                          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
-                        >
-                          <Eye size={14} />
-                          View Report
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDocument(doc.id, doc.fileName)}
-                          className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
-                        >
-                          <Trash size={14} />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
-                    <Search size={32} strokeWidth={1.5} />
-                    <p className="text-sm font-medium">No documents found matching your filters.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* --- Pagination Footer --- */}
-              <div className="flex flex-col sm:flex-row items-center justify-between px-4 md:px-6 py-4 border-t border-slate-100 dark:border-slate-800 gap-4">
-                <div className="text-sm text-slate-500 dark:text-slate-400 text-center sm:text-left">
-                  Showing{" "}
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {filteredData.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
-                  </span>{" "}
-                  to{" "}
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {Math.min(currentPage * itemsPerPage, filteredData.length)}
-                  </span>{" "}
-                  of <span className="font-semibold">{filteredData.length}</span> entries
-                </div>
-
-                <div className="flex items-center gap-2">
+              
+              <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center text-sm text-slate-600 dark:text-slate-400">
+                <span>Showing {currentData.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredAndSortedFiles.length)} of {filteredAndSortedFiles.length}</span>
+                <div className="flex gap-1">
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1}
-                    className="p-2 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-all"
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all"
                   >
                     <ChevronLeft size={18} />
                   </button>
-
-                  <div className="flex gap-1">
-                    {[...Array(totalPages)].map((_, i) => (
-                      <button
-                        key={i + 1}
-                        onClick={() => setCurrentPage(i + 1)}
-                        className={`w-9 h-9 rounded-lg text-sm transition-all ${currentPage === i + 1
-                            ? 'bg-blue-600 text-white shadow-md'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-
                   <button
                     onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages || totalPages === 0}
-                    className="p-2 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-all"
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-all"
                   >
                     <ChevronRight size={18} />
                   </button>
@@ -550,7 +366,6 @@ const HistoryPage = (props: { userId: string }) => {
       )}
     </>
   )
-
 };
 
 export default HistoryPage;
