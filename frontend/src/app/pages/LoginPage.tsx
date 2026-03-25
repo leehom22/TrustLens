@@ -9,6 +9,7 @@ import logo from '../images/logo.jpg'
 import google from '../images/google.png'
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { LanguageToggleButton } from '../components/LanguageToggleButton';
 
 const LoginPage = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -162,8 +163,10 @@ const LoginPage = () => {
     }
     return (
         <div className="min-h-screen flex items-center justify-center transition-colors duration-300 bg-gray-50 dark:bg-slate-950 bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-            {/* Theme Toggle Button */}
-            <div className="absolute top-4 right-4">
+            {/* Top-right controls: theme + language toggle */}
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+                {/* Language toggle — persists globally */}
+                <LanguageToggleButton variant="default" />
                 <Button
                     variant="outline"
                     size="icon"

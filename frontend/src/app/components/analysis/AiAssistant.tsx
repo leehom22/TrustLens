@@ -16,7 +16,8 @@ import { createClient, LiveClient, LiveTranscriptionEvents } from '@deepgram/sdk
 import { toast } from 'sonner'
 import { collection, query, orderBy, getDocs, where } from "firebase/firestore";
 import ReactMarkdown from 'react-markdown'
-import { auth, db } from "../../../lib/firebase"; 
+import { auth, db } from "../../../lib/firebase";
+import { useLanguage } from "../LanguageProvider";
 
 // --- TYPES ---
 type AnalysisStage = "idle" | "analyzing" | "complete";
@@ -69,6 +70,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
 
     const user = auth.currentUser
     const backendURL = import.meta.env.VITE_BACKEND_URL
+    // Global language — forwarded to /chat so responses are in the correct language
+    const { language } = useLanguage();
     // --- EFFECT: Close mode menu on click outside ---
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -154,7 +157,8 @@ const AiAssistant = ({ reqId, initialMessages = [], stage, userType }: AiAssista
                     req_id: reqId,
                     user_query: queryText,
                     mode: activeMode,
-                    user_type: userType
+                    user_type: userType,
+                    language: language   // tells backend to respond in the selected language
                 })
             });
 

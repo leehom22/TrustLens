@@ -16,6 +16,8 @@ import { Button } from "../components/ui/button";
 import DocumentFeedback from "../components/analysis/DocumentFeedback";
 import { statusStyles } from "@/lib/utils";
 import { decryptFile, getAccessibleDocumentUrl } from "@/lib/encrypt";
+import { useLanguage } from "../components/LanguageProvider";
+import { LanguageToggleButton } from "../components/LanguageToggleButton";
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -46,11 +48,15 @@ export function HistoryDocumentAnalysis() {
     const [riskLevel, setRiskLevel] = useState<RiskLevel>('SAFE')
     const [overallScore, setOverallScore] = useState<number>(0)
 
+    // Global language — toggles trigger a re-fetch of the analysis in the new language
+    const { language } = useLanguage();
+
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
             formData.append('docId', docId)
-            // console.log("Fetching structure analysis data")
+            // Send current language so backend returns the correct language version from DB
+            formData.append('language', language)
             const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData)
             const result = res.data
 
@@ -134,10 +140,13 @@ export function HistoryDocumentAnalysis() {
     }
 
     useEffect(() => {
-        // console.log("the Document Id is :", docId)
-        // fetch document from backend
         fetchingFile()
     }, [docId])
+
+    // Re-fetch analysis in the new language whenever the global language toggle is pressed
+    useEffect(() => {
+        if (docId) fetchingDocucmentAnalysis(docId)
+    }, [language])
     return (
         <>
             {loadingData === true ? (
@@ -170,8 +179,10 @@ export function HistoryDocumentAnalysis() {
                                 </div>
                             </div>
 
-                            {/* Right: status */}
+                            {/* Right: language toggle + status */}
                             <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Language toggle — persists globally */}
+                                <LanguageToggleButton variant="default" className="hidden sm:inline-flex" />
                                 {stage === "analyzing" && (
                                     <span className="text-xs text-gray-700 dark:text-slate-300 flex items-center gap-1">
                                         <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
@@ -195,23 +206,17 @@ export function HistoryDocumentAnalysis() {
                         <div className="lg:col-span-5 order-2 lg:order-1 flex flex-col gap-4">
                             <Tabs defaultValue="document" className="w-full">
                                 <TabsList className="grid w-full grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <TabsTrigger
-                                        value="document"
-                                        className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+                                    <TabsTrigger value="document" className="rounded-lg px-4 py-2 text-sm font-medium transition-all
                   data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
                   dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
-                  text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                                    >
-                                        Document
+                  text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                                        {language === "ms" ? "Dokumen" : "Document"}
                                     </TabsTrigger>
-                                    <TabsTrigger
-                                        value="ai-assistant"
-                                        className="rounded-lg px-4 py-2 text-sm font-medium transition-all
+                                    <TabsTrigger value="ai-assistant" className="rounded-lg px-4 py-2 text-sm font-medium transition-all
                   data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm
                   dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
-                  text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                                    >
-                                        AI Assistant
+                  text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                                        {language === "ms" ? "Pembantu AI" : "AI Assistant"}
                                     </TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="document" className="h-full m-0">
@@ -281,10 +286,10 @@ export function HistoryDocumentAnalysis() {
                                     <div className="overflow-x-auto pb-1 -mb-1 flex-1">
                                         <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full sm:min-w-0">
                                             {[
-                                                { value: 'metadata', label: 'Metadata' },
-                                                { value: 'heatmap', label: 'Visuals' },
-                                                { value: 'content', label: 'Semantics' },
-                                                { value: 'findings', label: 'Consistency' },
+                                                { value: 'metadata', label: language === 'ms' ? 'Metadata' : 'Metadata' },
+                                                { value: 'heatmap', label: language === 'ms' ? 'Visual' : 'Visuals' },
+                                                { value: 'content', label: language === 'ms' ? 'Semantik' : 'Semantics' },
+                                                { value: 'findings', label: language === 'ms' ? 'Konsistensi' : 'Consistency' },
                                             ].map(({ value, label }) => (
                                                 <TabsTrigger
                                                     key={value}

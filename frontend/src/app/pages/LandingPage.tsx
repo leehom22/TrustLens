@@ -16,6 +16,7 @@ import {
   Lock,
 } from "lucide-react";
 import logoImg from "../images/logo.jpg";
+import { LanguageToggleButton } from "../components/LanguageToggleButton";
 
 /* ------------------------------------------------------------------ */
 /*  INLINE STYLES (so the file is fully self-contained)                */
@@ -81,7 +82,9 @@ function Navigation() {
         </nav>
 
         {/* CTA */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Language toggle — visible from landing page, persists globally */}
+          <LanguageToggleButton variant="dark" className="hidden lg:inline-flex" />
           <a
             href="/login"
             className="hidden lg:inline-flex items-center justify-center px-5 h-[44px] text-[14px] font-semibold text-white/80 hover:text-white border border-white/20 rounded-full hover:border-white/40 transition-all"
@@ -142,6 +145,9 @@ function Navigation() {
             >
               Log In
             </a>
+            <div className="flex justify-center pt-1">
+              <LanguageToggleButton variant="dark" />
+            </div>
           </div>
         </div>
       )}
