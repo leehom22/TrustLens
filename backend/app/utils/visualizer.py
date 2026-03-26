@@ -159,7 +159,7 @@ def generate_hud(original_cv, ela_cv, detection_meta, global_score):
     z_map_resized = cv2.resize(z_matrix, (w, h), interpolation=cv2.INTER_CUBIC)
     
     if global_score > 40:
-        mask_l2 = (z_map_resized > 3.5).astype(np.uint8) * 255
+        mask_l2 = (z_map_resized > 3.0).astype(np.uint8) * 255
         contours_l2, _ = cv2.findContours(mask_l2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(base_layer, contours_l2, -1, (0, 0, 255), 1)
 

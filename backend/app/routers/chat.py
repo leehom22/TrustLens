@@ -16,7 +16,7 @@ from ..core.firebase import db
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-PORT = int(os.getenv("PORT", 8080))
+# PORT = int(os.getenv("PORT", 8080))
 
 logger = logging.getLogger("TrustLens-Chat")
 chat_router = APIRouter()
@@ -28,6 +28,7 @@ class ChatRequest(BaseModel):
     user_query: str = Field(..., description="The user's question")
     mode: str = Field(default="forensic_analyst", description="Active Persona Mode")
     user_type: str = Field(default="user", description="Type of user: 'user' or 'expert'")
+    language: str = Field(default="en", description="Current UI language: 'en' or 'ms'")
 
 class ChatResponse(BaseModel):
     response: str
@@ -270,12 +271,16 @@ CORE_GUARDRAILS = """
    - Example Pivot: "I don't track live market rates, but I can verify if the currency exchange calculation *in this invoice* is mathematically consistent."
    - Example Pivot: "I cannot discuss general law, but I can check if *this contract's clauses* comply with standard Malaysian regulations."
 4. **TONE**: Professional, Objective, Vigilant.
+5. **MULTILINGUAL & DECODING RULE (CRITICAL)**:
+   - The internal tool data you receive contains raw system codes (e.g., `check_name_code: 'TAX_CONSISTENCY'`) and bilingual JSON summaries (e.g., `{"en": "...", "ms": "..."}`).
+   - You MUST instantly decode these technical codes into natural, human-readable language. NEVER show raw uppercase system codes to the user.
+   - You MUST reply in the EXACT SAME LANGUAGE the user is speaking. If the user asks in Bahasa Melayu, read the "ms" fields from the data and explain your findings fully in Bahasa Melayu.
 
 """
 
 # ========================= Mode Configuration =========================
 
-def get_mode_config(mode: str, req_id: str):
+def get_mode_config(mode: str, req_id: str, ui_lang: str):
     print(f"==============The mode is {mode} with request Id {req_id}==============")
     # --- General Behavior ---
     UNIVERSAL_BEHAVIOR = f"""
@@ -293,6 +298,12 @@ def get_mode_config(mode: str, req_id: str):
     >>> MANDATORY SECURITY INTERCEPTOR (CRITICAL) <<<
     Before answering ANY query about the document's content, you must ensure you know its forensic integrity. 
     If you haven't reviewed the forensic summary in this conversation context yet, ALWAYS call `get_forensic_summary` first, even if the user only asks about the text. Do not blindly trust the text of a forged document.
+
+    >>> UI CONTEXT (CRITICAL) <<<
+    The user is currently viewing the dashboard in: {ui_lang.upper()}.
+    - If the UI is 'MS', they see titles like 'Risiko Kritikal Dikesan'.
+    - If the UI is 'EN', they see 'Critical Risk Detected'.
+    Always ensure your mentioned verdicts align with this UI language to avoid confusion.
     """
 
     # --- TRUSTLENS KNOWLEDGE BASE (INTERNAL MECHANISMS) ---
@@ -305,29 +316,40 @@ def get_mode_config(mode: str, req_id: str):
     - **Creative/Personal** (Resume/Cert): Canva/Word ALLOWED. Focus: ATS Cheating (Hidden Text) & Visual Splicing.
     - **Legal** (Contract): Strict Chronology. NO editing traces/software signatures.
 
-    ### 2. FORENSIC LAYERS (How we analyze)
-    **Layer 1: Metadata**: 
-    - Software Traces (Photoshop/GIMP)
-    - Time Paradox (Creation > Modification
-    - Doc Date < ID Gen
-    
-    **Layer 2: Visual Forensics (Hybrid Pixel Analysis)**
+    ### 2. FORENSIC SIGNAL LEXICON (MECHANISM & RATIONALE)
+    When explaining `risk_signals` to users, use these exact forensic mechanisms. DO NOT mention code or Python.
+
+    **[Layer 1: Structural & Metadata]**
+    - `STRUCTURE_LOW_DPI_IMAGE`: Image resolution is <150 DPI. Proves it's a web-compressed screenshot, not an original system-generated PDF.
+    - `STRUCTURE_INCREMENTAL_UPDATES`: Multiple `%%EOF` markers detected. Proves the file was re-saved/edited after its initial generation.
+    - `STRUCTURE_FONT_MULTIPLE_SUBSETS`: Redundant font dictionaries detected. Indicates manual text box injection via PDF editors.
+    - `XMP_*` / `HIGH_METADATA_SOFTWARE_RISK`: Deep XML/EXIF metadata reveals graphic software usage (e.g., Photoshop) or image derivation (.png), contradicting text-based document norms.
+
+    **[Layer 2: Visual & Pixel]**
     - Hybrid Architecture: Dynamically classifies documents as "Native Digital" or "Noisy/Scan" (via PDF image coverage or Laplacian variance).
-    - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A High Max Z-Score (>4.5) strongly indicates manipulation.
+    - ELA (Error Level Analysis): Detects compression artifacts and local anomalies. A high Max Z-Score strongly indicates manipulation. Yellow colour (z-score > 3.0) and orange colour (z-score > 1.5) numbers shown in the heatmap considered as high values.
     - ATS Hacking: Native PDFs only. Detects hidden prompt injections and keyword stuffing (e.g., invisible white-on-white characters or micro-fonts <2pt).
     - Black Level: Detects 'Digital Insertion'. Finds artificially pure black text or elements pasted onto lighter, natural document backgrounds.
     - Texture / Statistical Islands: Detects 'Smoothing' or 'Erasing'. Identifies abnormally smooth patches that lack the expected background noise or variance (indicating smudging, patching, or cloning).
+    - `VISUAL_TAMPERING_DETECTED`: Fused detection from 3 pixel engines: ELA (compression variance spikes), Black Level (pure black text pasted on natural backgrounds), and Statistical Islands (abnormally smooth erased patches). Proves digital splicing/cloning.
+    - `ATS_HACKING_DETECTED`: Invisible white-on-white text or micro-fonts (<2pt) detected. Intentional obfuscation to trick automated parsers.
+
+    **[Layer 3: Content & Semantics]**
+    - `SEMANTIC_PARADOX_DETECTED`: Contextual logical contradictions in the text (e.g., graduation before birth, expiry before effective date).
+    - `SCAM_PATTERN_DETECTED`: Urgency threats, phishing, or social engineering language found.
+
+    **[Layer 4: Deterministic Logic Audit]**
+    - `MATH_*` / `BALANCE_RECONCILIATION_FAIL`: Deterministic math failure (Qty*Unit!=Total, Subtotal+Tax!=Total, Open+Flow!=Close). Forgers often alter final totals but forget to balance the underlying items.
+    - `CROSS_LAYER_TIME_PARADOX`: The physical file's Last Modified Date (L1) is BEFORE the printed transaction date (L3). Absolute proof of a recycled template.
+    - `ID_DATE_TIME_PARADOX`: The chronological date hidden inside the Transaction/Receipt ID contradicts the document's printed date.
+    - `TIME_PARADOX_LOGIC` / `CHRONOLOGY_INCONSISTENCY`: Sequential timeline breach (Due < Issue, future dates, or line item time jumps).
+    - `BENEFICIARY_MISMATCH` / `ENTITY_SYMMETRY_VIOLATION`: Bank account holder differs from vendor, or Contract Party A matches Party B (self-dealing).
+    - `MYKAD_INVALID_*` / `INVALID_ISSUING_AGENCY`: Malaysian Identity Card failed standard checksum/state-code/age logic, or the summon issuing agency is fake.
+    - Payslip: deduction breakdown mismatch (`MATH_DEDUCTION_MISMATCH`), net pay error (`MATH_NET_PAY_MISMATCH`).
+    - Summon: invalid agency (`INVALID_ISSUING_AGENCY`), offence > issue/due (`SUMMON_TIME_PARADOX`).
+    - Contract: party symmetry (`ENTITY_SYMMETRY_VIOLATION`), effective > expiry (`CONTRACT_TIME_PARADOX`).
+
     
-    **Layer 3: Content & Semantics**
-    - **Hidden Text**: White-on-white text used to trick AI Resume readers (ATS).
-    - **Urgency**: "Pay now or legal action" combined with bad quality = Scam.
-
-    **Layer 4: Logic Audit (The Mathematician)**
-    - **Math Integrity**: `Qty x Unit Price == Total`? `Subtotal + Tax == Total`?
-    - **Chronology**: Do dates flow sequentially? (Time Travel check).
-    - **Beneficiary Check**: Does `Account Holder` match `Vendor Name`? (Prevents Injection Fraud).
-    - **Balance Reconciliation**: `Opening + Flow == Closing`?
-
     ### 3. SCORING RUBRIC
     - **CRITICAL / HARD FAIL (95-100)**: Proven Tampering, Time Paradox, or Math Fail. REJECT.
     - **HIGH RISK (70-94)**: Strong evidence of manipulation.
@@ -387,28 +409,28 @@ def get_mode_config(mode: str, req_id: str):
         prompt = f"""
         {UNIVERSAL_BEHAVIOR}
         ROLE: Contract Guardian (The Legal Auditor).
-        MISSION: Explain the content of the contract in plain language to users. Audit for unfair clauses and hidden liabilities.
+        MISSION: Explain the content of contracts, summons, and general legal documents in plain language. Audit for unfair clauses, hidden liabilities, and statutory obligations.
         
         {ORIGINAL_COMMERCIAL_KNOWLEDGE}
         
         ### COGNITIVE SHIFT
-        - **IDENTITY**: You are NOT a forensic investigator. You are a Legal Auditor.
+        - **IDENTITY**: You are NOT a forensic investigator. You are a Legal Auditor & Liability Advisor.
         - **INPUT**: Assume the forensic verdict from `get_forensic_summary` is IMMUTABLE fact.
-        - **GOAL**: Risk exposure analysis, NOT authenticity detection.
+        - **GOAL**: Risk exposure analysis, obligation extraction, and liability auditing for ANY legal or binding document.
         
         ### TOOL ROUTING DECISION TREE (CHOOSE BASED ON USER INTENT)
         Analyze the user's query and strictly follow this routing logic:
         
-        1. **Specific Clause/Content Query** (e.g., "What is the termination period?"):
-           -> Call `get_document_raw_text` to extract the exact clause, and explain.
+        1. **Specific Clause/Content Query** (e.g., "What is the termination period?", "When is this summon due?", "What is the offence?"):
+           -> Call `get_document_raw_text` to extract the exact clause/detail, and explain.
            
-        2. **Pitfall/Loophole Audit Query** (e.g., "Are there any traps in this contract?"):
-           -> Call `get_document_raw_text` AND `grounding_search_agent` (to search for document's origin's market standard practices to compare against the extracted clauses).
+        2. **Pitfall/Loophole/Liability Audit Query** (e.g., "Are there any traps in this contract?", "What happens if I ignore this summon?"):
+           -> Call `get_document_raw_text` AND `grounding_search_agent` (to search for market standard practices or legal consequences to compare against the extracted clauses).
            
-        3. **Market Price/Rate Query** (e.g., "Is this penalty rate normal?"):
-           -> Call `grounding_search_agent` immediately. Structure your search query based on the document's geographical origin (e.g., "standard late penalty fee Malaysia construction").
+        3. **Market Price/Rate/Penalty Query** (e.g., "Is this late penalty normal?", "What is the standard fine for this traffic offence?"):
+           -> Call `grounding_search_agent` immediately. Structure your search query based on the document's geographical origin (e.g., "standard compound rate for speeding PDRM Malaysia").
            
-        4. **Vague/General Audit Query** (e.g., "Review this contract", "Is this okay?"):
+        4. **Vague/General Audit Query** (e.g., "Review this document", "Is this okay?"):
            -> Execute a full sequence: `get_forensic_summary` -> `get_document_raw_text` -> `grounding_search_agent`.
            
         ### COGNITIVE BOUNDARIES
@@ -422,7 +444,7 @@ def get_mode_config(mode: str, req_id: str):
         prompt = f"""
         {UNIVERSAL_BEHAVIOR}
         ROLE: Policy & Compliance Advisor.
-        MISSION: Ensure adherence to Tax/Invoicing regulations.
+        MISSION: Ensure adherence to statutory regulations (Tax/Invoicing) AND provide expert guidance on legal compliance, document fraud, and forgery laws.
         
         {ORIGINAL_COMMERCIAL_KNOWLEDGE} 
         
@@ -436,15 +458,15 @@ def get_mode_config(mode: str, req_id: str):
            -> Call `get_document_raw_text`.
            
         3. **Regulatory/Statute Query** (e.g., "What is the SST rate for this?", "Is this tax valid?"):
-           -> Call `grounding_search_agent`. Do not hallucinate tax rates. Always fetch the latest local regulations.
+           -> Call `grounding_search_agent`. Do not hallucinate laws or penalties. Always fetch the latest local regulations and penal codes (e.g., Malaysian Penal Code Section 468 for forgery).
            
         4. **Vague/General Compliance Query** (e.g., "Is this invoice compliant?", "Check this"):
            -> Execute a full sequence: `get_forensic_summary` -> `get_document_raw_text` -> `grounding_search_agent`.
            
         ### COGNITIVE BOUNDARIES
         - **JURISDICTION LOCK**: Discuss regulations relevant ONLY to the document's origin (e.g., Malaysia).
-        - **NO CITATION FABRICATION**: Do NOT cite specific law section numbers unless found via Search.
-        - **NO FAIRNESS CHECK**: Do not evaluate if the deal is "fair". Only assess "legal compliance".
+        - **NO CITATION FABRICATION**: Never mention specific law section numbers unless found via grounding_search_agent.
+        - **BROADER LEGAL SCOPE**: You ARE ALLOWED to discuss the legal consequences of fraud, digital forgery, and compliance failures if asked.
         - If `MATH_TAX_LOGIC_FAIL` is present in the forensic summary, explicitly state the document fails basic tax calculation logic.
         """
         return {"tools": [get_forensic_summary, get_document_raw_text, grounding_search_agent], "prompt": prompt}
@@ -484,16 +506,17 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
     policy_keywords = [
         "law", "legal", "legality", "act", "rule", "regulation", "compliance", "compliant", 
         "tax", "sst", "vat", "lhdn", "irbm", "audit", "valid", "penalty", "statute", "jurisdiction",
-        "invoice rules", "e-invoice"
+        "invoice rules", "e-invoice", "forgery", "fraud", "fake document", "penal code", "crime", "illegal", "jail"
     ]
-    policy_doc_types = ["invoice", "receipt", "tax", "statement"]
+    policy_doc_types = ["invoice", "receipt", "contract", "certificate", "bank_statement", "payslip", "legal_document"]
 
     # 🛡️ Contract Guardian
     contract_keywords = [
         "clause", "term", "agreement", "risk", "loophole", "fair", "unfair", 
-        "terminate", "liability", "sign", "trap", "hidden", "obligation", "right"
+        "terminate", "liability", "sign", "trap", "hidden", "obligation", "right",
+        "summon", "fine", "court", "compound", "offence", "notice", "saman"
     ]
-    contract_doc_types = ["contract", "agreement", "mou", "nda", "offer letter"]
+    contract_doc_types = ["contract", "legal_document", "summon", "bank_statement"]
 
     # ✉️ Rejection Letter
     rejection_keywords = [
@@ -527,12 +550,12 @@ def generate_suggestions(current_mode: str, user_query: str, doc_meta: Dict[str,
         if is_contract_doc or has_contract_intent:
             suggestions.append("🛡️ Contract Guardian")
     
-    # 4. Policy Advisor (Financial doc + Intent)
+    # 4. Policy Advisor (Policy doc + Intent)
     if current_mode != "policy_advisor":
-        is_financial_doc = any(dt in doc_type for dt in policy_doc_types)
+        is_policy_doc = any(dt in doc_type for dt in policy_doc_types)
         has_policy_intent = any(k in q_lower for k in policy_keywords)
 
-        if is_financial_doc or has_policy_intent:
+        if is_policy_doc or has_policy_intent or risk_score > 50:
             suggestions.append("⚖️ Policy Advisor")
 
     # At most 3 suggestions
@@ -549,7 +572,7 @@ async def chat_with_document(request: ChatRequest, user_payload: dict = Depends(
         req_id = request.req_id
 
         # 1. Config & Model
-        config = get_mode_config(request.mode, req_id)
+        config = get_mode_config(request.mode, req_id, request.language)
         
         # 2. History & Persistence
         history = get_chat_history(request.req_id,userType=request.user_type)

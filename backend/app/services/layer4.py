@@ -58,13 +58,71 @@ def extract_first_date(text: str) -> Optional[datetime]:
     
     return None
 
-def create_audit_record(name: str, status: str, formula: str, visual: str, reason: str = ""):
+
+def normalize_entity_name(name: str) -> str:
+    if not name: return ""
+    # Convert to lowercase and remove symbol
+    clean = re.sub(r'[^a-z0-9]', '', str(name).lower())
+    # Remove common prefix of company names in Malaysia
+    for suffix in ['sdnbhd', 'bhd', 'ltd', 'inc', 'llc', 'corporation', 'enterprise']:
+        if clean.endswith(suffix):
+            clean = clean[:-len(suffix)]
+    return clean
+
+
+# --- Validates Malaysian IC (MyKad) formats with strict JPN State Codes and dynamic age logic ---
+def validate_mykad(ic_str: str, doc_type: str, doc_date: datetime = None) -> List[Dict]:
+
+    if not ic_str: return []
+    
+    clean_ic = re.sub(r"[^\d]", "", str(ic_str))
+    if len(clean_ic) != 12: 
+        return [] 
+        
+    errors = []
+    yy, mm, dd = int(clean_ic[0:2]), int(clean_ic[2:4]), int(clean_ic[4:6])
+    pb = int(clean_ic[6:8])
+
+    # 1. Strict State Code Check (PB) based on official JPN documentation
+    valid_pb = set(list(range(1, 60)))
+    
+    if pb not in valid_pb:
+        errors.append({"type": "MYKAD_INVALID_STATE", "visual": f"{pb}","reason_code": "MYKAD_INVALID_STATE"})
+
+    # 2. Dynamic Date Format Check
+    current_year = datetime.now().year
+    current_century = (current_year // 100) * 100
+    current_yy = current_year % 100
+    
+    if yy <= current_yy:
+        year = current_century + yy
+    else:
+        year = current_century - 100 + yy
+        
+    dob = None
+    try:
+        dob = datetime(year, mm, dd)
+    except ValueError:
+        errors.append({"type": "MYKAD_INVALID_DOB", "visual": f"{clean_ic[0:6]}", "reason_code": "MYKAD_INVALID_DOB"})
+
+    # 3. Age Check (ONLY triggered for legal/contractual documents)
+    if dob and doc_type in ["contract", "legal_document"]:
+        compare_date = doc_date if doc_date else datetime.now()
+        age = (compare_date - dob).days / 365.25
+        
+        if age < 18:
+            errors.append({"type": "MYKAD_MINOR_SIGNATORY", "visual": f"{clean_ic[0:6]} -> {int(age)}", "reason_code": "MYKAD_MINOR_SIGNATORY"})
+        elif age > 100:
+            errors.append({"type": "MYKAD_AGE_ANOMALY", "visual": f"{clean_ic[0:6]} -> {int(age)}","reason_code": "MYKAD_AGE_ANOMALY"})
+
+    return errors
+
+def create_audit_record(check_name_code: str, status: str, visual_feedback: str, reason_code: str):
     return {
-        "check_name": name,
+        "check_name_code": check_name_code,
         "status": status,
-        "formula": formula,
-        "visual_feedback": visual,
-        "reason": reason
+        "visual_feedback": visual_feedback,
+        "reason_code": reason_code
     }
 
 
@@ -130,23 +188,14 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         l4_signals.append("FORMAT_VIOLATION_SCREENSHOT")
         status = LayerStatus.HIGH_RISK
         score = max(score, 95)
-        audit_trails.append(create_audit_record(
-            "Format Check", "FAIL", "Original Document Only", 
-            "Mobile UI/Screenshot Detected", "High risk of manipulation"
-        ))
+        audit_trails.append(create_audit_record("FORMAT_CHECK", "FAIL", "UI/SCREENSHOT", "HIGH_RISK_MANIPULATION"))
     else:
         if is_screenshot:
             # Forgivable screenshot
-            audit_trails.append(create_audit_record(
-                "Format Check", "PASS", "Document Integrity", 
-                "Screenshot Detected", "Allowed for this document type"
-            ))
+            audit_trails.append(create_audit_record("FORMAT_CHECK", "PASS", "UI/SCREENSHOT", "ALLOWED_FOR_TYPE"))
         else:
             # No screenshot
-            audit_trails.append(create_audit_record(
-                "Format Check", "PASS", "Document Integrity", 
-                "Clean Layout", "No screenshot artifacts"
-            ))
+            audit_trails.append(create_audit_record("FORMAT_CHECK", "PASS", "NATIVE", "NO_SCREENSHOT_ARTIFACTS"))
 
 
 # ================= Rule 2: Math Integrity (Row & Tax) =================
@@ -188,10 +237,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         if is_subtotal_match or is_total_match:
             # Net vs Gross Reconciliation Mode: Row-level math doesn't match, but totals are consistent. 
             # This often indicates a systematic OCR error (e.g., decimal point missed in all unit prices) rather than random data tampering.
-            audit_trails.append(create_audit_record(
-                "Row Audit Mode", "PASS", "Net vs Gross Reconciliation", 
-                "Gross amounts detected in Line Total", "Qty*Unit != Line Total, but aggregates perfectly match Document Totals."
-            ))
+            audit_trails.append(create_audit_record("ROW_AUDIT_MODE", "PASS", "GROSS", "GROSS_MATCH_DESPITE_ROW_ERROR"))
             row_errors = []  
             calc_subtotal = calc_subtotal_net
         else:
@@ -200,18 +246,16 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             score = max(score, 80)
             status = LayerStatus.HIGH_RISK
             for err in row_errors[:3]: 
-                audit_trails.append(create_audit_record(
-                    f"Row {err['idx']} Math", "FAIL", "Qty * Unit == Extracted Total", err['visual'], "Unexplained discrepancy"
-                ))
+                visual_str = f"R{err['idx']}: {err['visual']}"
+                audit_trails.append(create_audit_record("ROW_MATH_CHECK", "FAIL", visual_str, "UNEXPLAINED_DISCREPANCY"))
             audit_trails.append(create_audit_record(
-                "Row Audit Summary", "FAIL", "All Rows Consistent", 
-                f"Failed {len(row_errors)}/{len(items)} rows", "Math inconsistencies detected"
+                "ROW_AUDIT_SUMMARY", "FAIL", 
+                f"{len(row_errors)}/{len(items)}", "MATH_INCONSISTENCIES_DETECTED"
             ))
             calc_subtotal = calc_subtotal_net 
     elif items:
         audit_trails.append(create_audit_record(
-            "Row Audit Summary", "PASS", "Qty * Unit = Total", 
-            "All items verified", f"Checked {len(items)} rows"
+            "ROW_AUDIT_SUMMARY", "PASS", f"{len(items)}/{len(items)}", "ALL_ITEMS_VERIFIED"
         ))
         calc_subtotal = calc_subtotal_net
 
@@ -228,11 +272,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             l4_signals.append("MATH_TAX_LOGIC_FAIL")
             score = max(score, 85)
             status = LayerStatus.HIGH_RISK
-            
+        
         audit_trails.append(create_audit_record(
-            "Tax Consistency", "PASS" if is_pass else "FAIL", "Subtotal + Tax = Total",
+            "TAX_CONSISTENCY", "PASS" if is_pass else "FAIL", 
             f"{base_val:.2f} + {tax:.2f} {'==' if is_pass else '!='} {total:.2f}",
-            f"Difference: {diff:.2f}" if not is_pass else "Match"
+            "MATCH" if is_pass else "TAX_DIFFERENCE"
         ))
 
     # 2.3 Tax Rate Multiplier Audit
@@ -250,14 +294,15 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             score = max(score, 80)
             status = LayerStatus.HIGH_RISK
             audit_trails.append(create_audit_record(
-                "Tax Multiplier", "FAIL", f"Subtotal * {tax_rate_pct}% == Tax",
-                f"{base_val} * {tax_rate_pct}% = {expected_statutory_tax:.2f} (Shown as {tax:.2f})",
-                "Statutory tax calculation does not match stated tax amount."
+                "TAX_MULTIPLIER", "FAIL", 
+                f"{base_val} * {tax_rate_pct}% = {expected_statutory_tax:.2f} != {tax:.2f}", 
+                "STATUTORY_TAX_MISMATCH"
             ))
         else:
             audit_trails.append(create_audit_record(
-                "Tax Multiplier", "PASS", f"Subtotal * {tax_rate_pct}% == Tax",
-                f"Verified {tax_rate_pct}% rate", "Statutory math perfectly matches."
+                "TAX_MULTIPLIER", "PASS", 
+                f"{tax_rate_pct}%", 
+                "STATUTORY_MATH_PERFECT"
             ))
 
 
@@ -269,9 +314,7 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             l4_signals.append("MISSING_INVOICE_ID")
             score = max(score, 65) 
             if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
-            audit_trails.append(create_audit_record(
-                "Compliance Check", "FAIL", "Invoice ID Exists", "ID is Null", "Missing unique identifier"
-            ))
+            audit_trails.append(create_audit_record("COMPLIANCE_CHECK", "FAIL", "NULL", "MISSING_UNIQUE_ID"))
 
         # 3B: Missing Payment Route
         payment = payment or {} 
@@ -284,14 +327,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 l4_signals.append("MISSING_CORE_ACCOUNT_ID")
                 score = max(score, 90) 
                 status = LayerStatus.HIGH_RISK
-                audit_trails.append(create_audit_record(
-                    "Payment Traceability", "FAIL", "Account Number Required", "None Found", 
-                    "Bank Statement missing core account identifier."
-                ))
+                audit_trails.append(create_audit_record("PAYMENT_TRACEABILITY", "FAIL", "NULL", "BANK_STMT_MISSING_ID"))
             else:
                 audit_trails.append(create_audit_record(
-                    "Payment Traceability", "PASS", "Account Identifier", 
-                    f"Found: {payment.get('account_number')}", "Core ID verified"
+                    "PAYMENT_TRACEABILITY", "PASS", 
+                    str(payment.get('account_number')), "CORE_ID_VERIFIED"
                 ))
 
         # Type 2: B2B Invoice (Strict - Suspicious)
@@ -300,14 +340,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 l4_signals.append("MISSING_PAYMENT_ROUTE")
                 score = max(score, 25)   # most of the invoice have account no. provided
                 if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
-                audit_trails.append(create_audit_record(
-                    "Payment Traceability", "FAIL", "Account Number Expected", "None Found", 
-                    "Invoice missing bank account details for payment."
-                ))
+                audit_trails.append(create_audit_record("PAYMENT_TRACEABILITY", "FAIL", "NULL", "INVOICE_MISSING_ACCOUNT"))
             else:
                 audit_trails.append(create_audit_record(
-                    "Payment Traceability", "PASS", "Payment Route", 
-                    "Account Found", "Standard invoice format"
+                    "PAYMENT_TRACEABILITY", "PASS", 
+                    str(payment.get('account_number')), "STANDARD_INVOICE_FORMAT"
                 ))
 
         # Type 3: Receipt / Payment Receipt (Relaxed)
@@ -316,18 +353,12 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 l4_signals.append("MISSING_PAYMENT_PROOF")
                 score = max(score, 60)
                 if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
-                audit_trails.append(create_audit_record(
-                    "Payment Traceability", "FAIL", "Account OR Ref ID", "None Found", 
-                    "Missing payment verification data"
-                ))
+                audit_trails.append(create_audit_record("PAYMENT_TRACEABILITY", "FAIL", "NULL", "MISSING_PAYMENT_VERIFICATION"))
             else:
                 proof = "Account No" if has_account else "Reference ID"
-                audit_trails.append(create_audit_record(
-                    "Payment Traceability", "PASS", "Payment Verification", 
-                    f"Found {proof}", "Traceable transaction"
-                ))
+                audit_trails.append(create_audit_record("PAYMENT_TRACEABILITY", "PASS", str(proof), "TRACEABLE_TRANSACTION"))
         
-        # 3C: Beneficiary Mismatch
+    # 3C: Beneficiary Mismatch
     if doc_type in ["invoice", "receipt", "payment_receipt"]:
         p_raw = payment.get("account_holder_name")
         v_raw = vendor.get("name")
@@ -342,26 +373,25 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 score = max(score, 85)
                 status = LayerStatus.HIGH_RISK
                 audit_trails.append(create_audit_record(
-                    "Beneficiary Check", "FAIL", "Holder == Vendor", 
-                    f"'{p_name}' != '{v_name}'", "Potential Injection Fraud"
+                    "BENEFICIARY_CHECK", "FAIL", 
+                    f"[{p_name}] != [{v_name}]", "POTENTIAL_INJECTION_FRAUD"
                 ))
             else:
                 audit_trails.append(create_audit_record(
-                    "Beneficiary Check", "PASS", "Holder == Vendor", 
-                    "Identity Verified", "Payment destination matches vendor"
+                    "BENEFICIARY_CHECK", "PASS", 
+                    f"[{p_name}] == [{v_name}]", "DESTINATION_MATCHES_VENDOR"
                 ))
 
 
-
-# ================= Rule 4: Date & Consistency Logic =================
+    # ================= Rule 4: Date & Consistency Logic =================
     
     # 4A: Basic Due Date Logic (Restored)
     if invoice_date and due_date and due_date < invoice_date:
         l4_signals.append("TIME_PARADOX_LOGIC")
         score = max(score, 75)
         audit_trails.append(create_audit_record(
-            "Date Logic", "FAIL", "Due Date >= Invoice Date", 
-            f"Due {due_date.date()} < Inv {invoice_date.date()}", "Logical Error"
+            "DATE_LOGIC", "FAIL", 
+            f"{due_date.date()} < {invoice_date.date()}", "DUE_BEFORE_INVOICE"
         ))
 
     # 4B: ID vs Date Consistency (New Feature)
@@ -383,17 +413,19 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         # Delta < 0: From future -> High Risk
         # Delta > 0: Delay -> Depends on synchronous and asynchronous document types
         delta = (invoice_date - hidden_date).days
-        raw_text_dump = str(data).upper()
+        raw_text_dump = (data.get("raw_document_content", "") + " ".join([i.get("desc", "") for i in items])).upper()
+        raw_text_clean = re.sub(r"[^\w\s]", "", raw_text_dump)
 
         # --- ( Synchronous & Asynchronous Document Classification ) ---
         # 1. According to doc_type
+        is_strict_mode = False
         is_strict_mode = doc_type in ["payment_receipt"]
         
         # 2. Keyword Override (E-Wallet strict, Official Receipt / Tax Invoice not strict )
-        ewallet_keywords = ["TOUCH 'N GO", "EWALLET", "GRABPAY", "DUITNOW", "ALIPAY"]
+        ewallet_keywords = ["TOUCH 'N GO", "PAYPAL", "EWALLET", "GRABPAY", "DUITNOW", "ALIPAY"]
         if any(kw in raw_text_dump for kw in ewallet_keywords):
             is_strict_mode = True
-        if "OFFICIAL RECEIPT" in raw_text_dump or "TAX INVOICE" in raw_text_dump:
+        if "OFFICIAL RECEIPT" in raw_text_clean or "TAX INVOICE" in raw_text_clean:
             is_strict_mode = False
 
         # --- Audit Execution ---
@@ -404,15 +436,13 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 score = max(score, 95)
                 status = LayerStatus.HIGH_RISK
                 audit_trails.append(create_audit_record(
-                    "Real-time ID", "FAIL", "Doc >= ID", 
-                    f"Doc {invoice_date.date()} < ID {hidden_date.date()}", 
-                    "Impossible: Transaction ID from future."
+                    "REALTIME_ID", "FAIL", 
+                    f"{invoice_date.date()} < {hidden_date.date()} ({target_ref_no}) | -{delta} day(s)", "ID_FROM_FUTURE"
                 ))
             elif delta == 0:
                 audit_trails.append(create_audit_record(
-                    "Real-time ID", "PASS", "Strict Match", 
-                    f"Verified ID: {target_ref_no}",
-                    "Perfect real-time match."
+                    "REALTIME_ID", "PASS", 
+                    str(target_ref_no), "PERFECT_REALTIME_MATCH"
                 ))
             else:
                 # 1 day late (Suspicious)
@@ -424,9 +454,8 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 score = max(score, risk_score)
                 if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
                 audit_trails.append(create_audit_record(
-                    "Real-time ID", "FAIL" if delta > 1 else "CAUTION", "Zero Lag Expected", 
-                    f"Ref: {target_ref_no} | Lag: {delta} day(s)", 
-                    "E-receipt logic failure: Transaction ID belongs to a different day."
+                    "REALTIME_ID", "FAIL" if delta > 1 else "CAUTION", 
+                    f"{invoice_date.date()} < {hidden_date.date()} ({target_ref_no}) | +{delta} day(s)", "ERECEIPT_DAY_MISMATCH"
                 ))
         
         else:
@@ -436,20 +465,20 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 score = max(score, 95)
                 status = LayerStatus.HIGH_RISK
                 audit_trails.append(create_audit_record(
-                    "Logic Check", "FAIL", "Doc >= ID", f"Gap: {delta} days", 
-                    "Critical: Document issued before ID generation."
+                    "LOGIC_CHECK", "FAIL", 
+                    f"{invoice_date.date()} < {hidden_date.date()} ({target_ref_no}) | -{delta} day(s)", "DOC_BEFORE_ID"
                 ))
             elif 0 <= delta <= 4:   # 1-4 days Tolerance Period
                 audit_trails.append(create_audit_record(
-                    "Batch Validity", "PASS", "Admin Tolerance", 
-                    f"Lag: {delta} days", "Within acceptable manual entry/processing window."
+                    "BATCH_VALIDITY", "PASS", 
+                    f"{invoice_date.date()} < {hidden_date.date()} ({target_ref_no}) | +{delta} day(s)", "WITHIN_MANUAL_WINDOW"
                 ))
             else:
                 l4_signals.append("LONG_ENTRY_DELAY")
                 score = max(score, 40)
                 audit_trails.append(create_audit_record(
-                    "Batch Validity", "CAUTION", "Extended Lag", 
-                    f"Lag: {delta} days", "Unusual processing delay."
+                    "BATCH_VALIDITY", "CAUTION", 
+                    f"{invoice_date.date()} < {hidden_date.date()} ({target_ref_no}) | +{delta} day(s)", "UNUSUAL_DELAY"
                 ))
 
 
@@ -457,17 +486,11 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
     if len(line_item_dates) > 1:
         
         # --- Real World Sanity Date Check ---
-        real_now = datetime.now(timezone.utc)
+        real_now_date = datetime.now().date()
         future_violation = None
         for d in line_item_dates:
-            # Naive datetime converted into UTC for comparison
-            if d.tzinfo is None:
-                d_aware = d.replace(tzinfo=timezone.utc)
-            else:
-                d_aware = d
-            
-            # 24 hours tolerance for time zone errors
-            if d_aware > (real_now + timedelta(hours=24)):
+            # 1 day tolerance for difference in timezones
+            if d.date() > real_now_date + timedelta(days=1):
                 future_violation = d
                 break
         
@@ -476,8 +499,8 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             score = max(score, 95)
             status = LayerStatus.HIGH_RISK
             audit_trails.append(create_audit_record(
-                "Real-World Sanity", "FAIL", "Date <= Now", 
-                f"Found: {future_violation.date()}", "Transaction is in the future relative to analysis time."
+                "REAL_WORLD_SANITY", "FAIL", 
+                f"{future_violation.date()} > {real_now_date}", "TRANSACTION_IN_FUTURE"
             ))
 
         # --- Chronology Consistency ---
@@ -494,10 +517,10 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 continue
             if is_descending:
                 if next_d > curr:
-                    chronology_errors.append(f"Row {i+1}->{i+2}: {curr.date()} -> {next_d.date()} (Time Jump)")
+                    chronology_errors.append(f"R{i+1}->R{i+2}: {curr.date()}->{next_d.date()} (^)")
             else:
                 if next_d < curr:
-                    chronology_errors.append(f"Row {i+1}->{i+2}: {curr.date()} -> {next_d.date()} (Backwards Jump)")
+                    chronology_errors.append(f"R{i+1}->R{i+2}: {curr.date()}->{next_d.date()} (v)")
 
         if chronology_errors:
             l4_signals.append("CHRONOLOGY_INCONSISTENCY")
@@ -505,25 +528,23 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
             if doc_type in ["bank_statement", "payslip"]:
                 score = max(score, 85)
                 status = LayerStatus.HIGH_RISK
-                reason_suffix = "Critical: Systematic timeline breach in financial record."
+                reason_code = "SYSTEMATIC_TIMELINE_BREACH"
             
             # Other document types with date sequence (e.g., delivery note) can be more forgiving as the date sequence might not be critical
             else:
                 score = max(score, 60)
                 if status == LayerStatus.CLEAN:
                     status = LayerStatus.SUSPICIOUS
-                reason_suffix = "Caution: Logical sequence error in document items."
+                reason_code = "LOGICAL_SEQUENCE_ERROR"
             
             # Only show first 2 errors
             for err in chronology_errors[:2]:
-                audit_trails.append(create_audit_record(
-                    "Timeline Logic", "FAIL", "Sequential Order", err, reason_suffix
-                ))
+                audit_trails.append(create_audit_record("TIMELINE_LOGIC", "FAIL", err, reason_code))
                 
         elif not future_violation:
-             audit_trails.append(create_audit_record(
-                "Timeline Audit", "PASS", "Chronology Check", 
-                f"Verified {len(line_item_dates)} dates", "Timeline is consistent"
+            audit_trails.append(create_audit_record(
+                "TIMELINE_AUDIT", "PASS", 
+                f"{len(line_item_dates)}/{len(line_item_dates)} Rows", "TIMELINE_CONSISTENT"
             ))
 
 
@@ -555,13 +576,211 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
                 l4_signals.append("BALANCE_RECONCILIATION_FAIL")
                 score = max(score, 95)
                 status = LayerStatus.HIGH_RISK
-            
+
             audit_trails.append(create_audit_record(
-                "Balance Reconciliation", "PASS" if is_pass else "FAIL", "Open + Flow = Close",
+                "BALANCE_RECONCILIATION", "PASS" if is_pass else "FAIL", 
                 f"{op_bal:.2f} + {calc_flow:.2f} {'==' if is_pass else '!='} {cl_bal:.2f}",
-                f"Gap: {diff:.2f}" if not is_pass else "Verified"
+                "MATCH" if is_pass else "UNEXPLAINED_DISCREPANCY"
             ))
 
+
+    # ================= Rule 6: Payslip Integrity =================
+    if doc_type == "payslip":
+        pd = data.get("payslip_details") or {}
+        if pd:
+            gross = to_decimal(pd.get("gross_pay"))
+            total_deduct = to_decimal(pd.get("total_deductions"))
+            net_pay = to_decimal(pd.get("net_pay"))
+            breakdown = pd.get("deduction_breakdown") or {}
+            
+            # 6.1 Deductions Breakdown Math
+            if breakdown and total_deduct > Decimal("0.00"):
+                calc_deduct = sum([to_decimal(v) for v in breakdown.values()])
+                if calc_deduct > Decimal("0.00"):
+                    diff_deduct = abs(calc_deduct - total_deduct)
+                    if diff_deduct > Decimal("1.00"):
+                        l4_signals.append("MATH_DEDUCTION_MISMATCH")
+                        score = max(score, 80)
+                        status = LayerStatus.HIGH_RISK
+                        audit_trails.append(create_audit_record(
+                            "DEDUCTION_MATH", "FAIL", 
+                            f"{calc_deduct:.2f} != {total_deduct:.2f}", "MATH_INCONSISTENCIES_DETECTED"))
+                    else:
+                        audit_trails.append(create_audit_record(
+                            "DEDUCTION_MATH", "PASS", 
+                            f"{calc_deduct:.2f} == {total_deduct:.2f}", "MATCH"
+                        ))
+
+            # 6.2 Net Pay Math
+            if gross > Decimal("0.00") and net_pay > Decimal("0.00"):
+                calc_net = gross - total_deduct
+                diff_net = abs(calc_net - net_pay)
+                if diff_net > Decimal("1.00"):
+                    l4_signals.append("MATH_NET_PAY_MISMATCH")
+                    score = max(score, 85)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "NET_PAY_MATH", "FAIL", 
+                        f"{gross:.2f} - {total_deduct:.2f} != {net_pay:.2f}", "MATH_INCONSISTENCIES_DETECTED"
+                    ))
+                else:
+                    audit_trails.append(create_audit_record("NET_PAY_MATH", "PASS", f"{net_pay:.2f}", "MATCH"))
+
+
+    # ================= Rule 7: Summon Integrity =================
+    if doc_type == "summon":
+        sd = data.get("summon_details") or {}
+        if sd:
+            # 7.1 Issuing Agency Whitelist Check
+            agency = str(sd.get("issuing_agency", "")).upper()
+            if agency:
+                valid_agencies = ["PDRM", "JPJ", "DBKL", "MBPJ", "MBSA", "MPSJ", "POLIS", "MAHKAMAH", "JIM", "JABATAN IMIGRESEN", "LHDN", "HASIL", "KASTAM", "SSM"]
+                if not any(v in agency for v in valid_agencies):
+                    l4_signals.append("INVALID_ISSUING_AGENCY")
+                    score = max(score, 90)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "AGENCY_VERIFICATION", "FAIL", str(agency), "UNRECOGNIZED_AUTHORITY"
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "AGENCY_VERIFICATION", "PASS", str(agency), "VALID_AUTHORITY"
+                    ))
+
+            # 7.2 Summon Timeline Check
+            offence_dt_str = sd.get("offence_date")
+            if offence_dt_str:
+                offence_date = extract_first_date(offence_dt_str)
+                
+                # Check 1: Offence Date vs Invoice (Issue) Date
+                if offence_date and invoice_date and offence_date.date() > invoice_date.date():
+                    l4_signals.append("SUMMON_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "SUMMON_TIMELINE", "FAIL", 
+                        f"{offence_date.date()} > {invoice_date.date()}", "OFFENCE_AFTER_ISSUE"
+                    ))
+                
+                # Check 2: Offence Date vs Due Date
+                if offence_date and due_date and offence_date.date() > due_date.date():
+                    l4_signals.append("SUMMON_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "SUMMON_TIMELINE", "FAIL", 
+                        f"{offence_date.date()} > {due_date.date()}", "OFFENCE_AFTER_DUE"
+                    ))
+
+
+    # ================= Rule 8: Legal Document Integrity =================
+    if doc_type in ["contract", "legal_document"]:
+        ld = data.get("legal_details") or {}
+        if ld:
+            party_a = normalize_entity_name(ld.get("party_a", {}).get("name", ""))
+            party_b = normalize_entity_name(ld.get("party_b", {}).get("name", ""))
+            
+            # 8.1 Entity Symmetry Check
+            if party_a and party_b and len(party_a) > 3 and party_a == party_b:
+                l4_signals.append("ENTITY_SYMMETRY_VIOLATION")
+                score = max(score, 85)
+                status = LayerStatus.HIGH_RISK
+                audit_trails.append(create_audit_record(
+                    "ENTITY_SYMMETRY", "FAIL", 
+                    f"{party_a} == {party_b}", "SELF_DEALING_CIRCULAR"
+                ))
+            elif party_a and party_b:
+                audit_trails.append(create_audit_record(
+                    "ENTITY_SYMMETRY", "PASS", 
+                    f"{party_a} != {party_b}", "PARTIES_DISTINCT"
+                ))
+
+            # 8.2 Validity Period Check
+            eff_dt_str = ld.get("effective_date")
+            exp_dt_str = ld.get("expiry_date")
+            if eff_dt_str and exp_dt_str:
+                eff_date = extract_first_date(eff_dt_str)
+                exp_date = extract_first_date(exp_dt_str)
+                
+                if eff_date and exp_date and eff_date > exp_date:
+                    l4_signals.append("CONTRACT_TIME_PARADOX")
+                    score = max(score, 80)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "VALIDITY_PERIOD", "FAIL", 
+                        f"{eff_date.date()} > {exp_date.date()}", "EXPIRES_BEFORE_EFFECTIVE"
+                    ))
+
+
+    # ================= Rule 9: Universal IC Format Verification =================
+    extracted_ics = list(set(data.get("extracted_ic_numbers", [])))
+    if extracted_ics:
+        for ic in extracted_ics:
+            mykad_errors = validate_mykad(ic, doc_type, invoice_date)
+            for err in mykad_errors:
+                l4_signals.append(err["type"])
+                score = max(score, 85)
+                status = LayerStatus.HIGH_RISK
+                audit_trails.append(create_audit_record(
+                    "IDENTITY_VERIFICATION", "FAIL", err["visual"], err["reason_code"]
+                ))
+            if not mykad_errors and len(re.sub(r"[^\d]", "", str(ic))) == 12:
+                audit_trails.append(create_audit_record(
+                    "IDENTITY_VERIFICATION", "PASS", str(ic), "MYKAD_VERIFIED"
+                ))
+
+    
+# ================= Rule 10: Cross-Layer Chronology (Meta vs Content) =================
+    l1_meta = data.get("_l1_metadata", {})
+    pdf_c_str = l1_meta.get("pdf_creation_date")
+    pdf_m_str = l1_meta.get("pdf_mod_date")
+    
+    if (pdf_c_str or pdf_m_str) and invoice_date:
+        try:
+            doc_day = invoice_date.date()
+            dates_to_compare = []
+            if pdf_c_str: dates_to_compare.append(datetime.fromisoformat(pdf_c_str).date())
+            if pdf_m_str: dates_to_compare.append(datetime.fromisoformat(pdf_m_str).date())
+            
+            # Time Boundary for last document operation
+            latest_physical_day = max(dates_to_compare)
+            
+            # Delta > 0 ：Transaction date claimed on document later than operational date on metadata
+            delta = (doc_day - latest_physical_day).days
+            
+            # Type 1：Retrospective factual evidence related document (Strict)
+            if doc_type in ["bank_statement", "payslip", "receipt", "payment_receipt"]:
+                if delta > 1:   # Time zone tolerance
+                    l4_signals.append("CROSS_LAYER_TIME_PARADOX")
+                    score = max(score, 95)
+                    status = LayerStatus.HIGH_RISK
+                    audit_trails.append(create_audit_record(
+                        "CROSS_LAYER_SYNC", "FAIL", 
+                        f"{latest_physical_day} > {doc_day}", "RETROACTIVE_FORGERY"
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "CROSS_LAYER_SYNC", "PASS", 
+                        f"{latest_physical_day} < {doc_day}", "TIMELINE_ALIGNS"
+                    ))
+                    
+            # Type 2：Forward-looking / Template type document (Relax, warning only)
+            else:
+                if delta > 30:
+                    l4_signals.append("CROSS_LAYER_TEMPLATE_ANOMALY")
+                    score = max(score, 70)
+                    if status == LayerStatus.CLEAN: status = LayerStatus.SUSPICIOUS
+                    audit_trails.append(create_audit_record(
+                        "CROSS_LAYER_SYNC", "CAUTION", 
+                        f"{latest_physical_day} >= {doc_day} | +{delta} day(s)", "TEMPLATE_ANOMALY"
+                    ))
+                else:
+                    audit_trails.append(create_audit_record(
+                        "CROSS_LAYER_SYNC", "PASS", 
+                        f"{latest_physical_day} >= {doc_day} | +{delta} day(s)", "NORMAL_TEMPLATE_WINDOW"
+                    ))
+        except ValueError:
+            pass
 
 # ================= Final Output Packaging =================
     details["audit_trails"] = audit_trails
@@ -571,7 +790,10 @@ def run_layer_4_logic(data: Dict[str, Any]) -> LayerResult:
         "TIME_PARADOX_LOGIC",
         "ID_DATE_TIME_PARADOX",
         "DATE_FROM_FUTURE",
-        "CHRONOLOGY_INCONSISTENCY"
+        "CHRONOLOGY_INCONSISTENCY",
+        "SUMMON_TIME_PARADOX",
+        "CONTRACT_TIME_PARADOX",
+        "CROSS_LAYER_TIME_PARADOX"
     ]
     is_critical_paradox = any(sig in l4_signals for sig in critical_time_triggers)
 

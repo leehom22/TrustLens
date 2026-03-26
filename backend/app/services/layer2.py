@@ -140,7 +140,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 # Threshold: > 80-100 implies noise/scan. < 80 implies clean digital.
                 is_native_digital = lap_var < 100 
             
-            mode_str = "Native Digital" if is_native_digital else "Noisy/Scan"
+            mode_str = "NATIVE" if is_native_digital else "NOISY"
             
             # ================= ALGORITHM WEIGHTS =================
             # Define confidence weights based on mode
@@ -242,7 +242,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             # ELA Score (Conservative)
             ela_page_score = 0
             # Only trust ELA high score if it's Native Digital and metrics are extreme
-            if is_native_digital and metrics["max_z_score"] > 4.5 and metrics["suspicious_grids"] > 2:
+            if is_native_digital and metrics["max_z_score"] > 3.0 and metrics["suspicious_grids"] > 2:
                 ela_page_score = 40
                 l2_signals.append(f"Page {idx+1}: ELA compression anomalies detected.")
             

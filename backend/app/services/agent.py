@@ -29,16 +29,21 @@ You have access to a `Google Search` tool. You MUST use it to verify data.
 --- DETAILED TASKS ---
 
 ### 1. DATA TRIAGE (PRIORITY FILTERING)
-- **Problem**: The `grounding_info` might be messy. 
-**Evaluation Matrix** (Strictly follow one of the three):
-- **Action**: IGNORE individual line items, unit prices, or descriptions. Extract Vendor Name, Address, and Contact **EXACTLY as written in the document**. DO NOT auto-correct.
+- **Action**: Review the `grounding_info`. Identify the Primary Entity (e.g., vendor_name, summon_issuing_agency, or contract_party_a/b).
+- **Classification Rule**: You MUST classify the Primary Entity into one of two categories:
+  - **[ORGANIZATION]**: A registered business, corporation, government agency, or institution (e.g., contains Sdn Bhd, Ltd, LLC, Department, Bank).
+  - **[PRIVATE INDIVIDUAL]**: A human name (e.g., John Doe, Ali bin Abu)
 - **FOCUS ONLY ON**:
-  1. **Vendor Name**: Does this entity exist in the real world?
+  1. **Primary Entity Identity**: Does this organization or agency exist in the real world?
   2. **Address**: Is the location compatible with the business type?
   3. **Contact**: Are there scam reports linked to the phone/email?
 
 ### 2. EXTERNAL VERIFICATION (TOOL USAGE)
-- **Action**: Use the `Google Search` tool to validate the high-priority entities.
+- **For [ORGANIZATION]**: 
+  - You MUST use the `Google Search` tool to validate their existence, address accuracy, contact accuracy and reputation (scam reports), based on **EXACTLY as written in the document**. DO NOT auto-correct.
+- **For [PRIVATE INDIVIDUAL]**: 
+  - **DO NOT** perform extensive Google Searches on private human names. This causes identity ambiguity (the "John Smith" problem) and false positives.
+  - **Action**: Automatically set their status to "UNVERIFIED" but DO NOT penalize their risk score. State explicitly in your summary that physical ID/Passport verification is required.
 - **Constraint**: You must base your findings **SOLELY** on the search tool results.
 - **Logic**:
   - If tool returns nothing -> Unverified.
@@ -72,6 +77,7 @@ You must determine the `grounding_score` first, then derive the `verification_st
 - **0 - 10 (VERIFIED)**: 
   - Exact match found on Maps/Registry/Official Site.
   - No negative reports.
+  - OR the entity is a [PRIVATE INDIVIDUAL] (Neutral baseline, no digital footprint required to get this score).
 - **30 - 60 (UNVERIFIED / AMBIGUOUS)**: 
   - Partial match (e.g., Name matches, Address differs).
   - OR No digital footprint found (common for small vendors).
@@ -93,22 +99,48 @@ You must translate technical data into a professional forensic narrative.
 - **Signal Integration**: Mention the standard Risk Signals (e.g., MATH_ROW_MISMATCH) in your explanation to align with the technical report.
 - **Handling Empty Data**: If a layer has 'CLEAN' status but no specific details, state 'No technical anomalies detected'. If a layer failed to process, state 'Technical data unavailable for this layer'.
 
+### 7. BILINGUAL OUTPUT RULE (STRICT)
+# For any field requiring both "en" and "ms" keys:
+1. ALWAYS generate the English ("en") text first based on your forensic reasoning.
+2. The Malay ("ms") text MUST be a direct, professional, and exact translation of your generated English text. DO NOT add new information or rethink the logic for the Malay version.
+
 --- OUTPUT GENERATION (JSON STRICT) ---
 {
-    "agent_summary": "A concise executive summary merging THREE elements: 1. Grounding: Summarize the grounding results. 2. Technical: Brief mention of L1-L4 status (e.g., 'Technical scores are clean' or 'High ELA risk detected'). 3. Lesson: EXPLICITLY mention if a historical lesson was applied to change the verdict.",
+    "agent_summary": {
+        "en": "A concise executive summary merging Grounding, Technical status, and Lessons applied.",
+        "ms": "Exact and professional Malay translation of the 'en' field."
+    },
     "verification_status": "VERIFIED" | "UNVERIFIED" | "SUSPICIOUS",
     "grounding_score": 0,
     "grounding_result": {
-        "notes": "Evidence found (e.g., 'Google Maps shows a warehouse at this address').",
+        "notes": {
+            "en": "Evidence found (e.g., 'Google Maps shows a warehouse at this address').",
+            "ms": "Exact Malay translation of the 'en' notes."
+        },
         "sources": ["MUST be actual URLs returned by the tool. If none, use empty list []"]
     },
     "layer_summaries": {
-        "L1_Metadata": "Translate code to plain English.",
-        "L2_Visual": "Translate code to plain English.",
-        "L3_Content": "Translate code to plain English.",
-        "L4_Logic": "Translate code to plain English."
+        "L1_Metadata": {
+            "en": "Translate code to plain English.",
+            "ms": "Exact Malay translation of the 'en' text."
+        },
+        "L2_Visual": {
+            "en": "Translate code to plain English.",
+            "ms": "Exact Malay translation of the 'en' text."
+        },
+        "L3_Content": {
+            "en": "Translate code to plain English.",
+            "ms": "Exact Malay translation of the 'en' text."
+        },
+        "L4_Logic": {
+            "en": "Translate code to plain English.",
+            "ms": "Exact Malay translation of the 'en' text."
+        }
     },
-    "next_step_recommendation": "Provide clear, actionable guidance for the human reviewer based on the specific findings (e.g., 'Contact the vendor to verify the mismatched bank account', 'Request the physical original document due to digital tampering', or 'Safe to proceed with standard processing')."
+    "next_step_recommendation": {
+        "en": "Provide clear, actionable guidance for the human reviewer.",
+        "ms": "Exact Malay translation of the 'en' recommendation."
+    }
 }
 """
 
@@ -269,12 +301,24 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
         
         # Safety check for output format
         defaults = {
-            "agent_summary": "AI Analysis failed to generate summary.",
+            "agent_summary": {
+                "en": "AI Analysis failed to generate summary.",
+                "ms": "Analisis AI gagal menjana ringkasan."
+            },
             "verification_status": "UNVERIFIED",
-            "grounding_score": 0, # Default to 0 risk if AI fails, let Tech Score rule
-            "grounding_result": {"error": "Parsing error"},
+            "grounding_score": 0,
+            "grounding_result": {
+                "notes": {
+                    "en": "Parsing error",
+                    "ms": "Ralat penghuraian"
+                },
+                "sources": []
+            },
             "layer_summaries": {},
-            "next_step_recommendation": "Review document findings manually."
+            "next_step_recommendation": {
+                "en": "Review document findings manually.",
+                "ms": "Semak penemuan dokumen secara manual."
+            }
         }
         
         # Combining output with default format
@@ -288,11 +332,23 @@ async def run_agent_analysis(report: FinalReport) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Agent Logic Failed: {e}")
         return {
-            "agent_summary": "Automated forensic analysis complete. AI Grounding service unavailable.",
+            "agent_summary": {
+                "en": "Automated forensic analysis complete. AI Grounding service unavailable.",
+                "ms": "Analisis forensik automatik selesai. Perkhidmatan AI Grounding tidak tersedia."
+            },
             "verification_status": "UNVERIFIED",
             "grounding_score": 0,
-            "grounding_result": {"error": str(e)},
+            "grounding_result": {
+                "notes": {
+                    "en": str(e),
+                    "ms": str(e)
+                },
+                "sources": []
+            },
             "layer_summaries": {},
             "active_lessons_applied": [],
-            "next_step_recommendation": "Review document findings manually."
+            "next_step_recommendation": {
+                "en": "Review document findings manually.",
+                "ms": "Semak penemuan dokumen secara manual."
+            }
         }

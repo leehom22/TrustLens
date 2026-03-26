@@ -1,10 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
-# Conceptual-like Typescript Interface but in Python, can auto doing type parsing and validation
-# For formatting final response of all analysis into JSON structure
 
 class LayerStatus(str, Enum):
     SKIPPED = "skipped"
@@ -49,10 +47,10 @@ class AnalysisRecord(FinalReport):
     req_id: str = Field(..., description="The unique Firestore ID of the analysis")
     user_id: str = "guest"
     file_name: str = "unknown_file"
-
+    
     # 1. AI Explanation Summary (Context)
-    agent_summary: str = Field(..., description="AI generated executive summary combining forensics and grounding")
-    final_recommendation: str = Field(..., description="Actionable guidance sentence from AI Agent")
+    agent_summary: Union[str, Dict[str, str]] = Field(..., description="AI generated executive summary")
+    final_recommendation: Union[str, Dict[str, str]] = Field(..., description="Actionable guidance sentence from AI Agent")
     active_lessons_applied: List[str] = Field(default_factory=list, description="Historical lessons used in reasoning")
 
     # 2. Grounding Search result
@@ -61,4 +59,14 @@ class AnalysisRecord(FinalReport):
     grounding_result: Dict[str, Any] = Field(default_factory=dict, description="Search sources and verification details")
 
     # 3. Layer Summary (Frontend Display)
-    layer_summaries: Dict[str, str] = Field(default_factory=dict, description="Plain English explanation for each layer")
+    layer_summaries: Union[Dict[str, str], Dict[str, Dict[str, str]]] = Field(default_factory=dict, description="Plain English explanation for each layer")
+
+class BatchTaskResult(BaseModel):
+    doc_id: Optional[str] = None
+    status: str  # "success" | "failed" | "critical_failure"
+    error: Optional[str] = None
+    data: Optional[AnalysisRecord] = None 
+
+class BatchAnalysisResponse(BaseModel):
+    batch_status: str
+    results: List[BatchTaskResult]

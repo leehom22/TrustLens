@@ -68,22 +68,24 @@ os.makedirs(EVIDENCE_DIR, exist_ok=True)   # create a new directory
 # - allow_screenshot: Allow the PDF file looks like screenshot
 # - hard_fail_checks: One fails, considered fails, final score follows it
 
-# Common Standard Categories 
+# ------------- Common Standard Categories --------------
 _STRICT_FINANCIAL_RULES = {
     "description": "Official financial record (Bank/HR). Must be system-generated.",
     "allow_creative_software": False,
     "allow_screenshot": False,
-    "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.05, "L4": 0.65},
+    "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.2, "L4": 0.5},
     "hard_fail_checks": [
         "HIGH_METADATA_SOFTWARE_RISK",
         "FORMAT_VIOLATION_SCREENSHOT",
+        "SCAM_PATTERN_DETECTED",
         "TIME_PARADOX_LOGIC",
         "ID_DATE_TIME_PARADOX",
         "DATE_FROM_FUTURE",
         "CHRONOLOGY_INCONSISTENCY",
         "MATH_ROW_MISMATCH",
         "MATH_TAX_LOGIC_FAIL",
-        "BALANCE_RECONCILIATION_FAIL"
+        "BALANCE_RECONCILIATION_FAIL",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
@@ -91,36 +93,67 @@ _TRANSACTIONAL_RULES = {
     "description": "Commercial transaction proof.",
     "allow_creative_software": False, # Commercial docs should be standard
     "allow_screenshot": True,
-    "weights": {"L1": 0.1, "L2": 0.15, "L3": 0.05, "L4": 0.7},
+    "weights": {"L1": 0.1, "L2": 0.15, "L3": 0.2, "L4": 0.55},
     "hard_fail_checks": [
         "HIGH_METADATA_SOFTWARE_RISK",
+        "SCAM_PATTERN_DETECTED",
         "MATH_ROW_MISMATCH", 
-        "MATH_TAX_LOGIC_FAIL", 
+        "MATH_TAX_LOGIC_FAIL",
         "BALANCE_RECONCILIATION_FAIL",
         "TIME_PARADOX_LOGIC",
+        "MYKAD_INVALID_DOB"
     ]
 }
 
-# Full Profiles and Weightages Standard for Different Doc Types
+_LEGAL_CONTRACT_RULES = {
+    "description": "Legal agreement (Freelance/Employment/General).",
+    "allow_creative_software": False,
+    "allow_screenshot": False,
+    "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.3, "L4": 0.4},
+    "hard_fail_checks": [
+        "HIGH_METADATA_SOFTWARE_RISK",
+        "SCAM_PATTERN_DETECTED",
+        "TIME_PARADOX_LOGIC",
+        "MYKAD_INVALID_DOB"
+    ]
+}
+
+_STRICT_OFFICIAL_RULES = {
+    "description": "Official government or legal document (e.g., Summon, Compound).",
+    "allow_creative_software": False,
+    "allow_screenshot": True,
+    "weights": {"L1": 0.1, "L2": 0.2, "L3": 0.4, "L4": 0.3}, 
+    "hard_fail_checks": [
+        "HIGH_METADATA_SOFTWARE_RISK",
+        "ID_DATE_TIME_PARADOX",
+        "MYKAD_INVALID_DOB"
+    ]
+}
+
+
+# ---------- Full Profiles and Weightages Standard for Different Doc Types ---------
+
 DOC_RISK_PROFILES = {
     # --- Group 1: Personal & Creative ---
     "resume": {
         "description": "Personal branding. Visual editing expected.",
         "allow_creative_software": True,
         "allow_screenshot": False,
-        "weights": {"L1": 0.05, "L2": 0.85, "L3": 0.1, "L4": 0.0},
+        "weights": {"L1": 0.05, "L2": 0.55, "L3": 0.4, "L4": 0.0},
         "hard_fail_checks": [
             "STRUCTURE_HIDDEN_DATA",
-            "ATS_HACKING_DETECTED"
+            "ATS_HACKING_DETECTED",
+            "MYKAD_INVALID_DOB"
         ]
     },
     "certificate": {
         "description": "Official award/verification.",
         "allow_creative_software": True,
         "allow_screenshot": True,
-        "weights": {"L1": 0.1, "L2": 0.8, "L3": 0.1, "L4": 0.0},
+        "weights": {"L1": 0.1, "L2": 0.65, "L3": 0.25, "L4": 0.0},
         "hard_fail_checks": [
-            "VISUAL_TAMPERING_DETECTED"
+            "VISUAL_TAMPERING_DETECTED",
+            "MYKAD_INVALID_DOB",
         ]
     },
 
@@ -134,29 +167,13 @@ DOC_RISK_PROFILES = {
     "payment_receipt": _TRANSACTIONAL_RULES,
 
     # --- Group 4: Legal / Contracts ---
-    "contract": {
-        "description": "Legal agreement (Freelance/Employment).",
-        "allow_creative_software": False, # Contracts should be Word/PDF
-        "allow_screenshot": False,
-        "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
-        "hard_fail_checks": [
-            "HIGH_METADATA_SOFTWARE_RISK",
-            "TIME_PARADOX_LOGIC"
-        ]
-    },
-    # Alias for fuzzy matching
-    "freelance_contract": {
-        "description": "Freelance Service Agreement.",
-        "allow_creative_software": False,
-        "allow_screenshot": False,
-        "weights": {"L1": 0.2, "L2": 0.3, "L3": 0.1, "L4": 0.4},
-        "hard_fail_checks": [
-            "HIGH_METADATA_SOFTWARE_RISK",
-            "TIME_PARADOX_LOGIC"
-        ]
-    },
+    "contract": _LEGAL_CONTRACT_RULES,
+    "legal_document": _LEGAL_CONTRACT_RULES,
 
-    # Default (Average Weightage)
+    # --- Group 5: Summons ---
+    "summon": _STRICT_OFFICIAL_RULES,
+
+    # --- Default (Average Weightage) ---
     "unknown": {
         "description": "Unclassified document.",
         "allow_creative_software": False,
@@ -165,6 +182,7 @@ DOC_RISK_PROFILES = {
         "hard_fail_checks": []
     }
 }
+
 
 
 # ================= Logger for testing details ====================
@@ -190,4 +208,4 @@ logger = logging.getLogger("TrustLens-Backend-Logger")
 handler = logging.StreamHandler(sys.stdout)   # Send the logs to the terminal
 handler.setFormatter(JsonFormatter())   # Set logger output formatter
 logger.addHandler(handler)
-logger.setLevel(logging.INFO)   # Show only from layer INF ignored DEBUG (DEBUG - INFO - WARNING - ERROR - CRITICAL)
+logger.setLevel(logging.INFO)   # Show only from layer INFO ignored DEBUG (DEBUG - INFO - WARNING - ERROR - CRITICAL)

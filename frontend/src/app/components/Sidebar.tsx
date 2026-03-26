@@ -8,6 +8,7 @@ import { Sun, Moon } from "lucide-react";
 import logo from '../images/logo.jpg'
 import userLogo from '../images/user.png'
 import { NavLink, useNavigate } from "react-router-dom";
+import { LanguageToggleButton } from "./LanguageToggleButton";
 
 interface SidebarProps {
   user: User | null
@@ -55,8 +56,8 @@ const Sidebar = ({ user }: SidebarProps) => {
   const handleSignOut = async () => {
     try {
       closeMobile();
-      navigate("/login");
       await auth.signOut();
+      navigate("/analyze");
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -110,6 +111,12 @@ const Sidebar = ({ user }: SidebarProps) => {
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
+        </div>
+
+        {/* Language toggle — persists globally via LanguageProvider */}
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-lg font-medium text-gray-500">Language</span>
+          <LanguageToggleButton variant="ghost" />
         </div>
         <div className="flex items-center gap-2">
           <img

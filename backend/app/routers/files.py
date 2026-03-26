@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, HTTPException,Form, UploadFile, File
+from fastapi import APIRouter, status, HTTPException, Form, UploadFile, File
 from app.models.files import FilesSchema
 from app.models.files import FlagDocumentRequest, SpamDocumentRequest
 from app.utils.scam_alert import sha256_hex,perceptual_hash, utcnow
@@ -7,91 +7,46 @@ from app.core.firebase import db
 from google.cloud import firestore
 from google.cloud.firestore import FieldFilter
 from datetime import datetime
+from typing import List
 import base64
 
 files_router = APIRouter()
 
 
-# user upload files
+# user upload files (allow multiple files)
 @files_router.post("/upload_files",status_code=status.HTTP_201_CREATED)
-async def upload_files(
-    user_id: str = Form(...),
-    fileName: str = Form(...),
-    fileUrl: str = Form(...),
-    fileSize: int = Form(...),
-    mimeType: str = Form(...),
-    flagged: bool = Form(False),
-    encryptedKey: str = Form(...),
-    iv: str = Form(...),
-    file: UploadFile = File(...)
-):
+def upload_files(files_data: List[FilesSchema]):
+
+    if not files_data:
+        raise HTTPException(status_code=400, detail="No file data provided.")
+    if len(files_data) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 files allowed per request.")
+    
     try: 
-        if not fileName:
-            raise HTTPException(400,"No file provided")
+        batch = db.batch()
+        collection_ref = db.collection("upload_files")
+        doc_ids = []
         
-        # create sha details of the document 
-        raw = await file.read()
-        file_sha256 = sha256_hex(raw)
-        phash       = perceptual_hash(raw)
+        server_time = firestore.SERVER_TIMESTAMP
         
-        # ── Deduplication check ───────────────────────────────────────────────────
-        existing = find_duplicate(file_sha256, phash)
-        if existing:
-            master_docId = existing["id"]
-            print("Same document has been uploaded before. The document will not be saved in the 'documents collection")
-        else:
-            # Save documents into /documents collection 
-            doc_data = {
-                "filename":         fileName,
-                "ai_analysis_id": '', # update in analysis.py
-                "file_hash":        file_sha256,
-                "perceptual_hash":  phash,
-                "fileUrl":   fileUrl,
-        
-                "document_type":    mimeType,
-                "threat_category":  "Unknown",
-                "ai_confidence":    0, # update in analysis.py
-                "scam_indicators":  [],
-                "redacted_preview": "",
-                "gemini_reasoning": "", # update in analysis.py
-        
-                "track":            None,
-                "status":           "PENDING",
-                "report_count":     0,
-                "avg_report_score": 0.0,
-                "states_reported":  [],
-                "is_national":      False,
-        
-                "first_flagged":    utcnow(),
-                "last_seen":        utcnow(),
-                "published_at":     None,
-                "created_at":       utcnow(),
+        for file_item in files_data:
+            doc_ref = collection_ref.document()
+            data_to_save = file_item.model_dump()
+            payload = {
+                **data_to_save,
+                "created_at": server_time,
+                "updatedAt": '',
+                "analysis_status": "PENDING" 
             }
-            master_docId = create_doc(doc_data)
-        
-        file_data = {
-            "user_id" : user_id,
-            "master_doc_id":master_docId,
-            "fileName": fileName,
-            "fileUrl" : fileUrl,
-            "fileSize": fileSize,
-            "mimeType": mimeType,
-            "flagged": flagged,
-            "encryptedKey":encryptedKey,
-            "iv":iv,
-        }
-        
-        update_time, doc_ref = db.collection("upload_files").add({
-            **file_data,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "updatedAt": ''
-        })
+            batch.set(doc_ref, payload)
+            doc_ids.append(doc_ref.id)
+
+        batch.commit()
             
         return {
             "message": "File successfully uploaded",
-            "id": doc_ref.id,
-            "masterDocId":master_docId,
-            "timestamp": str(update_time)
+            "id": doc_ids,
+            "timestamp": str(server_time)
         }
     
     except Exception as e:
