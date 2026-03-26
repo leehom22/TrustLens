@@ -9,6 +9,7 @@ import logo from '../images/logo.jpg'
 import userLogo from '../images/user.png'
 import { NavLink, useNavigate } from "react-router-dom";
 import { LanguageToggleButton } from "./LanguageToggleButton";
+import { useLanguage } from "./LanguageProvider";
 
 interface SidebarProps {
   user: User | null
@@ -17,6 +18,7 @@ const Sidebar = ({ user }: SidebarProps) => {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
+  const { language } = useLanguage();
 
   // Controls whether the mobile drawer is open
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -39,12 +41,33 @@ const Sidebar = ({ user }: SidebarProps) => {
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
+  const t = {
+    en: {
+      dashboard: "Dashboard",
+      upload: "Upload",
+      history: "History",
+      review: "Review Tasks",
+      theme: "Theme",
+      language: "Language",
+      signOut: "Sign Out"
+    },
+    ms: {
+      dashboard: "Papan Pemuka",
+      upload: "Muat Naik",
+      history: "Sejarah",
+      review: "Tugasan Semakan",
+      theme: "Tema",
+      language: "Bahasa",
+      signOut: "Log Keluar"
+    }
+  }[language];
+
   const navItems = [
-    { name: "Dashboard", path: "/dashboard", icon: <LayoutDashboard />, requiredRole: "user" },
-    { name: "Dashboard", path: "/admin-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
-    { name: "Upload", path: "/upload-document", icon: <FileScan />, requiredRole: "user" },
-    { name: "History", path: "/history", icon: <FileClock />, requiredRole: "user" },
-    { name: "Review", path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
+    { name: t.dashboard, path: "/dashboard", icon: <LayoutDashboard />, requiredRole: "user" },
+    { name: t.dashboard, path: "/admin-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
+    { name: t.upload, path: "/upload-document", icon: <FileScan />, requiredRole: "user" },
+    { name: t.history, path: "/history", icon: <FileClock />, requiredRole: "user" },
+    { name: t.review, path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
   ];
 
   const filteredItems = navItems.filter(
@@ -99,7 +122,7 @@ const Sidebar = ({ user }: SidebarProps) => {
       {/* Bottom section */}
       <div className="p-4 mb-1 border-t border-gray-100 dark:border-slate-800 space-y-4">
         <div className="flex items-center justify-between px-2 py-2">
-          <span className="text-lg font-medium text-gray-500">Theme</span>
+          <span className="text-lg font-medium text-gray-500">{t.theme}</span>
           <Button
             variant="ghost"
             size="icon"
@@ -111,11 +134,14 @@ const Sidebar = ({ user }: SidebarProps) => {
           </Button>
         </div>
 
-        {/* Language toggle — persists globally via LanguageProvider */}
-        <div className="flex items-center justify-between px-2 py-2">
-          <span className="text-lg font-medium text-gray-500">Language</span>
-          <LanguageToggleButton variant="ghost" />
-        </div>
+        {/* Language toggle — hides if role is expert */}
+        {role !== "expert" && (
+          <div className="flex items-center justify-between px-2 py-2">
+            <span className="text-lg font-medium text-gray-500">{t.language}</span>
+            <LanguageToggleButton variant="ghost" />
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <img
             src={user!.photoURL || userLogo}
@@ -137,7 +163,7 @@ const Sidebar = ({ user }: SidebarProps) => {
           onClick={handleSignOut}
         >
           <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
+          {t.signOut}
         </Button>
       </div>
     </>
@@ -187,4 +213,4 @@ const Sidebar = ({ user }: SidebarProps) => {
   );
 };
 
-export default Sidebar
+export default Sidebar;

@@ -10,9 +10,64 @@ import google from '../images/google.png'
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { LanguageToggleButton } from '../components/LanguageToggleButton';
+import { useLanguage } from '../components/LanguageProvider';
+
+// ─── All visible text in EN and BM ───────────────────────────────────────────
+const T = {
+  en: {
+    tagline: "Authenticate to access advanced document analysis",
+    roleUser: "👤 User",
+    roleExpert: "🧑‍💼 Expert",
+    googleHint: "Users must authenticate using Google.",
+    continueGoogle: "Continue with Google",
+    expertEmail: "Expert Email",
+    expertEmailPlaceholder: "Enter expert email",
+    password: "Password",
+    passwordPlaceholder: "Enter password",
+    signInExpert: "Sign In as Expert",
+    expertNote: "Expert accounts require prior approval.",
+    email: "Email",
+    emailPlaceholder: "Enter email",
+    username: "Username",
+    usernamePlaceholder: "Enter username",
+    iAmA: "I'm a",
+    optionUser: "User",
+    optionExpert: "Expert",
+    haveAccount: "Have an account?",
+    signIn: "Sign In",
+    registering: "Registering...",
+    register: "Register",
+  },
+  ms: {
+    tagline: "Log masuk untuk mengakses analisis dokumen lanjutan",
+    roleUser: "👤 Pengguna",
+    roleExpert: "🧑‍💼 Pakar",
+    googleHint: "Pengguna mesti mengesahkan identiti menggunakan Google.",
+    continueGoogle: "Teruskan dengan Google",
+    expertEmail: "E-mel Pakar",
+    expertEmailPlaceholder: "Masukkan e-mel pakar",
+    password: "Kata Laluan",
+    passwordPlaceholder: "Masukkan kata laluan",
+    signInExpert: "Log Masuk sebagai Pakar",
+    expertNote: "Akaun pakar memerlukan kelulusan terlebih dahulu.",
+    email: "E-mel",
+    emailPlaceholder: "Masukkan e-mel",
+    username: "Nama Pengguna",
+    usernamePlaceholder: "Masukkan nama pengguna",
+    iAmA: "Saya ialah",
+    optionUser: "Pengguna",
+    optionExpert: "Pakar",
+    haveAccount: "Sudah ada akaun?",
+    signIn: "Log Masuk",
+    registering: "Mendaftar...",
+    register: "Daftar",
+  },
+} as const;
 
 const LoginPage = () => {
     const [user, setUser] = useState<User | null>(null);
+    const { language } = useLanguage();
+    const t = T[language];
     const [loading, setLoading] = useState(true);
     const [registerLoading, setRegisterLoading] = useState(false)
     const [error, setError] = useState<string | null>(null);
@@ -188,7 +243,7 @@ const LoginPage = () => {
                         TrustLens
                     </h1>
                     <p className="text-gray-600 dark:text-slate-300">
-                        Authenticate to access advanced document analysis
+                        {t.tagline}
                     </p>
                 </div>
 
@@ -205,7 +260,7 @@ const LoginPage = () => {
                                         : "text-gray-600 dark:text-slate-300"
                                     }`}
                             >
-                                👤 User
+                                {t.roleUser}
                             </button>
 
                             <button
@@ -216,7 +271,7 @@ const LoginPage = () => {
                                         : "text-gray-600 dark:text-slate-300"
                                     }`}
                             >
-                                🧑‍💼 Expert
+                                {t.roleExpert}
                             </button>
                         </div>
 
@@ -225,7 +280,7 @@ const LoginPage = () => {
                             <div className="space-y-4 text-center">
 
                                 <p className="text-sm text-gray-600 dark:text-slate-400">
-                                    Users must authenticate using Google.
+                                    {t.googleHint}
                                 </p>
 
                                 <Button
@@ -234,7 +289,7 @@ const LoginPage = () => {
                                     size="lg"
                                 >
                                     <img src={google} alt="google" className="w-5 h-5 mr-2" />
-                                    Continue with Google
+                                    {t.continueGoogle}
                                 </Button>
                             </div>
                         )}
@@ -245,26 +300,26 @@ const LoginPage = () => {
 
                                 <div className="flex flex-col space-y-1">
                                     <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                                        Expert Email
+                                        {t.expertEmail}
                                     </label>
                                     <input
                                         type="email"
                                         name="email"
-                                        placeholder="Enter expert email"
+                                        placeholder={t.expertEmailPlaceholder}
                                         className="px-3 py-2 border rounded-md bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     />
                                 </div>
 
                                 <div className="flex flex-col space-y-1">
                                     <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                                        Password
+                                        {t.password}
                                     </label>
 
                                     <div className="relative">
                                         <input
                                             type={showPassword ? "text" : "password"}
                                             name="password"
-                                            placeholder="Enter password"
+                                            placeholder={t.passwordPlaceholder}
                                             className="w-full px-3 py-2 pr-10 border rounded-md bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                         />
 
@@ -282,11 +337,11 @@ const LoginPage = () => {
                                     type="submit"
                                     className="w-full py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
                                 >
-                                    Sign In as Expert
+                                    {t.signInExpert}
                                 </button>
 
                                 <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
-                                    Expert accounts require prior approval.
+                                    {t.expertNote}
                                 </p>
 
                             </form>
@@ -297,50 +352,50 @@ const LoginPage = () => {
                     <div className="space-y-4">
                         <form className="w-full space-y-4" onSubmit={(e) => handleUserRegister(e)}>
                             <div className="flex flex-col space-y-1">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">Email</label>
+                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">{t.email}</label>
                                 <input
                                     type="email"
-                                    placeholder="Enter email"
+                                    placeholder={t.emailPlaceholder}
                                     name="email"
                                     className="px-3 py-2 text-md border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600"
                                 />
                             </div>
 
                             <div className="flex flex-col space-y-1">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">Username</label>
+                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">{t.username}</label>
                                 <input
                                     type="text"
-                                    placeholder="Enter username"
+                                    placeholder={t.usernamePlaceholder}
                                     name="username"
                                     className="px-3 py-2 text-md border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600"
                                 />
                             </div>
 
                             <div className="flex flex-col space-y-2">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">I'm a</label>
+                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">{t.iAmA}</label>
                                 <select
                                     name="role"
                                     className="px-3 py-2 text-md border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600"
                                 >
-                                    <option value="user">User</option>
-                                    <option value="expert">Expert</option>
+                                    <option value="user">{t.optionUser}</option>
+                                    <option value="expert">{t.optionExpert}</option>
                                 </select>
                             </div>
 
                             <div className="flex flex-col space-y-1">
-                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">Password</label>
+                                <label className="text-md font-semibold text-gray-700 dark:text-slate-200">{t.password}</label>
                                 <input
                                     type={showPassword ? "text" : "password"}
-                                    placeholder="Enter password"
+                                    placeholder={t.passwordPlaceholder}
                                     name="password"
                                     className="px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:border-blue-600"
                                 />
                             </div>
 
                             <div className="flex w-full justify-center items-center gap-2 pt-2">
-                                <p className="text-gray-600 dark:text-slate-400">Have an account?</p>
+                                <p className="text-gray-600 dark:text-slate-400">{t.haveAccount}</p>
                                 <button type="button" className="text-blue-600 dark:text-blue-400 underline" onClick={() => setShowRegister(false)}>
-                                    Sign In
+                                    {t.signIn}
                                 </button>
                             </div>
 
@@ -352,7 +407,7 @@ const LoginPage = () => {
                                     : 'text-sky-500 border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/30'
                                     }`}
                             >
-                                {registerLoading ? "Registering..." : "Register"}
+                                {registerLoading ? t.registering : t.register}
                             </button>
                         </form>
                     </div>
