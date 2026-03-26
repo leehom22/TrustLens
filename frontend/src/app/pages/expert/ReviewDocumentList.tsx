@@ -9,15 +9,15 @@ import {
   ChevronRight,
   Loader2,
   RotateCcw,
-  Trash,
   Check,
   CheckCheck
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { formatDateTime, getRiskColor, statusStyles } from '@/lib/utils';
+import { formatDateTime, statusStyles } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { FileHeader, RiskLevel, RiskLevelColor } from '@/app/types/db-ai-analysis-type';
+import { useLanguage } from '@/app/components/LanguageProvider';
 
 interface Files {
   id: string,
@@ -56,6 +56,75 @@ const ReviewDocumentList = () => {
   const backendUrl = import.meta.env.VITE_BACKEND_URL
 
   const [deleteDocLoading, setDeleteDocLoading] = useState<boolean>(false)
+
+  // --- LANGUAGE CONTEXT ---
+  const { language } = useLanguage();
+  const t = {
+    en: {
+      deleting: "Deleting Document...",
+      title: "Flagged Documents",
+      subtitle: "Flagged for Manual Review",
+      searchPlaceholder: "Search by filename...",
+      filterByRisk: "Filter by Risk:",
+      allLevels: "All Levels",
+      resetFilters: "Reset Filters",
+      colDocName: "Document Name",
+      colDate: "Date Analyzed",
+      colRiskLevel: "Risk Level",
+      colRiskScore: "Risk Score",
+      colFileSize: "File Size",
+      colActions: "Actions",
+      btnView: "View",
+      btnViewReport: "View Report",
+      statusReviewed: "Reviewed",
+      statusPending: "Pending",
+      statusNeeded: "Needed",
+      tooltipReviewed: "Already reviewed",
+      tooltipPending: "Waiting for review",
+      noDocs: "No documents found matching your filters.",
+      page: "Page",
+      of: "of",
+      riskScoreLabel: "risk score"
+    },
+    ms: {
+      deleting: "Memadam Dokumen...",
+      title: "Dokumen Ditanda",
+      subtitle: "Ditanda untuk Semakan Manual",
+      searchPlaceholder: "Cari mengikut nama fail...",
+      filterByRisk: "Tapis ikut Risiko:",
+      allLevels: "Semua Tahap",
+      resetFilters: "Tetapkan Semula",
+      colDocName: "Nama Dokumen",
+      colDate: "Tarikh Dianalisis",
+      colRiskLevel: "Tahap Risiko",
+      colRiskScore: "Skor Risiko",
+      colFileSize: "Saiz Fail",
+      colActions: "Tindakan",
+      btnView: "Lihat",
+      btnViewReport: "Lihat Laporan",
+      statusReviewed: "Telah Disemak",
+      statusPending: "Menunggu",
+      statusNeeded: "Diperlukan",
+      tooltipReviewed: "Telah disemak",
+      tooltipPending: "Menunggu semakan",
+      noDocs: "Tiada dokumen yang sepadan ditemui.",
+      page: "Muka Surat",
+      of: "daripada",
+      riskScoreLabel: "skor risiko"
+    }
+  }[language];
+
+  const translateRisk = (risk: string) => {
+    if (!risk) return language === 'ms' ? 'Rendah' : 'Low';
+    switch (risk.toUpperCase()) {
+      case 'CRITICAL': return language === 'ms' ? 'Kritikal' : 'Critical';
+      case 'SUSPICIOUS': return language === 'ms' ? 'Mencurigakan' : 'Suspicious';
+      case 'CAUTION': return language === 'ms' ? 'Awas' : 'Caution';
+      case 'SAFE': return language === 'ms' ? 'Selamat' : 'Safe';
+      default: return risk;
+    }
+  };
+
   // Add toggle sort function
   const toggleSort = (key: string) => {
     setSortConfig(prev => ({
@@ -119,8 +188,8 @@ const ReviewDocumentList = () => {
     try {
       const res = await axios.get(`${backendUrl}/files/flagged_document`);
       // console.log("Data from flagged files: ", res.data.files)
-      if (res.data.success){
-         setFlaggedFile(res.data.files)
+      if (res.data.success) {
+        setFlaggedFile(res.data.files)
       }
 
     } catch (error) {
@@ -130,6 +199,7 @@ const ReviewDocumentList = () => {
       setLoading(false)
     }
   }
+
   useEffect(() => {
     fetchingFiles()
   }, [])
@@ -151,7 +221,7 @@ const ReviewDocumentList = () => {
           <div className="p-6 flex flex-col items-center">
             <Loader2 className="animate-spin text-blue-600 dark:text-blue-400" size={48} />
             <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Deleting Document...
+              {t.deleting}
             </p>
           </div>
         </div>
@@ -162,8 +232,8 @@ const ReviewDocumentList = () => {
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
               <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Flagged Documents</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Flagged for Manual Review</p>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t.title}</h1>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t.subtitle}</p>
               </div>
             </div>
 
@@ -173,7 +243,7 @@ const ReviewDocumentList = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search by filename..."
+                  placeholder={t.searchPlaceholder}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
@@ -181,13 +251,13 @@ const ReviewDocumentList = () => {
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Filter size={16} className="text-slate-400 flex-shrink-0" />
-                <span className="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter by Risk:</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">{t.filterByRisk}</span>
                 <select
                   value={riskFilter}
-                  onChange={(e) => setRiskFilter(e.target.value)}
+                  onChange={(e) => setRiskFilter(e.target.value as RiskLevelFilter)}
                   className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="All">All Levels</option>
+                  <option value="All">{t.allLevels}</option>
                   <option value="CRITICAL">CRITICAL</option>
                   <option value="SUSPICIOUS">SUSPICIOUS</option>
                   <option value="CAUTION">CAUTION</option>
@@ -203,15 +273,15 @@ const ReviewDocumentList = () => {
               <div className="p-4 md:p-6 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">Flagged Documents</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Flagged for Manual Review.</p>
+                    <h2 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">{t.title}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t.subtitle}.</p>
                   </div>
                   <button
                     onClick={handleReset}
                     className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                   >
                     <RotateCcw size={16} />
-                    Reset Filters
+                    {t.resetFilters}
                   </button>
                 </div>
               </div>
@@ -222,11 +292,11 @@ const ReviewDocumentList = () => {
                   <thead className="bg-slate-50 dark:bg-slate-800/50">
                     <tr className="border-b border-slate-200 dark:border-slate-800">
                       {[
-                        { label: 'Document Name', key: 'fileName' },
-                        { label: 'Date Analyzed', key: 'created_at' },
-                        { label: 'Risk Level', key: 'risk_level' },
-                        { label: 'Risk Score', key: 'overall_score' },
-                        { label: 'File Size', key: 'fileSize' },
+                        { label: t.colDocName, key: 'fileName' },
+                        { label: t.colDate, key: 'created_at' },
+                        { label: t.colRiskLevel, key: 'risk_level' },
+                        { label: t.colRiskScore, key: 'overall_score' },
+                        { label: t.colFileSize, key: 'fileSize' },
                       ].map(({ label, key }) => (
                         <th
                           key={key}
@@ -242,7 +312,7 @@ const ReviewDocumentList = () => {
                         </th>
                       ))}
                       <th className="p-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">
-                        Actions
+                        {t.colActions}
                       </th>
                     </tr>
                   </thead>
@@ -279,7 +349,7 @@ const ReviewDocumentList = () => {
                           </td>
                           <td className="p-4">
                             <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}`}>
-                              {doc.risk_level || "Low"}
+                              {translateRisk(doc.risk_level)}
                             </span>
                           </td>
                           <td className="p-4">
@@ -307,9 +377,9 @@ const ReviewDocumentList = () => {
                                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
                               >
                                 <Eye size={14} />
-                                View
+                                {t.btnView}
                               </button>
-                              <div className="tooltip" data-tip={doc.expertReview === true ? "Already reviewed" : "Waiting for review"}>
+                              <div className="tooltip" data-tip={doc.expertReview === true ? t.tooltipReviewed : t.tooltipPending}>
                                 {doc.expertReview === true
                                   ? <CheckCheck size={20} color="green" />
                                   : <Check size={20} className="text-slate-400" />
@@ -324,7 +394,7 @@ const ReviewDocumentList = () => {
                         <td colSpan={6} className="p-12">
                           <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
                             <Search size={32} strokeWidth={1.5} />
-                            <p className="text-sm font-medium">No documents found matching your filters.</p>
+                            <p className="text-sm font-medium">{t.noDocs}</p>
                           </div>
                         </td>
                       </tr>
@@ -358,7 +428,7 @@ const ReviewDocumentList = () => {
                           </span>
                         </div>
                         <span className={`flex-shrink-0 px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusStyles[doc.risk_level_color || 'gray']}`}>
-                          {doc.risk_level || "Low"}
+                          {translateRisk(doc.risk_level)}
                         </span>
                       </div>
 
@@ -384,7 +454,7 @@ const ReviewDocumentList = () => {
                             style={{ width: `${doc.overall_score || 0}%` }}
                           />
                         </div>
-                        <span className="text-xs text-slate-400">risk score</span>
+                        <span className="text-xs text-slate-400">{t.riskScoreLabel}</span>
                       </div>
 
                       {/* Actions */}
@@ -394,16 +464,16 @@ const ReviewDocumentList = () => {
                           className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all"
                         >
                           <Eye size={14} />
-                          View Report
+                          {t.btnViewReport}
                         </button>
                         <div
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium border-slate-200 dark:border-slate-700"
-                          title={doc.expertReview === true ? "Already reviewed" : "Waiting for review"}
+                          title={doc.expertReview === true ? t.tooltipReviewed : t.tooltipPending}
                         >
                           {doc.expertReview === true ? (
-                            <><CheckCheck size={15} color="green" /><span className="text-green-600">Reviewed</span></>
+                            <><CheckCheck size={15} color="green" /><span className="text-green-600">{t.statusReviewed}</span></>
                           ) : (
-                            <><Check size={15} className="text-slate-400" /><span className="text-slate-500">Pending</span></>
+                            <><Check size={15} className="text-slate-400" /><span className="text-slate-500">{t.statusPending}</span></>
                           )}
                         </div>
                       </div>
@@ -412,7 +482,7 @@ const ReviewDocumentList = () => {
                 ) : (
                   <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
                     <Search size={32} strokeWidth={1.5} />
-                    <p className="text-sm font-medium">No documents found matching your filters.</p>
+                    <p className="text-sm font-medium">{t.noDocs}</p>
                   </div>
                 )}
               </div>
@@ -420,7 +490,7 @@ const ReviewDocumentList = () => {
               {/* Pagination Footer */}
               <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-800 gap-3">
                 <span className="text-sm text-slate-500 dark:text-slate-400">
-                  Page {currentPage} of {totalPages}
+                  {t.page} {currentPage} {t.of} {totalPages}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
