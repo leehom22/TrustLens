@@ -417,7 +417,7 @@ def get_alerts(
 # Comments — Community Reports on Alerts
 # ──────────────────────────────────────────────────────────────────────────────
  
-@scam_alert_router.post("/alerts/{document_id}/comments", response_model=CommentResponse,
+@scam_alert_router.post("/{document_id}/comments", response_model=CommentResponse,
           summary="Public — Add community comment to a published alert")
 def add_comment(document_id: str, payload: CommentRequest):
     doc = get_doc(document_id)
@@ -428,7 +428,8 @@ def add_comment(document_id: str, payload: CommentRequest):
     now  = utcnow()
     data = {
         "document_id": document_id,
-        "user_name":   payload.user_name,
+        "user_id":   payload.user_id,
+        "user_name": payload.user_name,
         "text":        payload.text,
         "created_at":  now,
         "helpful":     0,
@@ -438,14 +439,15 @@ def add_comment(document_id: str, payload: CommentRequest):
     return CommentResponse(
         comment_id  = cid,
         document_id = document_id,
-        user_name   = payload.user_name,
+        user_id   = payload.user_id,
+        user_name= payload.user_name,
         text        = payload.text,
         created_at  = fmt_date(now),
         helpful     = 0,
     )
  
  
-@scam_alert_router.get("/alerts/{document_id}/comments", response_model=list[CommentResponse],
+@scam_alert_router.get("/{document_id}/comments", response_model=list[CommentResponse],
          summary="Public — Get all comments for an alert")
 def get_comments(document_id: str):
     """Firestore path: /comments where document_id == {document_id}"""
@@ -457,7 +459,8 @@ def get_comments(document_id: str):
         results.append(CommentResponse(
             comment_id  = snap.id,
             document_id = document_id,
-            user_name   = d.get("user_name", "Anonymous"),
+            user_id   = d.get("user_id", 0),
+            user_name=d.get("user_name","Anonymous"),
             text        = d.get("text", ""),
             created_at  = fmt_date(d.get("created_at")),
             helpful     = int(d.get("helpful", 0)),
@@ -479,7 +482,7 @@ def mark_helpful(comment_id: str):
 # Dispute
 # ──────────────────────────────────────────────────────────────────────────────
  
-@scam_alert_router.post("/alerts/{document_id}/dispute",
+@scam_alert_router.post("/{document_id}/dispute",
           summary="Public — Dispute a published alert (PDPA compliance)")
 async def dispute_alert(
     document_id:   str,

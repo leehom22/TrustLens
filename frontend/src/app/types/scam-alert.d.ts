@@ -26,4 +26,5 @@ interface ScamAlert {
   scamIndicators: string[];
   comments: Comment[];
   verified: boolean;
+  riskLevel:RiskLevel
 }

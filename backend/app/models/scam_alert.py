@@ -96,6 +96,7 @@ class PublishedAlert(BaseModel):
     firstFlagged:    str
     lastSeen:        str
     published_at:     Optional[str]
+    riskLevel:str
  
  
 class AdminDecision(BaseModel):
@@ -108,6 +109,7 @@ class AdminDecision(BaseModel):
 class CommentRequest(BaseModel):
     document_id: str
     user_name:   str
+    user_id: str
     text:        str
  
  
