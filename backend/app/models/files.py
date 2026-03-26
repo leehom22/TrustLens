@@ -1,23 +1,57 @@
 from pydantic import BaseModel
 from app.core.firebase import db
 from firebase_admin import auth, storage
+from fastapi import UploadFile, File, Form
+from google.cloud.firestore_v1.base_query import FieldFilter
+import logging
 
 file_collection = "upload_files"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 class FilesSchema(BaseModel):
-    user_id: str
-    fileName: str
-    fileUrl: str
-    fileSize: int
-    mimeType: str
-    flagged: bool
-    encryptedKey: str
-    iv: str
+    user_id: str = Form(...)
+    fileName: str = Form(...)
+    fileUrl: str = Form(...)
+    fileSize: int = Form(...)
+    mimeType: str = Form(...)
+    flagged: bool = Form(False)
+    encryptedKey: str = Form(...)
+    iv: str = Form(...)
+    file: UploadFile = File(...)
+    
+
     
     # get user uploaded files
     @staticmethod
-    def get_files(user_id:str):
-        docs = db.collection(file_collection).where("user_id", "==", user_id).stream()
-        return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+    def get_files(user_id: str):
+
+        try:
+            # logger.info(f"🔍 Fetching files for user_id: {user_id}")
+            
+            # 1. Capture the stream into a list immediately
+            query_ref = db.collection(file_collection).where(
+                filter=FieldFilter("user_id", "==", user_id)
+            )
+            docs = list(query_ref.stream())
+
+            # logger.info(f"✅ Found {len(docs)} documents in Firestore.")
+
+            # 2. Debug individual document structure
+            results = []
+            for doc in docs:
+                data = doc.to_dict()
+                # Check if critical TrustLens fields exist
+                # if "master_doc_id" not in data:
+                #     logger.warning(f"⚠️ Doc {doc.id} is missing 'master_doc_id'!")
+                
+                results.append({**data, "id": doc.id})
+
+            return results
+
+        except Exception as e:
+            logger.error(f"❌ Firestore Error in get_files: {str(e)}")
+            # In FastAPI, you might want to raise an HTTPException here
+            return []
     
     # get selected files
     def get_selected_file(doc_id: str):
@@ -179,3 +213,9 @@ class FilesSchema(BaseModel):
 class FlagDocumentRequest(BaseModel):
     documentId: str
     flaggedReason: str
+
+class SpamDocumentRequest(BaseModel):
+    documentId: str 
+    coment: str 
+    state: str # MalaysiaState
+    

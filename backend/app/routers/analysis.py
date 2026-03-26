@@ -7,7 +7,6 @@ import mimetypes
 import shutil
 import requests
 import json
-import google.generativeai as genai
 import time
 from typing import List
 from datetime import datetime
@@ -33,8 +32,7 @@ from ..services.agent import run_agent_analysis
 from ..utils.schemas import FinalReport, AnalysisRecord
 from ..core.firebase import db
 from ..core.generatePdf import generate_analysis_pdf
-
-
+from app.models.scam_alert import DOCS_COL_NAME
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -83,6 +81,7 @@ async def measure_task(layer_name: str, req_id: str, awaitable_task):
 
 # ======================== Pipeline Execution =========================
 async def analyze_pipeline(
+    masterDocId: str,
     doc_id: str, 
     req_id: str,
     user_id: str, 
@@ -397,6 +396,13 @@ async def analyze_pipeline(
         # [Step 11] Session Memory
         try:
             db.collection("analysis_results").document(req_id).set(final_record.dict())
+            print("masterDocId: ",masterDocId)
+            # save the ai_analysis to the master_document_collection
+            db.collection(DOCS_COL_NAME).document(masterDocId).update({
+                "ai_analysis_id" : req_id,
+                "ai_confidence" : final_risk_score,
+                "gemini_reasoning":ai_results.get("agent_summary")
+            })
             logger.info(f"Report saved to Firestore: {req_id} (User: {user_id})")
         except Exception as e:
             logger.error(f"Firestore Save Error: {e}")
@@ -448,64 +454,78 @@ async def trigger_analysis_endpoint(doc_id: str, background_tasks: BackgroundTas
 
 
 # ========== API Routing: An endpoint as a tool for the AI Agent =================
-@analysis_router.post("/ai-analyze-document", response_model = BatchAnalysisResponse)
+@analysis_router.post("/ai-analyze-document", response_model=BatchAnalysisResponse)
 async def analyze_document(
     request: Request, 
     file: List[UploadFile] = File(...), 
     doc_id: List[str] = Form(default=[]),
-    user_id: str = Form(default="guest")
+    user_id: str = Form(default="guest"),
+    masterDocIds: List[str] = Form(default=[])
 ):
-    # For guest users, doc_id list will be empty — pad it with empty strings to match file count
-    if not doc_id:
-        doc_id = [""] * len(file)
+    # 1. Padding Logic: Ensure lists match the number of files to avoid IndexError
+    num_files = len(file)
+    
+    # If frontend doesn't send IDs (Guest mode), pad with empty strings
+    if not doc_id or len(doc_id) == 0:
+        doc_id = [""] * num_files
+    elif len(doc_id) < num_files:
+        doc_id += [""] * (num_files - len(doc_id))
 
-    # Safety checks
-    if len(file) != len(doc_id):
-        raise HTTPException(status_code=400, detail="Mismatch between files and doc_ids count.")
-    if len(file) > 3:
+    if not masterDocIds or len(masterDocIds) == 0:
+        masterDocIds = [""] * num_files
+    elif len(masterDocIds) < num_files:
+        masterDocIds += [""] * (num_files - len(masterDocIds))
+
+    # 2. Safety limit check
+    if num_files > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 files allowed per batch.")
     
-    async def process_task(single_file: UploadFile, single_doc_id: str):
-        # Queueing Mechanism: Force to limit CPU/RAM computing amount in a same time
+    async def process_task(single_file: UploadFile, single_doc_id: str, master_id: str):
         async with analysis_semaphore:
-            req_id = str(uuid.uuid4())    # generate an ID for every doc as reference
-            logger.info(f"Start Analysis", extra={"request_id": req_id, "doc_name": single_file.filename})   # initiate logger
+            req_id = str(uuid.uuid4())
+            
+            # Null Check: Filename and Content Type
+            original_name = single_file.filename or f"unknown_{req_id}"
+            verified_content_type = single_file.content_type or "application/octet-stream"
 
-            verified_content_type = single_file.content_type
-            # If the guess type different with the file type sent from the user terminal, follow guess type
-            guessed_type, _ = mimetypes.guess_type(single_file.filename)
+            logger.info(f"Processing: {original_name}", extra={"request_id": req_id})
+
+            # MIME Correction logic
+            guessed_type, _ = mimetypes.guess_type(original_name)
             if guessed_type and guessed_type != verified_content_type:
-                logger.info(f"MIME type corrected: {verified_content_type} -> {guessed_type}", 
-                            extra={"request_id": req_id})
                 verified_content_type = guessed_type
 
-            # Security check for invalid or unsafe file source
+            # Security: MIME Type check
             if verified_content_type not in ALLOWED_MIME_TYPES:
-                # Only write to DB if this is an authenticated user with a real doc_id
                 if single_doc_id:
-                    db.collection("upload_files").document(single_doc_id).set({"analysis_status": "FAILED", "error_msg": "Invalid MIME"}, merge=True)
-                return {"doc_id": single_doc_id, "status": "failed", "error": f"Invalid type. Allowed: {ALLOWED_MIME_TYPES}"}
+                    db.collection("upload_files").document(single_doc_id).set({
+                        "analysis_status": "FAILED", 
+                        "error_msg": "Invalid MIME"
+                    }, merge=True)
+                return {"doc_id": single_doc_id, "status": "failed", "error": "Invalid file type"}
             
             temp_path = None
             try:
-                ext = os.path.splitext(single_file.filename)[1]
-                temp_dir = tempfile.gettempdir()
-                temp_path = os.path.join(temp_dir, f"{single_doc_id}{ext}")
+                # Null Check: Ensure single_doc_id isn't empty for pathing
+                path_seed = single_doc_id if single_doc_id else req_id
+                ext = os.path.splitext(original_name)[1] or ".tmp"
+                temp_path = os.path.join(tempfile.gettempdir(), f"{path_seed}{ext}")
                 
                 size = 0
                 with open(temp_path, "wb") as buffer:
                     while chunk := await single_file.read(1024 * 1024):
                         size += len(chunk)
                         if size > MAX_FILE_SIZE:
-                            raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
+                            raise HTTPException(status_code=413, detail="File too large")
                         buffer.write(chunk)
 
                 # Execute Pipeline
                 final_record = await analyze_pipeline(
+                    masterDocId=master_id,
                     doc_id=single_doc_id,
                     req_id=req_id,
                     user_id=user_id,
-                    file_name=single_file.filename,
+                    file_name=original_name,
                     original_mime_type=verified_content_type,
                     file_url=None,
                     local_path_override=temp_path
@@ -513,22 +533,23 @@ async def analyze_document(
                 return {"doc_id": single_doc_id, "status": "success", "data": final_record}
                 
             except Exception as e:
-                logger.error(f"Batch task failed for {single_doc_id}: {e}")
+                logger.error(f"Task failed: {e}")
                 return {"doc_id": single_doc_id, "status": "failed", "error": str(e)}
             finally:
-                # Cleaning
                 if temp_path and os.path.exists(temp_path):
                     try: os.remove(temp_path)
                     except: pass
 
-    tasks = [process_task(file[i], doc_id[i]) for i in range(len(file))]
+    # 3. Use zip() for safer iteration and fix the 'masterDocIds(i)' typo
+    tasks = [
+        process_task(f, d, m) 
+        for f, d, m in zip(file, doc_id, masterDocIds)
+    ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Cleaning and pack up return structure
     final_response = []
     for res in results:
         if isinstance(res, Exception):
-            # Capture underlying system anomalies
             final_response.append({"status": "critical_failure", "error": str(res)})
         else:
             final_response.append(res)
@@ -538,7 +559,7 @@ async def analyze_document(
 
 # ============= Get Doc Analysis at Frontend for History Chat Display =============
 @analysis_router.post("/get-doc-analysis")
-async def get_document_analysis(docId: str = Form(...), language: str = Form("en")):
+async def get_document_analysis(docId: str = Form(...), language: str = Form("en"),masterDocId: str = Form(...)):
     try:
         # 1. Correctly define the query
         query = db.collection(structure_analysis_collection).where("documentId", "==", docId)

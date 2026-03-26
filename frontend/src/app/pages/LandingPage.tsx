@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import logoImg from "../images/logo.jpg";
 import { LanguageToggleButton } from "../components/LanguageToggleButton";
+import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../components/LanguageProvider";
 
 // ─── All user-visible text in EN and BM ──────────────────────────────────────
@@ -166,11 +167,10 @@ function Navigation() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ${
-        scrolled
+      className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ${scrolled
           ? "bg-[#0B0F19]/80 backdrop-blur-xl border-b border-white/5 py-3"
           : "bg-transparent py-5"
-      }`}
+        }`}
     >
       <div className="max-w-[1180px] mx-auto px-6 md:px-10 flex items-center justify-between">
         {/* Logo */}
@@ -265,6 +265,8 @@ function Navigation() {
 /*  HERO                                                               */
 /* ------------------------------------------------------------------ */
 function HeroSection() {
+  const navigate = useNavigate()
+
   const { language } = useLanguage();
   const t = T[language];
   return (
@@ -300,39 +302,40 @@ function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <a
-              href="/analyze"
-              className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)]"
+            <button
+              className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)] cursor-pointer"
+              onClick={() => navigate('/analyze')}
             >
               {t.startAnalyzing} <ArrowRight size={20} />
-            </a>
-            <a
-              href="#features"
-              className="inline-flex items-center justify-center px-8 h-[56px] text-[18px] font-bold text-white bg-white/10 border border-white/20 rounded-[28px] hover:bg-white/20 transition-all"
-            >
-              {t.seeHow}
-            </a>
-          </div>
-
-          {/* Dashboard Mockup */}
-          <DashboardMockup />
+            </button>
+            
+          <a
+            href="#features"
+            className="inline-flex items-center justify-center px-8 h-[56px] text-[18px] font-bold text-white bg-white/10 border border-white/20 rounded-[28px] hover:bg-white/20 transition-all"
+          >
+            {t.seeHow}
+          </a>
         </div>
-      </div>
 
-      {/* Wave transition */}
-      <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-[0] pointer-events-none">
-        <svg
-          className="relative block w-full h-[60px]"
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,0 C150,110 350,110 500,110 C650,110 850,110 1200,0 L1200,120 L0,120 Z"
-            fill="#0B0F19"
-          />
-        </svg>
+        {/* Dashboard Mockup */}
+        <DashboardMockup />
       </div>
-    </section>
+    </div>
+
+      {/* Wave transition */ }
+  <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-[0] pointer-events-none">
+    <svg
+      className="relative block w-full h-[60px]"
+      viewBox="0 0 1200 120"
+      preserveAspectRatio="none"
+    >
+      <path
+        d="M0,0 C150,110 350,110 500,110 C650,110 850,110 1200,0 L1200,120 L0,120 Z"
+        fill="#0B0F19"
+      />
+    </svg>
+  </div>
+    </section >
   );
 }
 
@@ -420,7 +423,7 @@ function DashboardMockup() {
                 <div className="col-span-2">{language === "ms" ? "Isu Dikesan" : "Detected Issue"}</div>
                 <div>{t.tableRisk}</div>
               </div>
-              {t.mockupLabels.slice(0,2).map((row, i) => (
+              {t.mockupLabels.slice(0, 2).map((row, i) => (
                 <div key={i} className="grid grid-cols-4 gap-4 items-center p-2 rounded-lg border-b border-gray-50">
                   <div className="flex items-center gap-2 font-medium text-gray-800 text-sm">
                     <FileText size={14} className="text-blue-500" />
@@ -624,7 +627,7 @@ function FeatureBento() {
                 {t.mockupLabels.map((item) => (
                   <div key={item.label} className="flex justify-between items-center text-xs border-b border-gray-100 pb-2">
                     <span className="text-gray-600 font-medium">{item.label}</span>
-                    <span className={`font-bold ${["text-red-500","text-yellow-600","text-red-500","text-green-600","text-yellow-600"][t.mockupLabels.indexOf(item)]}`}>{item.status}</span>
+                    <span className={`font-bold ${["text-red-500", "text-yellow-600", "text-red-500", "text-green-600", "text-yellow-600"][t.mockupLabels.indexOf(item)]}`}>{item.status}</span>
                   </div>
                 ))}
               </div>

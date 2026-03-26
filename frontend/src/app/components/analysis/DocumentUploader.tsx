@@ -217,9 +217,10 @@ export function DocumentUploader({ onFileUpload, isGuest = false }: DocumentUplo
             </div>
           </label>
         </div>
-
+      
+      {/*
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-slate-800/50 rounded-xl p-6 border border-gray-200 dark:border-slate-700">
+           <div className="bg-white dark:bg-slate-800/50 rounded-xl p-6 border border-gray-200 dark:border-slate-700">
             <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-600/20 flex items-center justify-center mb-4">
               <span className="text-2xl">🔍</span>
             </div>
@@ -242,7 +243,7 @@ export function DocumentUploader({ onFileUpload, isGuest = false }: DocumentUplo
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t.f3}</h3>
             <p className="text-gray-600 dark:text-slate-400 text-sm">{t.f3d}</p>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

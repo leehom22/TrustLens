@@ -6,13 +6,16 @@ import { AnalysisResults } from "./AnalysisResults";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import DocumentViewer from "./DocumentViewer";
 import AiAssistant from "./AiAssistant";
-import { setFileAsFlagged } from "@/api/document";
+import {  handleConfirmSpam, setFileAsFlagged } from "@/api/document";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { DocumentAnalysisOverallResult, DocumentAnalysisResult } from "@/app/types/db-ai-analysis-type";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../LanguageProvider";
 import type { Language } from "../../App";
+import RequestReview from "../modal/RequestReview";
+import ConfirmSpam from "../modal/ConfirmSpam";
+import { SpamReviewInterface } from "@/app/types/type";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface AnalysisInterfaceProps {
@@ -26,6 +29,7 @@ interface AnalysisInterfaceProps {
   userId: string;
   language?: Language;
   isGuest?: boolean;
+  masterDocIds: string[]
 }
 
 type AnalysisStage = "idle" | "analyzing" | "complete" | "error";
@@ -38,15 +42,14 @@ export function AnalysisInterface({
   fileTypes,
   documentIds,
   files,
-  userId,
+  userId, masterDocIds,
   language: initialLanguage = "en",
   isGuest = false,
 }: AnalysisInterfaceProps) {
 
-  // ─── State ──────────────────────────────────────────────────────────────────
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [stages, setStages] = useState<AnalysisStage[]>(files.map(() => "idle"));
-  
+
   const [aiAnalysisList, setAiAnalysisList] = useState<(DocumentAnalysisResult | null)[]>(files.map(() => null));
   const [aiAnalysisHeaders, setAiAnalysisHeaders] = useState<(DocumentAnalysisOverallResult | null)[]>(files.map(() => null));
   const [rawAnalysisDataList, setRawAnalysisDataList] = useState<any[]>(files.map(() => null));
@@ -59,8 +62,15 @@ export function AnalysisInterface({
   const { language } = useLanguage();
   const [langSwitching, setLangSwitching] = useState(false);
   // Guards against the language useEffect firing on initial mount.
-  // The effect should only trigger when the user actively presses the EN|BM toggle.
   const hasMountedRef = useRef(false);
+
+  // Spam Management state
+  const [confirmSpamReview, setConfirmSpamReview] = useState<SpamReviewInterface>({
+    comment: '',
+    state: null,
+    phone:null
+  })
+  const [confirmSpam, setConfirmSpam] = useState<boolean>(false)
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   const navigate = useNavigate();
@@ -71,6 +81,8 @@ export function AnalysisInterface({
   const activeAnalysis = aiAnalysisList[activeFileIndex];
   const activeHeader = aiAnalysisHeaders[activeFileIndex];
   const activeDocId = documentIds[activeFileIndex];
+
+
 
   // ─── Prevent accidental page close during analysis ───────────────────────────
   useEffect(() => {
@@ -93,7 +105,7 @@ export function AnalysisInterface({
 
   const startBatchAnalysis = async () => {
     setStages(files.map(() => "analyzing"));
-    
+
     try {
       const analyzeFormData = new FormData();
       files.forEach(f => analyzeFormData.append("file", f));
@@ -101,39 +113,42 @@ export function AnalysisInterface({
       
       if (!isGuest) {
         documentIds.forEach(id => analyzeFormData.append("doc_id", id));
+        masterDocIds.forEach(masterId => analyzeFormData.append("masterDocIds",masterId))
       }
+      console.log("Receive data: ",documentIds,userId,masterDocIds)
 
       const aiAnalysis = await axios.post(`${backendUrl}/analysis/ai-analyze-document`, analyzeFormData);
 
       if (aiAnalysis.status === 200 && aiAnalysis.data.results) {
-        const batchResults = aiAnalysis.data.results; 
+        const batchResults = aiAnalysis.data.results;
         setRawAnalysisDataList(batchResults.map((r: any) => r.status === 'success' ? r.data : null));
 
         const restructurePromises = batchResults.map(async (result: any, idx: number) => {
-            if (result.status === 'success') {
-                const restructureFormData = new FormData();
-                restructureFormData.append("file", files[idx]);
-                restructureFormData.append("document_raw_data", JSON.stringify(result.data));
-                restructureFormData.append("language", language);
-                restructureFormData.append("documentId", isGuest ? "" : documentIds[idx]);
+          if (result.status === 'success') {
+            const restructureFormData = new FormData();
+            restructureFormData.append("file", files[idx]);
+            restructureFormData.append("document_raw_data", JSON.stringify(result.data));
+            restructureFormData.append("language", language);
+            restructureFormData.append("documentId", isGuest ? "" : documentIds[idx]);
+            restructureFormData.append("masterDocId", isGuest ? "" : masterDocIds[idx]);
 
-                const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, restructureFormData, { 
-                    headers: { "Content-Type": "multipart/form-data" } 
-                });
-                return res.data;
-            }
-            return null;
+            const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, restructureFormData, {
+              headers: { "Content-Type": "multipart/form-data" }
+            });
+            return res.data;
+          }
+          return null;
         });
 
         const restructuredData = await Promise.all(restructurePromises);
-        
+
         setAiAnalysisList(restructuredData.map(r => r ? r.analysis_content : null));
         setAiAnalysisHeaders(restructuredData.map(r => r ? r : null));
-        
+
         setStages(batchResults.map((r: any) => r.status === 'success' ? "complete" : "error"));
 
         if (!isGuest && userEmail) {
-            sendEmailNotification(userEmail);
+          sendEmailNotification(userEmail);
         }
       }
     } catch (error) {
@@ -145,7 +160,6 @@ export function AnalysisInterface({
 
   // ─── Re-restructure ALL files when global language changes ─────────────────
   useEffect(() => {
-    // Skip on the very first render — initial analysis already uses the correct language.
     // Only re-fetch when the user actively toggles EN | BM.
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
@@ -157,17 +171,18 @@ export function AnalysisInterface({
       setLangSwitching(true);
       try {
         const promises = rawAnalysisDataList.map(async (rawData, idx) => {
-            if (!rawData) return null;
-            const restructureFormData = new FormData();
-            restructureFormData.append("file", files[idx]);
-            restructureFormData.append("document_raw_data", JSON.stringify(rawData));
-            restructureFormData.append("language", language);
-            restructureFormData.append("documentId", isGuest ? "" : documentIds[idx]);
+          if (!rawData) return null;
+          const restructureFormData = new FormData();
+          restructureFormData.append("file", files[idx]);
+          restructureFormData.append("document_raw_data", JSON.stringify(rawData));
+          restructureFormData.append("language", language);
+          restructureFormData.append("documentId", isGuest ? "" : documentIds[idx]);
+          restructureFormData.append("masterDocId", isGuest ? "" : masterDocIds[idx]); 
 
-            const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, restructureFormData, { 
-                headers: { "Content-Type": "multipart/form-data" } 
-            });
-            return res.data;
+          const res = await axios.post(`${backendUrl}/analysis/ai-restructure-data`, restructureFormData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+          return res.data;
         });
 
         const retranslated = await Promise.all(promises);
@@ -209,12 +224,12 @@ export function AnalysisInterface({
     try {
       // Loop through and send notifications for all completed files
       fileNames.forEach(async (name, idx) => {
-          if(stages[idx] === 'complete') {
-            const formData = new FormData();
-            formData.append("email", email);
-            formData.append("file", new Blob([""], { type: "application/pdf" }), `${name}_Report.pdf`);
-            await fetch(`${backendUrl}/email/send-report`, { method: "POST", body: formData });
-          }
+        if (stages[idx] === 'complete') {
+          const formData = new FormData();
+          formData.append("email", email);
+          formData.append("file", new Blob([""], { type: "application/pdf" }), `${name}_Report.pdf`);
+          await fetch(`${backendUrl}/email/send-report`, { method: "POST", body: formData });
+        }
       });
     } catch (error) {
       console.error("Email failed:", error);
@@ -250,33 +265,33 @@ export function AnalysisInterface({
             <Button variant="ghost" onClick={onBack} className="text-gray-700 dark:text-slate-300 px-2 sm:px-3 text-sm flex-shrink-0">
               ← <span className="hidden sm:inline ml-1">{language === "ms" ? "Kembali" : "Back"}</span>
             </Button>
-            
+
             {/* Desktop File Switcher Tabs */}
             {files.length > 1 && (
-                <div className="hidden md:flex gap-1 ml-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                    {fileNames.map((name, idx) => (
-                        <button 
-                            key={idx}
-                            onClick={() => setActiveFileIndex(idx)}
-                            className={`px-4 py-1.5 text-sm rounded-md transition-all flex items-center gap-2 ${activeFileIndex === idx ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                        >
-                            <Layers className="w-3.5 h-3.5" />
-                            <span className="max-w-[140px] truncate">{name}</span>
-                            {stages[idx] === 'analyzing' && <Loader2 className="w-3 h-3 animate-spin text-blue-600"/>}
-                            {stages[idx] === 'complete' && <div className="w-2 h-2 bg-green-500 rounded-full"/>}
-                            {stages[idx] === 'error' && <div className="w-2 h-2 bg-red-500 rounded-full"/>}
-                        </button>
-                    ))}
-                </div>
+              <div className="hidden md:flex gap-1 ml-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                {fileNames.map((name, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveFileIndex(idx)}
+                    className={`px-4 py-1.5 text-sm rounded-md transition-all flex items-center gap-2 ${activeFileIndex === idx ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span className="max-w-[140px] truncate">{name}</span>
+                    {stages[idx] === 'analyzing' && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
+                    {stages[idx] === 'complete' && <div className="w-2 h-2 bg-green-500 rounded-full" />}
+                    {stages[idx] === 'error' && <div className="w-2 h-2 bg-red-500 rounded-full" />}
+                  </button>
+                ))}
+              </div>
             )}
-            
+
             {/* Single File fallback title */}
             {files.length === 1 && (
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                    <div className="min-w-0">
-                        <h2 className="font-semibold text-gray-900 dark:text-white text-sm truncate max-w-[140px] sm:max-w-xs">{activeFileName}</h2>
-                    </div>
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-gray-900 dark:text-white text-sm truncate max-w-[140px] sm:max-w-xs">{activeFileName}</h2>
                 </div>
+              </div>
             )}
           </div>
 
@@ -300,38 +315,38 @@ export function AnalysisInterface({
       {/* ── Main Content Area ── */}
       <div className={`w-full mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-6 transition-all duration-200 ${stages.includes("analyzing") && !hasShownWarning ? "pt-28 sm:pt-28 md:pt-32" : "pt-16 md:pt-20"}`}>
         <div className="max-w-7xl mx-auto">
-          
+
           {/* Mobile File Switcher */}
           {files.length > 1 && (
             <div className="md:hidden flex overflow-x-auto gap-2 mb-6 pb-2 no-scrollbar">
-                 {fileNames.map((name, idx) => (
-                    <button 
-                        key={idx} 
-                        onClick={() => setActiveFileIndex(idx)}
-                        className={`flex-shrink-0 px-4 py-2 text-sm rounded-lg border font-medium flex items-center gap-2 ${activeFileIndex === idx ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-400' : 'bg-white border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
-                    >
-                        {name}
-                        {stages[idx] === 'analyzing' && <Loader2 className="w-3 h-3 animate-spin text-blue-600"/>}
-                        {stages[idx] === 'complete' && <div className="w-2 h-2 bg-green-500 rounded-full"/>}
-                    </button>
-                ))}
+              {fileNames.map((name, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveFileIndex(idx)}
+                  className={`flex-shrink-0 px-4 py-2 text-sm rounded-lg border font-medium flex items-center gap-2 ${activeFileIndex === idx ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-400' : 'bg-white border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
+                >
+                  {name}
+                  {stages[idx] === 'analyzing' && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
+                  {stages[idx] === 'complete' && <div className="w-2 h-2 bg-green-500 rounded-full" />}
+                </button>
+              ))}
             </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
-            
+
             {/* ── Analysis Results Column ── */}
             <div className="lg:col-span-7 order-1 lg:order-2">
               {activeStage === "analyzing" && <AnalysisProcess language={language} />}
-              
+
               {activeStage === "error" && (
-                  <div className="p-6 bg-red-50 text-red-600 rounded-xl border border-red-200 dark:bg-red-900/20 dark:border-red-800 flex items-center gap-3">
-                      <AlertTriangle className="w-6 h-6"/>
-                      <div>
-                          <h3 className="font-bold">Analysis Failed</h3>
-                          <p className="text-sm">There was an error processing this specific document. Please try again later.</p>
-                      </div>
+                <div className="p-6 bg-red-50 text-red-600 rounded-xl border border-red-200 dark:bg-red-900/20 dark:border-red-800 flex items-center gap-3">
+                  <AlertTriangle className="w-6 h-6" />
+                  <div>
+                    <h3 className="font-bold">Analysis Failed</h3>
+                    <p className="text-sm">There was an error processing this specific document. Please try again later.</p>
                   </div>
+                </div>
               )}
 
               {activeStage === "complete" && activeAnalysis && activeHeader && (
@@ -341,6 +356,7 @@ export function AnalysisInterface({
                   doc_type={activeHeader.doc_type}
                   raw_analysis_id={activeHeader.raw_analysis_id}
                   language={language}
+                  setConfirmSpam={setConfirmSpam}
                 />
               )}
             </div>
@@ -377,65 +393,22 @@ export function AnalysisInterface({
 
       {/* ── Request Review Modal ── */}
       {requestReview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRequestReview(false)} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
-            <div className="mb-5">
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-                {language === "ms" ? "Minta Semakan Forensik" : "Request Forensic Review"}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mt-1">
-                {language === "ms" ? "Dokumen ini akan diutamakan untuk pengesahan manual." : "This document will be prioritized for manual verification by our forensic team."}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label htmlFor="review-reason" className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {language === "ms" ? "Sebab semakan manual" : "Reason for manual review"}
-              </label>
-              <textarea
-                id="review-reason"
-                rows={4}
-                onChange={(e) => setflaggedReason(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 mt-6">
-              <Button variant="ghost" className="flex-1 border border-gray-300 dark:border-slate-600" onClick={() => setRequestReview(false)}>
-                {language === "ms" ? "Batal" : "Cancel"}
-              </Button>
-              <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleConfirmReview}>
-                {language === "ms" ? "Sahkan Permintaan" : "Confirm Request"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <RequestReview
+          handleConfirmReview={() => handleConfirmReview()}
+          setRequestReview={setRequestReview}
+          setflaggedReason={setflaggedReason}
+        />
       )}
-
-      {/* ── Login Required Modal ── */}
-      {showLoginPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowLoginPrompt(false)} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200 text-center">
-            <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4">
-              <LogIn className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
-              {language === "ms" ? "Log Masuk Diperlukan" : "Login Required"}
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              {language === "ms" ? "Meminta semakan forensik memerlukan akaun. Log masuk atau daftar untuk mengakses ciri ini." : "Requesting a forensic review requires an account. Log in or sign up to access this feature."}
-            </p>
-            <div className="flex flex-col gap-3">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/login")}>
-                {language === "ms" ? "Log Masuk / Daftar" : "Log In / Sign Up"}
-              </Button>
-              <Button variant="ghost" className="w-full text-slate-500" onClick={() => setShowLoginPrompt(false)}>
-                {language === "ms" ? "Teruskan sebagai Tetamu" : "Continue as Guest"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {
+        confirmSpam && (
+          <ConfirmSpam
+            handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam,activeDocId)}
+            setConfirmSpamReview={setConfirmSpamReview}
+            setConfirmSpam={setConfirmSpam}
+            confirmSpamReview={confirmSpamReview}
+          />
+        )
+      }
     </div>
   );
 }

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import sys
 import cv2
 # --- Load Env Vars ---
 # This block ensures we find the .env file whether running from root or /app
@@ -22,11 +23,12 @@ from .routers.chat import chat_router
 from .routers.analysis import analysis_router
 from .routers.restructuring_data import restructure_router
 from .routers.annotate import annotate_router
+from .routers.scam_alert import scam_alert_router
 
 # ------- Import internal modules ------
 from .core.config import Config
 from .core.config import EVIDENCE_DIR
-
+from .core.firebase import db
 # ======================= Backend API set-up =====================================
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
@@ -92,6 +94,12 @@ app.include_router(
 )
 
 app.include_router(
+    scam_alert_router,
+    prefix='/scam-alert',
+    tags=['ScamAlert']
+)
+
+app.include_router(
     annotate_router,
     prefix="/annotate",
     tags=["Annotate"]
@@ -105,6 +113,12 @@ app.include_router(
     tags=["Speech"]
 )
 
+if db:
+    print("Firebase connected")
+else:
+    print("Firebase Failed to connected")
+    sys.exit(1)
+    
 # ====================== Local Testing ===========================
 if __name__ == "__main__":
     import uvicorn

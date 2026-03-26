@@ -17,7 +17,17 @@ interface Files {
   risk_level_color: RiskLevelColor
   analysis_status: string
   flagged: boolean
+  master_doc_id: string
 }
+
+type RiskLevelFilter = RiskLevel | "All"
+
+const RISK_PRIORITY: Record<string, number> = {
+  'CRITICAL': 3,
+  'SUSPICIOUS': 2,
+  'CAUTION': 1,
+  'SAFE': 0,
+};
 
 // Internal Helper
 const formatDateTime = (dateString: string) => {
@@ -32,7 +42,12 @@ const HistoryPage = ({ userId }: { userId: string }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'highest_risk'>('newest');
+  const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({
+    key: 'created_at',
+    direction: 'desc' as 'asc' | 'desc'
+  });
   const itemsPerPage = 6;
   const navigate = useNavigate();
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
@@ -51,6 +66,7 @@ const HistoryPage = ({ userId }: { userId: string }) => {
       filterPending: 'Pending',
       filterFailed: 'Failed',
       sortNewest: 'Newest First',
+      reset: 'reset',
       sortOldest: 'Oldest First',
       sortHighestRisk: 'Highest Risk',
       colDocName: 'Document Name',
@@ -88,19 +104,32 @@ const HistoryPage = ({ userId }: { userId: string }) => {
     }
   }[language];
 
+  // Add toggle sort function
+  const toggleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const handleSortDropdownChange = (value: string) => {
+    if (value === 'newest') setSortConfig({ key: 'created_at', direction: 'desc' });
+    else if (value === 'oldest') setSortConfig({ key: 'created_at', direction: 'asc' });
+    else if (value === 'highest_risk') setSortConfig({ key: 'risk_score', direction: 'desc' });
+  };
+
   const fetchHistoryFiles = async () => {
     try {
       setLoading(true);
       const res = await axios.get(`${backendUrl}/files/get_history_files/${userId}`);
-      
       // CRASH FIX: Guarantee we only set an array to state
       let validData: Files[] = [];
       if (Array.isArray(res.data)) {
-          validData = res.data;
+        validData = res.data;
       } else if (res.data && Array.isArray(res.data.data)) {
-          validData = res.data.data;
+        validData = res.data.data;
       }
-      
+
       setHistoryFiles(validData);
     } catch (error) {
       console.log('Error fetching history: ', error);
@@ -113,6 +142,11 @@ const HistoryPage = ({ userId }: { userId: string }) => {
   useEffect(() => {
     fetchHistoryFiles();
   }, [userId]);
+
+  // Reset to page 1 whenever filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, riskFilter, sortConfig]);
 
   const handleDelete = async (docId: string) => {
     if (!window.confirm("Are you sure you want to delete this document?")) return;
@@ -140,31 +174,54 @@ const HistoryPage = ({ userId }: { userId: string }) => {
     }
   };
 
-  const filteredAndSortedFiles = useMemo(() => {
-    // Extra safety guard just in case state gets corrupted
-    if (!Array.isArray(historyFiles)) return [];
+  // Add reset function
+  const handleReset = () => {
+    setSearchQuery("");
+    setRiskFilter("All");
+    setSortConfig({ key: 'created_at', direction: 'desc' });
+  };
 
-    let result = [...historyFiles];
-    
-    if (searchQuery) {
-      result = result.filter(file => (file.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    
-    if (statusFilter !== 'ALL') {
-      if (statusFilter === 'PENDING') result = result.filter(file => file.analysis_status === 'PENDING' || file.analysis_status === 'PROCESSING');
-      else if (statusFilter === 'FAILED') result = result.filter(file => file.analysis_status === 'FAILED');
-      else result = result.filter(file => file.risk_level?.toUpperCase() === statusFilter && file.analysis_status !== 'FAILED' && file.analysis_status !== 'PENDING');
-    }
-    
-    result.sort((a, b) => {
-      if (sortOrder === 'newest') return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-      if (sortOrder === 'oldest') return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-      if (sortOrder === 'highest_risk') return (b.risk_score || 0) - (a.risk_score || 0);
+  const filteredAndSortedFiles = useMemo(() => {
+    // First, filter by search term and risk level
+    let filtered = historyFiles.filter((doc) => {
+      const matchesSearch = doc.fileName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRisk = riskFilter === "All" || doc.risk_level === riskFilter;
+      return matchesSearch && matchesRisk;
+    });
+
+    // Then, sort the filtered results
+    filtered.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Files];
+      let bValue: any = b[sortConfig.key as keyof Files];
+
+      if (sortConfig.key === 'risk_level') {
+        // We compare the numeric weights instead of the strings
+        aValue = RISK_PRIORITY[aValue as string] ?? -1;
+        bValue = RISK_PRIORITY[bValue as string] ?? -1;
+      }
+      // -------------------------------------
+
+      // Handle date sorting
+      else if (sortConfig.key === 'created_at') {
+        aValue = new Date(aValue).getTime();
+        bValue = new Date(bValue).getTime();
+      }
+
+      // Handle numeric sorting
+      else if (sortConfig.key === 'overall_score' || sortConfig.key === 'fileSize') {
+        aValue = Number(aValue || 0);
+        bValue = Number(bValue || 0);
+      }
+
+      // Standard comparison
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-    
-    return result;
-  }, [historyFiles, searchQuery, statusFilter, sortOrder]);
+
+    return filtered;
+  }, [historyFiles, searchQuery, riskFilter, sortConfig]);
+
 
   const totalPages = Math.ceil(filteredAndSortedFiles.length / itemsPerPage);
   const currentData = filteredAndSortedFiles.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -176,12 +233,12 @@ const HistoryPage = ({ userId }: { userId: string }) => {
     if (file.analysis_status === "PENDING" || file.analysis_status === "PROCESSING") {
       return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</span>;
     }
-    
+
     let colorClass = "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
     if (file.risk_level === 'CRITICAL') colorClass = "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
     if (file.risk_level === 'SUSPICIOUS') colorClass = "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
     if (file.risk_level === 'CAUTION') colorClass = "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
-    
+
     return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${colorClass}`}>{file.risk_level || 'SAFE'}</span>;
   };
 
@@ -211,15 +268,19 @@ const HistoryPage = ({ userId }: { userId: string }) => {
                   placeholder={t.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-900 dark:text-slate-100"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
                 />
               </div>
 
               <div className="flex gap-3">
+                <button onClick={handleReset} className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-100 transition-colors">
+                  {t.reset}
+                </button>
+
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl text-sm font-medium outline-none"
                 >
                   <option value="ALL">{t.filterAll}</option>
                   <option value="CRITICAL">{t.filterCritical}</option>
@@ -230,27 +291,49 @@ const HistoryPage = ({ userId }: { userId: string }) => {
                 </select>
 
                 <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as any)}
-                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
+                  // Determine dropdown value based on sortConfig
+                  value={sortConfig.key === 'risk_score' ? 'highest_risk' : sortConfig.direction === 'desc' ? 'newest' : 'oldest'}
+                  onChange={(e) => handleSortDropdownChange(e.target.value)}
+                  className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl text-sm font-medium outline-none"
                 >
                   <option value="newest">{t.sortNewest}</option>
                   <option value="oldest">{t.sortOldest}</option>
                   <option value="highest_risk">{t.sortHighestRisk}</option>
                 </select>
               </div>
+
             </div>
 
             <div className="hidden md:block bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                      <th className="p-5">{t.colDocName}</th>
-                      <th className="p-5">{t.colDate}</th>
-                      <th className="p-5">{t.colStatus}</th>
-                      <th className="p-5">{t.colScore}</th>
-                      <th className="p-5 text-right">{t.colAction}</th>
+                  <thead className="bg-slate-50 dark:bg-slate-800/50">
+                    <tr className="border-b border-slate-200 dark:border-slate-800">
+                      {[
+                        { label: t.colDocName, key: 'fileName' },
+                        { label: t.colDate, key: 'created_at' },
+                        { label: t.colStatus, key: 'risk_level' },
+                        // { label: t.colScore, key: 'overall_score' },
+                        { label: t.colScore, key: 'fileSize' },
+                      ].map(({ label, key }) => (
+                        <th
+                          key={key}
+                          onClick={() => toggleSort(key)}
+                          className="p-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors select-none"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {label}
+                            {sortConfig.key === key && (
+                              <span className="text-xs">
+                                {sortConfig.direction === 'desc' ? '▼' : '▲'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                      <th className="p-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -282,24 +365,24 @@ const HistoryPage = ({ userId }: { userId: string }) => {
                             </td>
                             <td className="p-5">
                               {isProcessed ? (
-                                  <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300 w-6">{file.risk_score || 0}</span>
-                                      <div className="w-20 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                      <div
-                                          className={`h-full ${(file.risk_score || 0) > 70 ? 'bg-red-500' : (file.risk_score || 0) > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
-                                          style={{ width: `${file.risk_score || 0}%` }}
-                                      />
-                                      </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 w-6">{file.risk_score || 0}</span>
+                                  <div className="w-20 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${(file.risk_score || 0) > 70 ? 'bg-red-500' : (file.risk_score || 0) > 40 ? 'bg-amber-500' : 'bg-green-500'}`}
+                                      style={{ width: `${file.risk_score || 0}%` }}
+                                    />
                                   </div>
+                                </div>
                               ) : (
-                                  <span className="text-sm text-slate-400">-</span>
+                                <span className="text-sm text-slate-400">-</span>
                               )}
                             </td>
                             <td className="p-5 text-right">
                               <div className="flex justify-end gap-2">
                                 {isProcessed && (
                                   <button
-                                    onClick={() => navigate(`/review-document-analysis/${file.id}`)}
+                                    onClick={() => navigate(`/review-document-analysis/${file.id}/${file.master_doc_id}`)}
                                     className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors border border-transparent hover:border-blue-200 dark:hover:border-blue-800"
                                     title={t.btnView}
                                   >
@@ -340,7 +423,7 @@ const HistoryPage = ({ userId }: { userId: string }) => {
                   </tbody>
                 </table>
               </div>
-              
+
               <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center text-sm text-slate-600 dark:text-slate-400">
                 <span>Showing {currentData.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredAndSortedFiles.length)} of {filteredAndSortedFiles.length}</span>
                 <div className="flex gap-1">

@@ -2,7 +2,7 @@ import { useState, useEffect, ReactNode } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, onAuthStateChanged, User } from "firebase/auth";
 import { Button } from "@/app/components/ui/button";
-import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock, BadgeAlert, Menu, X } from "lucide-react";
+import { Shield, LogOut, LayoutDashboard, ArrowUpFromLine, FileScan, FileClock, BadgeAlert, Menu, X, TriangleAlert, AlertCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import logo from '../images/logo.jpg'
@@ -49,7 +49,8 @@ const Sidebar = ({ user }: SidebarProps) => {
       review: "Review Tasks",
       theme: "Theme",
       language: "Language",
-      signOut: "Sign Out"
+      signOut: "Sign Out",
+      Scam_Alert:"Scam Alert"
     },
     ms: {
       dashboard: "Papan Pemuka",
@@ -58,7 +59,8 @@ const Sidebar = ({ user }: SidebarProps) => {
       review: "Tugasan Semakan",
       theme: "Tema",
       language: "Bahasa",
-      signOut: "Log Keluar"
+      signOut: "Log Keluar",
+      Scam_Alert:"Amaran Scam"
     }
   }[language];
 
@@ -67,6 +69,7 @@ const Sidebar = ({ user }: SidebarProps) => {
     { name: t.dashboard, path: "/expert-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
     { name: t.upload, path: "/upload-document", icon: <FileScan />, requiredRole: "user" },
     { name: t.history, path: "/history", icon: <FileClock />, requiredRole: "user" },
+    { name: t.Scam_Alert, path: "/alert", icon: <AlertCircle />, requiredRole: "user" },
     { name: t.review, path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
   ];
 

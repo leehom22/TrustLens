@@ -5,7 +5,7 @@ import { statusStyles } from '@/lib/utils';
 
 interface LogicalConsistencyProps {
     layer: LayerResult
-    sources: string[]
+    sources: string[] | undefined
     nextStepRecommendation: string | null
 }
 

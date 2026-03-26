@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, AlertCircle, Search } from "lucide-react";
 import { Badge } from "@/app/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { motion } from "motion/react";
@@ -15,24 +15,26 @@ import type { Language } from "../../App";
 const UI_TEXT = {
   en: {
     tabs: [
-      { value: "metadata",  label: "Metadata" },
-      { value: "heatmap",   label: "Visuals" },
-      { value: "content",   label: "Semantics" },
-      { value: "findings",  label: "Consistency" },
+      { value: "metadata", label: "Metadata" },
+      { value: "heatmap", label: "Visuals" },
+      { value: "content", label: "Semantics" },
+      { value: "findings", label: "Consistency" },
     ],
-    requestReview: "Request for a review",
-    giveFeedback:  "Give Feedback",
+    requestReview: "Review",
+    confirmSpam: "Report Spam",
+    giveFeedback: "Give Feedback",
     riskBadge: (level: string, score: any) => `Risk Level: ${level} (Risk Score: ${score})`,
   },
   ms: {
     tabs: [
-      { value: "metadata",  label: "Metadata" },
-      { value: "heatmap",   label: "Visual" },
-      { value: "content",   label: "Semantik" },
-      { value: "findings",  label: "Konsistensi" },
+      { value: "metadata", label: "Metadata" },
+      { value: "heatmap", label: "Visual" },
+      { value: "content", label: "Semantik" },
+      { value: "findings", label: "Konsistensi" },
     ],
-    requestReview: "Minta semakan",
-    giveFeedback:  "Beri Maklum Balas",
+    requestReview: "Semakan",
+    confirmSpam: "Laport Spam",
+    giveFeedback: "Beri Maklum Balas",
     riskBadge: (level: string, score: any) => `Tahap Risiko: ${level} (Skor Risiko: ${score})`,
   },
 };
@@ -43,8 +45,10 @@ interface AnalysisResultProps {
   raw_analysis_id: string;
   doc_type: string;
   language?: Language;
+  setConfirmSpam: React.Dispatch<React.SetStateAction<boolean>>
+
 }
-export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id, language = "en" }: AnalysisResultProps) {
+export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type, raw_analysis_id, language = "en", setConfirmSpam }: AnalysisResultProps) {
   const t = UI_TEXT[language];
   const riskLevel = ai_analysis_format?.dashboard_header?.risk_level;
   const riskLevelColor: RiskLevelColor = ai_analysis_format?.dashboard_header?.risk_level_color || 'gray'
@@ -125,12 +129,20 @@ export function AnalysisResults({ setRequestReview, ai_analysis_format, doc_type
           </div>
 
           {/* Request Review button */}
-          <button
-            className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-            onClick={() => setRequestReview(true)}
-          >
-            {t.requestReview}
-          </button>
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <button
+              className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors flex gap-1 justify-center items-center"
+              onClick={() => setRequestReview(true)}
+            >
+              <Search color="red" size={14} /> <p>{t.requestReview}</p>
+            </button>
+            <button
+              className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              onClick={() => setConfirmSpam(true)}
+            >
+              {t.confirmSpam}
+            </button>
+          </div>
         </div>
 
         {/* Helper to render a tab content + feedback */}

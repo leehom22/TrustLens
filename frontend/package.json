@@ -61,7 +61,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.4.120",
     "radix-ui": "^1.4.3",
-    "react-day-picker": "8.10.1",
+    "react-day-picker": "^8.10.1",
     "react-dnd": "16.0.1",
     "react-dnd-html5-backend": "16.0.1",
     "react-hook-form": "7.55.0",
