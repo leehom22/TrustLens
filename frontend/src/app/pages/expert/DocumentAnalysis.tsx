@@ -18,6 +18,7 @@ import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/Docum
 import AiAssistant from '@/app/components/analysis/AiAssistant';
 import { Annotation, Note } from '@/app/types/document-highlight-type';
 import { getAccessibleDocumentUrl } from '@/lib/encrypt';
+import { useLanguage } from '@/app/components/LanguageProvider';
 
 type AnalysisStage = "idle" | "analyzing" | "complete";
 
@@ -38,39 +39,101 @@ const DocumentAnalysis = (props: { userId: string, }) => {
     })
     const [downloadNotes, setDownloadNotes] = useState<Note[]>([]);
     const [downloadAnnotations, setDownloadAnnotations] = useState<Annotation[]>([]);
-    const [expertReviewNotes, setExpertReviewNotes] = useState<string[]>([])
+    const [expertReviewNotes, setExpertReviewNotes] = useState<any[]>([])
     const [selectedTabs, setSelectedTabs] = useState<string>('metadata')
     const [structure_ai_analysis_id, setStructure_ai_analysis_id] = useState<string>('')
     const [rawAnalysisId, setRawAnalysisId] = useState<string>('')
-    const [imageSize, setImageSize] = useState({height:0,width:0})
-    const [ userFlaggedReason, setUserFlaggedReason] = useState<string>('')
+    const [imageSize, setImageSize] = useState({ height: 0, width: 0 })
+    const [userFlaggedReason, setUserFlaggedReason] = useState<string>('')
+
+    // --- LANGUAGE CONTEXT ---
+    const { language } = useLanguage();
+    const t = {
+        en: {
+            loadingText: "Loading Document ...",
+            docTab: "Document",
+            aiTab: "AI Assistant",
+            metaTab: "Metadata",
+            visualTab: "Visuals",
+            semanticTab: "Semantics",
+            findingsTab: "Consistency",
+            flaggedReasonTitle: "🚩 Document Flagged Reason (User Reported)",
+            noReason: "No reason provided.",
+            reviewComplete: "Review Completed",
+            reviewCompleteDesc: "Expert analysis is now available for this document.",
+            expertNotes: "Expert Notes",
+            reviewedOn: "Reviewed on",
+            noNotes: "No specific notes were provided by the reviewer.",
+            errFetchDoc: "Failed to fetch document analysis",
+            errFetchReview: "Failed to fetch document expert review",
+            errLoadDoc: "Failed to load document",
+            docIdNotFound: "Document Id not found!"
+        },
+        ms: {
+            loadingText: "Memuatkan Dokumen ...",
+            docTab: "Dokumen",
+            aiTab: "Pembantu AI",
+            metaTab: "Metadata",
+            visualTab: "Visual",
+            semanticTab: "Semantik",
+            findingsTab: "Konsistensi",
+            flaggedReasonTitle: "🚩 Sebab Dokumen Ditanda (Laporan Pengguna)",
+            noReason: "Tiada sebab diberikan.",
+            reviewComplete: "Semakan Selesai",
+            reviewCompleteDesc: "Analisis pakar kini tersedia untuk dokumen ini.",
+            expertNotes: "Nota Pakar",
+            reviewedOn: "Disemak pada",
+            noNotes: "Tiada nota khusus diberikan oleh penyemak.",
+            errFetchDoc: "Gagal mengambil analisis dokumen",
+            errFetchReview: "Gagal mengambil semakan pakar dokumen",
+            errLoadDoc: "Gagal memuatkan dokumen",
+            docIdNotFound: "Id Dokumen tidak ditemui!"
+        }
+    }[language];
 
 
     const fetchingDocucmentAnalysis = async (docId: string) => {
         try {
             const formData = new FormData()
             formData.append('docId', docId)
+            formData.append('language', language) // Forward language to backend
+
             console.log("Fetching structure analysis data")
             const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData)
             const result = res.data
 
             if (result.success === true) {
-                setAiAnalysis(result.data?.analysis_content)
-                // console.log("Data for analysis: ",result.data)
+                // Handle i18n structure correctly (same fix applied to history)
+                const rawData = result.data;
+                let content = null;
+                
+                if (rawData?.i18n_content) {
+                    content = rawData.i18n_content[language] || rawData.i18n_content['en'];
+                } else if (rawData?.analysis_content) {
+                    content = rawData.analysis_content;
+                } else {
+                    content = rawData;
+                }
+
+                if (typeof content === 'string') {
+                    try { content = JSON.parse(content); } catch (e) { }
+                }
+
+                setAiAnalysis(content)
                 setAnalysisHeader({
-                    analysis_id: result.data?.raw_analysis_id,
-                    doc_type: result.data?.doc_type,
-                    structure_analysis_id: result.data?.id,
+                    analysis_id: rawData?.raw_analysis_id,
+                    doc_type: rawData?.doc_type || content?.doc_type,
+                    structure_analysis_id: rawData?.id,
                 })
-                setRawAnalysisId(result.data?.raw_analysis_id)
-                setStructure_ai_analysis_id(result.data?.id)
+                setRawAnalysisId(rawData?.raw_analysis_id)
+                setStructure_ai_analysis_id(rawData?.id)
 
             } else {
-                toast.error("Failed to fetch document analysis")
+                toast.error(t.errFetchDoc)
                 return
             }
         } catch (error) {
-            toast.error("Failed to fetch document analysis")
+            toast.error(t.errFetchDoc)
             console.log("Error fetching document analysis: ", error)
         }
     }
@@ -87,7 +150,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                 setExpertReviewNotes(result.review)
             }
         } catch (error) {
-            toast.error("Failed to fetch document expert review")
+            toast.error(t.errFetchReview)
             console.log("Error fetching document expert review: ", error)
         }
     }
@@ -104,47 +167,49 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                     await fetchingExpertDocumentReview(docId)
                     setUserFlaggedReason(result.data.flaggedReason)
 
-                    const documentData = result.data 
+                    const documentData = result.data
 
-                     // 🔐 Decrypt using fresh data (NOT state)
+                    // 🔐 Decrypt using fresh data (NOT state)
                     const accessibleUrl = await getAccessibleDocumentUrl(
                         documentData.fileUrl,
                         documentData.encryptedKey!,
                         documentData.iv!
                     );
-    
+
                     // console.log("Decrypted key:", accessibleUrl);
-    
+
                     // ✅ Now update state once
                     setSelectedDocument({
                         ...documentData,
                         fileUrl: accessibleUrl || documentData.fileUrl,
                     });
-        }
+                }
             } else {
-                toast.error("Document Id not found!")
+                toast.error(t.docIdNotFound)
                 return
             }
         } catch (error) {
-            toast.error("Failed to laod document")
+            toast.error(t.errLoadDoc)
             console.log("Error loading document: ", error)
         } finally {
             setLoading(false)
         }
     }
+    
+    // Re-fetch document analysis if language changes so tabs update
     useEffect(() => {
         // console.log("the Document Id is :", docId)
         // fetch document from backend
         fetchingFile()
-    }, [docId])
+    }, [docId, language])
 
     return (
         <>
             {
                 loading === true ? (
                     <div className="w-full flex flex-col gap-3 items-center justify-center inset-0 fixed z-50">
-                        <Loader2 className="animate-spin" size={50} />
-                        <p>Loading Document ...</p>
+                        <Loader2 className="animate-spin text-blue-600 dark:text-blue-400" size={50} />
+                        <p className="text-slate-600 dark:text-slate-300 font-medium">{t.loadingText}</p>
                     </div>
                 ) :
                     (
@@ -163,7 +228,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                     dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
                                                     text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                                                 >
-                                                    Document
+                                                    {t.docTab}
                                                 </TabsTrigger>
                                                 <TabsTrigger
                                                     value="ai-assistant"
@@ -172,7 +237,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-blue-400
                                                 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                                                 >
-                                                    AI Assistant
+                                                    {t.aiTab}
                                                 </TabsTrigger>
                                             </TabsList>
 
@@ -181,7 +246,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                     <DocumentVercel
                                                         userId={props.userId}
                                                         documentUrl={selectedDocument.fileUrl}
-                                                        documentId={selectedDocument.id}
+                                                        documentId={selectedDocument.id!}
                                                         documentName={selectedDocument.fileName}
                                                         setDownloadNotes={setDownloadNotes}
                                                     />
@@ -190,7 +255,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                     <DocumentImages
                                                         userId={props.userId}
                                                         documentUrl={selectedDocument.fileUrl}
-                                                        documentId={selectedDocument.id}
+                                                        documentId={selectedDocument.id!}
                                                         documentName={selectedDocument.fileName}
                                                         setDownloadAnnotations={setDownloadAnnotations}
                                                         setParentImageSize={setImageSize}
@@ -199,7 +264,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                             </TabsContent>
 
                                             <TabsContent value="ai-assistant">
-                                                <AiAssistant reqId={rawAnalysisId} initialMessages={chatMessages} stage={stage} userType='expert'/>
+                                                <AiAssistant reqId={rawAnalysisId} initialMessages={chatMessages} stage={stage} userType='expert' />
                                             </TabsContent>
                                         </Tabs>
                                     </div>
@@ -229,61 +294,70 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                             {/* Horizontally scrollable tab list on mobile */}
                                             <div className="overflow-x-auto pb-1 -mb-1 flex-1">
                                                 <TabsList className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 h-11 px-2 flex w-max min-w-full ">
-                                                {[
-                                                    { value: 'metadata', label: 'Metadata' },
-                                                    { value: 'heatmap', label: 'Visuals' },
-                                                    { value: 'content', label: 'Semantics' },
-                                                    { value: 'findings', label: 'Consistency' },
-                                                ].map(({ value, label }) => (
-                                                    <TabsTrigger
-                                                    key={value}
-                                                    value={value}
-                                                    className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
+                                                    {[
+                                                        { value: 'metadata', label: t.metaTab },
+                                                        { value: 'heatmap', label: t.visualTab },
+                                                        { value: 'content', label: t.semanticTab },
+                                                        { value: 'findings', label: t.findingsTab },
+                                                    ].map(({ value, label }) => (
+                                                        <TabsTrigger
+                                                            key={value}
+                                                            value={value}
+                                                            className="px-3 sm:px-4 py-2 rounded-sm text-xs sm:text-sm whitespace-nowrap
                                                             data-[state=active]:text-blue-600 data-[state=active]:font-bold
                                                             dark:text-slate-400 dark:data-[state=active]:text-blue-400"
-                                                    >
-                                                    {label}
-                                                    </TabsTrigger>
-                                                ))}
+                                                        >
+                                                            {label}
+                                                        </TabsTrigger>
+                                                    ))}
                                                 </TabsList>
                                             </div>
 
                                             <TabsContent value="metadata" className="main-card-container">
-                                                <Metadata layer={ai_analysis_format!.layer_results[0]} />
+                                                {ai_analysis_format?.layer_results?.[0] && (
+                                                    <Metadata layer={ai_analysis_format.layer_results[0]} />
+                                                )}
                                             </TabsContent>
 
                                             <TabsContent value="heatmap">
-                                                <VisualManipulation layer={ai_analysis_format!.layer_results[1]} />
+                                                {ai_analysis_format?.layer_results?.[1] && (
+                                                    <VisualManipulation layer={ai_analysis_format.layer_results[1]} />
+                                                )}
                                             </TabsContent>
 
                                             <TabsContent value="content" className="main-card-container">
-                                                <ContentAnalysis layer={ai_analysis_format!.layer_results[2]} />
+                                                {ai_analysis_format?.layer_results?.[2] && (
+                                                    <ContentAnalysis layer={ai_analysis_format.layer_results[2]} />
+                                                )}
                                             </TabsContent>
 
                                             <TabsContent value="findings" className="main-card-container">
-                                                <LogicalConsistency
-                                                    layer={ai_analysis_format!.layer_results[3]}
-                                                    nextStepRecommendation={ai_analysis_format?.dashboard_header?.next_step_recommendation}
-                                                />
+                                                {ai_analysis_format?.layer_results?.[3] && (
+                                                    <LogicalConsistency
+                                                        layer={ai_analysis_format.layer_results[3]}
+                                                        nextStepRecommendation={ai_analysis_format?.dashboard_header?.next_step_recommendation}
+                                                        sources={ai_analysis_format?.dashboard_header?.sources}
+                                                    />
+                                                )}
                                             </TabsContent>
                                         </Tabs>
-                                        
-                                     <div className= "bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-6 transition-colors shadow-sm mt-6">
-                                            <h3 className=" font-bold text-gray-700 dark:text-slate-300 mb-2">
-                                                🚩 Document Flagged Reason (User Reported)
+
+                                        <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-6 transition-colors shadow-sm mt-6">
+                                            <h3 className="font-bold text-gray-700 dark:text-slate-300 mb-2">
+                                                {t.flaggedReasonTitle}
                                             </h3>
 
                                             {userFlaggedReason ? (
                                                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-md text-gray-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-                                                {userFlaggedReason}
+                                                    {userFlaggedReason}
                                                 </div>
                                             ) : (
                                                 <div className="text-sm text-gray-500 dark:text-slate-400 italic">
-                                                No reason provided.
+                                                    {t.noReason}
                                                 </div>
                                             )}
-                                     </div>
-                                                                                {/* Review Status */}
+                                        </div>
+                                        {/* Review Status */}
                                         <div className="mt-6">
                                             {selectedDocument.expertReview === true ? (
                                                 <div className="bg-green-50/50 dark:bg-emerald-900/10 border border-green-200 dark:border-emerald-800/50 rounded-xl p-4 sm:p-6 transition-all shadow-sm">
@@ -294,10 +368,10 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                         </div>
                                                         <div>
                                                             <h3 className="text-base sm:text-lg font-bold text-green-900 dark:text-emerald-100 leading-none">
-                                                                Review Completed
+                                                                {t.reviewComplete}
                                                             </h3>
                                                             <p className="text-sm text-green-700/80 dark:text-emerald-400/80 mt-1">
-                                                                Expert analysis is now available for this document.
+                                                                {t.reviewCompleteDesc}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -306,7 +380,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                     {expertReviewNotes && expertReviewNotes.length > 0 ? (
                                                         <div className="mt-4 space-y-3">
                                                             <h4 className="text-xs font-semibold uppercase tracking-wider text-green-800/60 dark:text-emerald-500/60 ml-1">
-                                                                Expert Notes
+                                                                {t.expertNotes}
                                                             </h4>
                                                             <div className="bg-white/50 dark:bg-emerald-950/20 rounded-lg border border-green-100 dark:border-emerald-800/30 divide-y divide-green-100 dark:divide-emerald-800/30">
                                                                 {expertReviewNotes.map((note, index) => (
@@ -316,7 +390,7 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                                         </p>
                                                                         {note.timestamp && (
                                                                             <span className="text-[10px] text-green-600/50 dark:text-emerald-500/50 mt-2 block">
-                                                                                Reviewed on {new Date(note.timestamp).toLocaleDateString()}
+                                                                                {t.reviewedOn} {new Date(note.timestamp).toLocaleDateString()}
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -325,13 +399,13 @@ const DocumentAnalysis = (props: { userId: string, }) => {
                                                         </div>
                                                     ) : (
                                                         <p className="text-sm italic text-green-600/70 dark:text-emerald-500/70 mt-2">
-                                                            No specific notes were provided by the reviewer.
+                                                            {t.noNotes}
                                                         </p>
                                                     )}
                                                 </div>
                                             ) : (
                                                 <ExpertReview
-                                                    documentId={selectedDocument.id}
+                                                    documentId={selectedDocument.id!}
                                                     userId={selectedDocument.user_id}
                                                     analysis_id={analysisHeader.analysis_id}
                                                     doc_type={analysisHeader.doc_type}

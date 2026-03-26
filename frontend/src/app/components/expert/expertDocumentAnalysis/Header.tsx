@@ -4,6 +4,7 @@ import { Annotation, Note } from "@/app/types/document-highlight-type";
 import { Calendar, CheckCircle, Download, ExternalLink, FileText, FileType, HardDrive, Loader2, SendIcon, Shield, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLanguage } from "@/app/components/LanguageProvider";
 
 interface ImageSize {
     height: number,
@@ -16,9 +17,46 @@ interface HeaderProps {
     downloadNotes?: Note[]
     downloadAnnotations?: Annotation[]
 }
+
 const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotations, downloadNotes, imageSize }: HeaderProps) => {
 
     const [sendingReportLoading, setSendingReportLoading] = useState<boolean>(false)
+    const { language } = useLanguage();
+
+    const t = {
+        en: {
+            sendSuccess: "Review email sent to user successfully.",
+            sendError: "Error sending review email to user.",
+            uploaded: "Uploaded:",
+            size: "Size:",
+            type: "Type:",
+            sending: "Sending",
+            sendToUser: "Send PDF to user",
+            sendShort: "Send",
+            download: "Download",
+            userName: "User name",
+            status: "Status",
+            analysisComplete: "Analysis Complete",
+            docId: "Document ID",
+            viewInStorage: "View in Storage"
+        },
+        ms: {
+            sendSuccess: "E-mel semakan berjaya dihantar kepada pengguna.",
+            sendError: "Ralat menghantar e-mel semakan kepada pengguna.",
+            uploaded: "Dimuat Naik:",
+            size: "Saiz:",
+            type: "Jenis:",
+            sending: "Menghantar",
+            sendToUser: "Hantar PDF ke pengguna",
+            sendShort: "Hantar",
+            download: "Muat Turun",
+            userName: "Nama pengguna",
+            status: "Status",
+            analysisComplete: "Analisis Selesai",
+            docId: "ID Dokumen",
+            viewInStorage: "Lihat di Storan"
+        }
+    }[language];
 
     const handleSendReportRequest = async (userEmail: string, docName: string, docId: string, analysisId: string, role: string, documentURL: string, notesType: "image" | "pdf", notes?: Note[] | undefined, annotations?: Annotation[]) => {
         try {
@@ -39,9 +77,9 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
             )
 
             if (res!.success) {
-                toast.success("Review email sent to user successfully.");
+                toast.success(t.sendSuccess);
             } else {
-                toast.error("Error sending review email to user.");
+                toast.error(t.sendError);
             }
         } catch (error) {
             console.log("Eror sending review email:", error);
@@ -110,7 +148,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                         <div className="flex items-center gap-2 min-w-0">
                             <Calendar className="w-4 h-4 flex-shrink-0" />
                             <span>
-                                Uploaded:
+                                {t.uploaded}
                                 <span className="ml-1 font-medium text-gray-800 dark:text-slate-200">
                                     {formatDate(selectedDocument.created_at)}
                                 </span>
@@ -121,7 +159,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                         <div className="flex items-center gap-2">
                             <HardDrive className="w-4 h-4 flex-shrink-0" />
                             <span>
-                                Size:
+                                {t.size}
                                 <span className="ml-1 font-medium text-gray-800 dark:text-slate-200">
                                     {formatFileSize(selectedDocument.fileSize)}
                                 </span>
@@ -132,7 +170,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                         <div className="flex items-center gap-2">
                             <FileType className="w-4 h-4 flex-shrink-0" />
                             <span>
-                                Type:
+                                {t.type}
                                 <span className="ml-1 font-medium text-gray-800 dark:text-slate-200">
                                     {selectedDocument.mimeType.split('/')[1].toUpperCase()}
                                 </span>
@@ -151,7 +189,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                             handleSendReportRequest(
                                 selectedDocument.user.email,
                                 selectedDocument.fileName,
-                                selectedDocument.id,
+                                selectedDocument.id!,
                                 structure_ai_analysis_id,
                                 'expert',
                                 selectedDocument.fileUrl,
@@ -179,16 +217,16 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                         {sendingReportLoading ? (
                             <>
                                 <Loader2 className="animate-spin" size={18} />
-                                Sending
+                                {t.sending}
                             </>
                         ) : (
                             <>
                                 <SendIcon className="w-4 h-4" />
                                 <span className="hidden sm:inline">
-                                    Send PDF to user
+                                    {t.sendToUser}
                                 </span>
                                 <span className="sm:hidden">
-                                    Send
+                                    {t.sendShort}
                                 </span>
                             </>
                         )}
@@ -198,7 +236,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                     <button
                         onClick={() =>
                             handlePdfDownload(
-                                selectedDocument.id,
+                                selectedDocument.id!,
                                 structure_ai_analysis_id,
                                 selectedDocument.fileName,
                                 'expert'
@@ -217,7 +255,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                 "
                     >
                         <Download className="w-4 h-4" />
-                        Download
+                        {t.download}
                     </button>
 
                 </div>
@@ -239,7 +277,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                     </div>
                     <div className="min-w-0">
                         <p className="text-xs text-gray-500 dark:text-slate-400">
-                            User name
+                            {t.userName}
                         </p>
                         <p className="text-sm font-mono font-medium truncate">
                             {selectedDocument.user.username}
@@ -254,10 +292,10 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                     </div>
                     <div>
                         <p className="text-xs text-gray-500 dark:text-slate-400">
-                            Status
+                            {t.status}
                         </p>
                         <p className="text-sm font-medium text-gray-900 dark:text-slate-100">
-                            Analysis Complete
+                            {t.analysisComplete}
                         </p>
                     </div>
                 </div>
@@ -269,7 +307,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                     </div>
                     <div className="min-w-0">
                         <p className="text-xs text-gray-500 dark:text-slate-400">
-                            Document ID
+                            {t.docId}
                         </p>
                         <p className="text-sm font-mono font-medium truncate">
                             {selectedDocument.id || 'N/A'}
@@ -313,7 +351,7 @@ const Header = ({ selectedDocument, structure_ai_analysis_id, downloadAnnotation
                 "
                     >
                         <ExternalLink className="w-3 h-3 mr-1.5" />
-                        View in Storage
+                        {t.viewInStorage}
                     </a>
                 )}
 

@@ -64,7 +64,7 @@ const Sidebar = ({ user }: SidebarProps) => {
 
   const navItems = [
     { name: t.dashboard, path: "/dashboard", icon: <LayoutDashboard />, requiredRole: "user" },
-    { name: t.dashboard, path: "/admin-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
+    { name: t.dashboard, path: "/expert-dashboard", icon: <LayoutDashboard />, requiredRole: "expert" },
     { name: t.upload, path: "/upload-document", icon: <FileScan />, requiredRole: "user" },
     { name: t.history, path: "/history", icon: <FileClock />, requiredRole: "user" },
     { name: t.review, path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
@@ -134,13 +134,11 @@ const Sidebar = ({ user }: SidebarProps) => {
           </Button>
         </div>
 
-        {/* Language toggle — hides if role is expert */}
-        {role !== "expert" && (
-          <div className="flex items-center justify-between px-2 py-2">
-            <span className="text-lg font-medium text-gray-500">{t.language}</span>
-            <LanguageToggleButton variant="ghost" />
-          </div>
-        )}
+        {/* Language toggle — AVAILABLE FOR ALL ROLES NOW */}
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-lg font-medium text-gray-500">{t.language}</span>
+          <LanguageToggleButton variant="ghost" />
+        </div>
 
         <div className="flex items-center gap-2">
           <img

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { AlertCircle, CheckCircle, Loader2, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
 import React, { useState } from 'react'
 import { toast } from 'react-toastify';
+import { useLanguage } from '@/app/components/LanguageProvider';
 
 interface ExpertReviewProps {
     userId: string, 
@@ -15,14 +16,49 @@ interface ExpertReviewProps {
 const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , analysis_id, target_layer } : ExpertReviewProps) => {
     const [reviewDecision, setReviewDecision] = useState<String | null>(null);
     const [reviewNotes, setReviewNotes] = useState('');
-    const [agreeAnalysis, setAgreeAnalysis] = useState(false)
+    const [agreeAnalysis, setAgreeAnalysis] = useState<boolean | null>(null); // Made nullable to handle missing state cleanly
     const [isLoading, setIsLoading] = useState(false)
     const [selectedTabs, setSelectedTabs] = useState<string>("layer1")
     const backendUrl = import.meta.env.VITE_BACKEND_URL
 
+    // --- LANGUAGE CONTEXT ---
+    const { language } = useLanguage();
+    const t = {
+        en: {
+            missingErr: "Review Decision, review notes, or review acknowledgement is missing",
+            submitSuccess: "Review submitted",
+            submitFail: "Error occurred while submitting review. Please try again",
+            title: "Expert Review Decision",
+            decisionLabel: "Your Decision",
+            authentic: "Authentic",
+            suspicious: "Suspicious",
+            forgery: "Forgery",
+            notesLabel: "Review Notes",
+            notesPlaceholder: "Provide detailed reasoning for your decision...",
+            agree: "Agree",
+            disagree: "Disagree",
+            submitBtn: "Submit Review",
+        },
+        ms: {
+            missingErr: "Keputusan Semakan, nota semakan, atau pengesahan semakan hilang",
+            submitSuccess: "Semakan dihantar",
+            submitFail: "Ralat berlaku semasa menghantar semakan. Sila cuba lagi",
+            title: "Keputusan Semakan Pakar",
+            decisionLabel: "Keputusan Anda",
+            authentic: "Sah",
+            suspicious: "Mencurigakan",
+            forgery: "Palsu",
+            notesLabel: "Nota Semakan",
+            notesPlaceholder: "Berikan alasan terperinci untuk keputusan anda...",
+            agree: "Setuju",
+            disagree: "Tidak Setuju",
+            submitBtn: "Hantar Semakan",
+        }
+    }[language];
+
     const handleReviewSubmit = async () => {
         if (!reviewDecision || agreeAnalysis === null || !reviewNotes) {
-            toast.warning("Review Decision or review notes or review acknowledgement is missing")
+            toast.warning(t.missingErr)
             return;
         }
         try {
@@ -61,14 +97,14 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
 
             if(result.success){
                 // console.log("SelectedTabs: ",selectedTabs)
-                toast.success("Review submitted")
+                toast.success(t.submitSuccess)
                 setReviewDecision(null);
                 setReviewNotes('');
                 setAgreeAnalysis(true)
             } 
         } catch (error) {
             console.log(`Error occur while submiting review: ${error}`)
-            toast.error("Error occur while submmiting review. Please try again")
+            toast.error(t.submitFail)
         } finally {
             setIsLoading(false)
         }
@@ -76,10 +112,10 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-6 transition-colors shadow-sm">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-4">Expert Review Decision</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-4">{t.title}</h3>
 
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Your Decision</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">{t.decisionLabel}</label>
                 <div className="grid grid-cols-3 gap-3">
                     {/* Authentic Button */}
                     <button
@@ -91,7 +127,7 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
                     >
                         <CheckCircle className={`w-8 h-8 mx-auto mb-2 ${reviewDecision === 'authentic' ? 'text-green-600 dark:text-emerald-400' : 'text-gray-400 dark:text-slate-600'
                             }`} />
-                        <p className={`text-sm font-medium ${reviewDecision === 'authentic' ? 'text-green-900 dark:text-emerald-100' : 'text-gray-900 dark:text-slate-400'}`}>Authentic</p>
+                        <p className={`text-sm font-medium ${reviewDecision === 'authentic' ? 'text-green-900 dark:text-emerald-100' : 'text-gray-900 dark:text-slate-400'}`}>{t.authentic}</p>
                     </button>
 
                     {/* Suspicious Button */}
@@ -104,7 +140,7 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
                     >
                         <AlertCircle className={`w-8 h-8 mx-auto mb-2 ${reviewDecision === 'suspicious' ? 'text-yellow-600 dark:text-amber-400' : 'text-gray-400 dark:text-slate-600'
                             }`} />
-                        <p className={`text-sm font-medium ${reviewDecision === 'suspicious' ? 'text-yellow-900 dark:text-amber-100' : 'text-gray-900 dark:text-slate-400'}`}>Suspicious</p>
+                        <p className={`text-sm font-medium ${reviewDecision === 'suspicious' ? 'text-yellow-900 dark:text-amber-100' : 'text-gray-900 dark:text-slate-400'}`}>{t.suspicious}</p>
                     </button>
 
                     {/* Forgery Button */}
@@ -117,18 +153,18 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
                     >
                         <XCircle className={`w-8 h-8 mx-auto mb-2 ${reviewDecision === 'forgery' ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-slate-600'
                             }`} />
-                        <p className={`text-sm font-medium ${reviewDecision === 'forgery' ? 'text-red-900 dark:text-red-100' : 'text-gray-900 dark:text-slate-400'}`}>Forgery</p>
+                        <p className={`text-sm font-medium ${reviewDecision === 'forgery' ? 'text-red-900 dark:text-red-100' : 'text-gray-900 dark:text-slate-400'}`}>{t.forgery}</p>
                     </button>
                 </div>
             </div>
 
             {/* Notes Section */}
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Review Notes</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">{t.notesLabel}</label>
                 <textarea
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
-                    placeholder="Provide detailed reasoning for your decision..."
+                    placeholder={t.notesPlaceholder}
                     className="w-full h-32 px-4 py-3 border border-gray-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-950 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-600 resize-none outline-none transition-colors"
                 />
             </div>
@@ -146,20 +182,20 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
                         onClick={() => setAgreeAnalysis(true)}
                     >
                         <ThumbsUp className={`w-4 h-4 ${agreeAnalysis === true ? 'fill-current' : ''}`} />
-                        Agree
+                        {t.agree}
                     </button>
 
                     {/* DISAGREE BUTTON */}
                     <button
                         className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all rounded-lg
-                            ${agreeAnalysis === false
+                             ${agreeAnalysis === false
                                 ? 'bg-red-600 text-white shadow-md' // Active State
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700' // Inactive State
                             }`}
                         onClick={() => setAgreeAnalysis(false)}
                     >
                         <ThumbsDown className={`w-4 h-4 ${agreeAnalysis === false ? 'fill-current' : ''}`} />
-                        Disagree
+                        {t.disagree}
                     </button>
                 </div>
                 <button
@@ -167,7 +203,7 @@ const ExpertReview = ({userId, documentId, doc_type, structure_analysis_id , ana
                     className={`px-6 py-2  font-medium rounded-lg  shadow-lg shadow-blue-500/20 flex gap-3 justify-center items-center ${isLoading === true ? 'bg-gray-400 dark:bg-gray-500 text-white' : 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors'}`}
                     disabled={isLoading}
                 >
-                        <p>Submit Review </p>
+                        <p>{t.submitBtn}</p>
                         <div>        
                             {
                                 isLoading && <Loader2 className='animate-spin mx-auto'/>
