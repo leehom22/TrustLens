@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import logoImg from "../images/logo.jpg";
 import { LanguageToggleButton } from "../components/LanguageToggleButton";
+import { useNavigate } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
 /*  INLINE STYLES (so the file is fully self-contained)                */
@@ -159,6 +160,8 @@ function Navigation() {
 /*  HERO                                                               */
 /* ------------------------------------------------------------------ */
 function HeroSection() {
+  const navigate = useNavigate()
+
   return (
     <section className="relative min-h-screen w-full overflow-hidden bg-gradient-to-b from-[#0B0F19] via-[#101630] to-[#0B0F19] pt-[100px] lg:pt-[140px] pb-[80px]">
       {/* Background effects */}
@@ -194,12 +197,12 @@ function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <a
-              href="/analyze"
-              className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)]"
+            <button
+              className="inline-flex items-center justify-center gap-2 px-8 h-[56px] text-[18px] font-bold text-[#0B0F19] bg-white rounded-[28px] hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.15)] cursor-pointer"
+              onClick={() => navigate('/analyze')}
             >
               Start Analyzing Now <ArrowRight size={20} />
-            </a>
+            </button>
             <a
               href="#features"
               className="inline-flex items-center justify-center px-8 h-[56px] text-[18px] font-bold text-white bg-white/10 border border-white/20 rounded-[28px] hover:bg-white/20 transition-all"

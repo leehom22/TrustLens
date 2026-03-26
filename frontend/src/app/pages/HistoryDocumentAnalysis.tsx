@@ -11,7 +11,7 @@ import LogicalConsistency from "../components/expert/expertDocumentAnalysis/anal
 import AiAssistant from "../components/analysis/AiAssistant";
 import DocumentViewer from "../components/analysis/DocumentViewer";
 import { useNavigate, useParams } from "react-router-dom";
-import { handleConfirmReview, handleConfirmSpam, handlePdfDownload, setFileAsFlagged } from "@/api/document";
+import {  handleConfirmSpam, handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import { statusStyles } from "@/lib/utils";
 import { getAccessibleDocumentUrl } from "@/lib/encrypt";
@@ -24,10 +24,10 @@ import ConfirmSpam from "../components/modal/ConfirmSpam";
 type AnalysisStage = "idle" | "analyzing" | "complete" | "error";
 
 export function HistoryDocumentAnalysis() {
-    const { docId } = useParams();
+    const { docId, masterDocId } = useParams();
     const navigate = useNavigate();
     const { language } = useLanguage();
-    
+
     const [ai_analysis_format, setAi_analysis_format] = useState<DocumentAnalysisResult | null>(null);
     const [fileUrl, setFileUrl] = useState<string>('');
     const [fileType, setFileType] = useState<string>('');
@@ -38,6 +38,12 @@ export function HistoryDocumentAnalysis() {
     const [raw_analysis_id, setRaw_analysis_id] = useState('');
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     const [stage, setStage] = useState<AnalysisStage>("idle");
+    const [confirmSpamReview, setConfirmSpamReview] = useState<SpamReviewInterface>({
+        comment: '',
+        state: null,
+        phone: null
+    })
+    const [confirmSpam, setConfirmSpam] = useState<boolean>(false)
 
     useEffect(() => {
         const fetchAnalysis = async () => {
@@ -46,12 +52,12 @@ export function HistoryDocumentAnalysis() {
                 const formData = new FormData();
                 formData.append("docId", docId!);
                 formData.append("language", language);
-
+                formData.append("masterDocId",masterDocId!)
                 const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData);
                 const fileReqRes = await axios.get(`${backendUrl}/files/get_selected_files/${docId}`);
 
                 if (res.status === 200 && fileReqRes.status === 200) {
-                    
+
                     // CRASH FIX: Safely extract content based on the exact DB structure
                     const rawData = res.data?.data || res.data;
                     let content = null;
@@ -59,11 +65,11 @@ export function HistoryDocumentAnalysis() {
                     // 1. Newest Format (Bilingual Support via i18n_content)
                     if (rawData?.i18n_content) {
                         content = rawData.i18n_content[language] || rawData.i18n_content['en'];
-                    } 
+                    }
                     // 2. Older Format (Nested in analysis_content)
                     else if (rawData?.analysis_content) {
                         content = rawData.analysis_content;
-                    } 
+                    }
                     // 3. Oldest Format (Root level properties)
                     else {
                         content = rawData;
@@ -193,9 +199,9 @@ export function HistoryDocumentAnalysis() {
 
                                             <Badge variant="outline" className={`self-start text-sm font-semibold border-2 whitespace-nowrap 
                                                 ${ai_analysis_format?.dashboard_header?.risk_level === "CRITICAL" ? "border-red-600 text-red-600 bg-red-50"
-                                                : ai_analysis_format?.dashboard_header?.risk_level === "SUSPICIOUS" ? "border-orange-500 text-orange-600 bg-orange-50"
-                                                : ai_analysis_format?.dashboard_header?.risk_level === "CAUTION" ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                                                : "border-green-600 text-green-600 bg-green-50"}`}>
+                                                    : ai_analysis_format?.dashboard_header?.risk_level === "SUSPICIOUS" ? "border-orange-500 text-orange-600 bg-orange-50"
+                                                        : ai_analysis_format?.dashboard_header?.risk_level === "CAUTION" ? "border-yellow-500 text-yellow-700 bg-yellow-50"
+                                                            : "border-green-600 text-green-600 bg-green-50"}`}>
                                                 Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} ({ai_analysis_format?.dashboard_header?.overall_score})
                                             </Badge>
                                         </div>
@@ -204,7 +210,7 @@ export function HistoryDocumentAnalysis() {
                                         </p>
                                     </div>
 
-                                    <Tabs defaultValue="metadata" className="space-y-4">
+                                    <Tabs defaultValue="metadata" className="space-y-4 w-full">
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                             <div className="overflow-x-auto pb-1">
                                                 <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700 h-11">
@@ -216,17 +222,23 @@ export function HistoryDocumentAnalysis() {
                                             </div>
 
                                             <div className="flex gap-2">
-                                                <Button
-                                                    className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                                                <button
+                                                    className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                                                     onClick={() => setRequestReview(true)}
                                                     disabled={fileHeader?.flagged}
                                                 >
-                                                    {fileHeader?.flagged ? (language === 'ms' ? "Sedang Disemak" : "Review In Progress") : (language === 'ms' ? "Minta Semakan" : "Request Review")}
-                                                </Button>
+                                                    {fileHeader?.flagged ? (language === 'ms' ? "Sedang Disemak" : "Review In Progress") : (language === 'ms' ? " Semak" : " Review")}
+                                                </button>
+                                                <button
+                                                    className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                                                    onClick={() => setConfirmSpam(true)}
+                                                >
+                                                    Spam
+                                                </button>
                                                 <Button
                                                     variant="outline"
                                                     className="flex items-center gap-2 bg-white dark:bg-slate-800 dark:border-slate-700"
-                                                    onClick={() => handlePdfDownload(fileHeader?.fileName!, docId!, doc_type, raw_analysis_id, "user", language)}
+                                                    onClick={() => handlePdfDownload(fileHeader?.fileName!, docId!, raw_analysis_id, "user")}
                                                 >
                                                     <Download className="w-4 h-4" /> Download
                                                 </Button>
@@ -289,26 +301,22 @@ export function HistoryDocumentAnalysis() {
                     </div>
 
                     {requestReview && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRequestReview(false)} />
-                            <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in">
-                                <h3 className="text-xl font-bold dark:text-white mb-2">Request Forensic Review</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                                    This document will be prioritized for manual verification by our forensic team.
-                                </p>
-                                <textarea
-                                    rows={4}
-                                    placeholder="Briefly describe why this document requires human oversight..."
-                                    onChange={(e) => setflaggedReason(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 dark:text-white resize-none"
-                                />
-                                <div className="flex gap-3 mt-4">
-                                    <Button variant="ghost" className="flex-1 border" onClick={() => setRequestReview(false)}>Cancel</Button>
-                                    <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" onClick={handleConfirmReview}>Confirm</Button>
-                                </div>
-                            </div>
-                        </div>
+                        <RequestReview
+                            handleConfirmReview={() => handleConfirmReview()}
+                            setRequestReview={setRequestReview}
+                            setflaggedReason={setflaggedReason}
+                        />
                     )}
+                    {
+                        confirmSpam && (
+                            <ConfirmSpam
+                                confirmSpamReview={confirmSpamReview}
+                                handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam,docId!)}
+                                setConfirmSpam={setConfirmSpam}
+                                setConfirmSpamReview={setConfirmSpamReview}
+                            />
+                        )
+                    }
                 </div>
             )}
         </>

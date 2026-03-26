@@ -3,6 +3,8 @@ import time
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, Form
 from ..core.config import logger
+from app.models.scam_alert import DOCS_COL_NAME
+from typing import Optional
 
 # ------ Import for AI and DB connection ---------
 from ..core.firebase import db
@@ -13,7 +15,8 @@ restructure_router = APIRouter()
 
 @restructure_router.post("/ai-restructure-data")
 async def generate_document_dashboard(
-    documentId: str = Form(...),
+    documentId: Optional[str] = Form(None),
+    masterDocId: Optional[str] = Form(None),
     document_raw_data: str = Form(...),
     file: UploadFile = File(...),
     language: str = Form("en"),   # Language option in frontend, default as English
@@ -631,6 +634,13 @@ async def generate_document_dashboard(
         elif isinstance(next_step, dict): next_step = next_step.get(target_lang, next_step.get("en", t("REVIEW_MANUALLY")))
         else: next_step = t("REVIEW_MANUALLY") if str(next_step) == "Review document findings manually." else str(next_step)
         
+        if masterDocId:
+            # save the ai_analysis to the master_document_collection
+            db.collection(DOCS_COL_NAME).document(masterDocId).update({
+                "ai_confidence" : raw_json.get("overall_risk_score", 0),
+                "gemini_reasoning":agent_summary
+            })
+        
         return {
             "ui_render_mode": "dashboard_v2",
             "document_id": raw_analysis_id,
@@ -648,7 +658,7 @@ async def generate_document_dashboard(
             },
             "layer_results": layer_results
         }
-
+    
     # -----------------------------
     # 4. Generate & Persist Dual-Language Data
     # -----------------------------
@@ -657,29 +667,29 @@ async def generate_document_dashboard(
         "en": build_view("en"),
         "ms": build_view("ms")
     }
-
-    db_payload = {
-        "documentId": documentId,
-        "raw_analysis_id": raw_analysis_id,
-        "doc_type": raw_json.get("doc_type", "unknown"),
-        "i18n_content": i18n_payload,   # Save BOTH to DB
-        "created_at": datetime.utcnow().isoformat()
-    }
+    if documentId:
+        db_payload = {
+            "documentId": documentId,
+            "raw_analysis_id": raw_analysis_id,
+            "doc_type": raw_json.get("doc_type", "unknown"),
+            "i18n_content": i18n_payload,   # Save BOTH to DB
+            "created_at": datetime.utcnow().isoformat()
+        }
     
-    try:
-        db.collection("structure_analysis_result").add(db_payload)
-        
-        # Update upload_files overview based on EN base
-        en_header = i18n_payload["en"]["dashboard_header"]
-        upload_ref = db.collection('upload_files').document(documentId)
-        if upload_ref.get().exists:
-            upload_ref.update({
-                "risk_level": en_header["risk_level"],
-                "risk_level_color": en_header["risk_level_color"],
-                "overall_score": en_header["overall_score"]
-            })
-    except Exception as e:
-        logger.error(f"Firestore save error in restructure: {e}")
+        try:
+            db.collection("structure_analysis_result").add(db_payload)
+            
+            # Update upload_files overview based on EN base
+            en_header = i18n_payload["en"]["dashboard_header"]
+            upload_ref = db.collection('upload_files').document(documentId)
+            if upload_ref.get().exists:
+                upload_ref.update({
+                    "risk_level": en_header["risk_level"],
+                    "risk_level_color": en_header["risk_level_color"],
+                    "overall_score": en_header["overall_score"]
+                })
+        except Exception as e:
+            logger.error(f"Firestore save error in restructure: {e}")
 
     restructure_duration_ms = int((time.perf_counter() - start_restructure) * 1000)
     logger.info(f"[AI_Restructure] generated i18n view in {restructure_duration_ms}ms")
@@ -691,7 +701,7 @@ async def generate_document_dashboard(
     selected_view = i18n_payload.get(language, i18n_payload["en"])
     return {
         "success": True,
-        "documentId": documentId,
+        "documentId": documentId or "anonymous",
         "raw_analysis_id": raw_analysis_id,
         "doc_type": raw_json.get("doc_type", "unknown"),
         "analysis_content": selected_view
