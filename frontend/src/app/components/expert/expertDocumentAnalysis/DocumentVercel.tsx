@@ -14,6 +14,7 @@ import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import "@react-pdf-viewer/highlight/lib/styles/index.css";
 import { Note } from "@/app/types/document-highlight-type";
 import { deleteNoteFromFirestore, downloadAnnotatedPDF, loadNotesFromFirestore, saveNotesToFirestore } from "@/api/documentPdf";
+import { useLanguage } from "@/app/components/LanguageProvider";
 
 export default function DocumentVercel(props: {
   userId: string;
@@ -31,17 +32,46 @@ export default function DocumentVercel(props: {
   const documentURL = props.documentUrl;
   const documentName = props.documentName;
 
+  // --- LANGUAGE CONTEXT ---
+  const { language } = useLanguage();
+  const t = {
+    en: {
+      downloadBtn: "Download Annotated PDF",
+      noNotes: "No notes yet",
+      quote: "Quote:",
+      comment: "Comment:",
+      delete: "Delete",
+      notesTitle: "Notes",
+      addNoteTooltip: "Add a note",
+      saveError: "Failed to save note. Please try again.",
+      addBtn: "Add",
+      cancelBtn: "Cancel"
+    },
+    ms: {
+      downloadBtn: "Muat Turun PDF Bernotasi",
+      noNotes: "Tiada nota lagi",
+      quote: "Petikan:",
+      comment: "Komen:",
+      delete: "Padam",
+      notesTitle: "Nota",
+      addNoteTooltip: "Tambah nota",
+      saveError: "Gagal menyimpan nota. Sila cuba lagi.",
+      addBtn: "Tambah",
+      cancelBtn: "Batal"
+    }
+  }[language];
+
   const renderSidebarNotes = () => (
     <div className="p-2 flex flex-col gap-2">
       <Button
         onClick={() => downloadAnnotatedPDF(documentURL, documentName, notes)}
         className="w-full mb-2 text-sm"
       >
-        Download Annotated PDF
+        {t.downloadBtn}
       </Button>
 
       {notes.length === 0 ? (
-        <p className="text-sm text-gray-500 px-1">No notes yet</p>
+        <p className="text-sm text-gray-500 px-1">{t.noNotes}</p>
       ) : (
         notes.map((note) => (
           <div
@@ -50,13 +80,13 @@ export default function DocumentVercel(props: {
           >
             <div onClick={() => jumpToNote(note)} className="flex flex-col gap-1.5">
               <div className="flex gap-2 text-sm">
-                <span className="font-medium flex-shrink-0">Quote:</span>
+                <span className="font-medium flex-shrink-0">{t.quote}</span>
                 <blockquote className="text-gray-600 dark:text-slate-400 italic truncate">
                   {note.quote}
                 </blockquote>
               </div>
               <div className="flex gap-2 text-sm">
-                <span className="font-medium flex-shrink-0">Comment:</span>
+                <span className="font-medium flex-shrink-0">{t.comment}</span>
                 <span className="text-gray-700 dark:text-slate-300 break-words">{note.content}</span>
               </div>
             </div>
@@ -64,7 +94,7 @@ export default function DocumentVercel(props: {
               onClick={() => handleDeleteNote(note)}
               className="text-xs self-end"
             >
-              Delete
+              {t.delete}
             </Button>
           </div>
         ))
@@ -84,7 +114,7 @@ export default function DocumentVercel(props: {
       defaultTabs.concat({
         content: renderSidebarNotes(),
         icon: <MessageIcon />,
-        title: "Notes",
+        title: t.notesTitle,
       }),
   });
 
@@ -119,7 +149,7 @@ export default function DocumentVercel(props: {
         <Tooltip
           position={isTopHalf ? Position.BottomCenter : Position.TopCenter}
           target={<Button onClick={props.toggle}><MessageIcon /></Button>}
-          content={() => <div style={{ width: "100px" }}>Add a note</div>}
+          content={() => <div style={{ width: "100px" }}>{t.addNoteTooltip}</div>}
           offset={{ left: 0, top: isTopHalf ? 8 : -8 }}
         />
       </div>
@@ -143,7 +173,7 @@ export default function DocumentVercel(props: {
         setMessage("");
       } catch (error) {
         console.error("Failed to save note:", error);
-        alert("Failed to save note. Please try again.");
+        alert(t.saveError);
       }
     };
 
@@ -177,8 +207,8 @@ export default function DocumentVercel(props: {
           className="p-2 text-black text-sm rounded"
         />
         <div style={{ display: "flex", marginTop: 8, gap: 8 }}>
-          <PrimaryButton onClick={addNote}>Add</PrimaryButton>
-          <Button onClick={props.cancel}>Cancel</Button>
+          <PrimaryButton onClick={addNote}>{t.addBtn}</PrimaryButton>
+          <Button onClick={props.cancel}>{t.cancelBtn}</Button>
         </div>
       </div>
     );
@@ -220,16 +250,13 @@ export default function DocumentVercel(props: {
   });
 
   return (
-    /* 
-      Height strategy:
-      - Mobile:  calc(100vh - 120px)  — leaves room for header + tabs
-      - sm+:     calc(100vh - 80px)
-      - lg+:     100vh (full height, sits in its own scrollable column)
-    */
     <div
       className="z-[1] h-[calc(100vh-120px)] sm:h-[calc(100vh-80px)] lg:h-screen"
     >
-      <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+      {/* Changed from unpkg.com to cdnjs.cloudflare.com to bypass potential 
+        network/ad-blocker blocks that were causing the loading failure.
+      */}
+      <Worker workerUrl="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js">
         <Viewer
           fileUrl={documentURL}
           plugins={[defaultLayoutPluginInstance, highlightPluginInstance]}
