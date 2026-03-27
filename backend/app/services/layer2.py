@@ -120,6 +120,12 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
         l2_signals = [] 
         max_visual_score = 0
 
+        global_max_breakdown = {
+            "ATS_Hacking": 0.0,
+            "Black_Level": 0.0,
+            "Texture": 0.0
+        }
+
         ats_total_hidden = 0
         ats_total_tiny = 0
         ats_score = 0
@@ -205,8 +211,6 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                     meta_collection["Texture"]["mask"] = tex_mask
             else:
                 # Use Statistical Island for Noisy/Scans
-                # Also run standard texture as backup or complementary? 
-                # According to plan: "Statistical island: noisy only"
                 raw_island_score, island_mask, island_sigs = analyze_statistical_islands(cv_img)
                 final_texture_score = raw_island_score * w_island # Island replaces texture score
                 if raw_island_score > 0:
@@ -228,6 +232,10 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
             # Max of all weighted scores
             advanced_score = max(ats_score, final_black_score, final_texture_score)   # final_align_score
             max_visual_score = max(max_visual_score, advanced_score)
+
+            global_max_breakdown["ATS_Hacking"] = max(global_max_breakdown["ATS_Hacking"], ats_score)
+            global_max_breakdown["Black_Level"] = max(global_max_breakdown["Black_Level"], final_black_score)
+            global_max_breakdown["Texture"] = max(global_max_breakdown["Texture"], final_texture_score)
 
             # ================= ELA (For Reference & HUD) =================
             with io.BytesIO() as buffer:
@@ -313,11 +321,7 @@ def run_layer_2_ela(file_path: str, file_type: str) -> LayerResult:
                 "analyzed_pages": len(images), 
                 "all_pages": page_results,
                 "worst_page_details": worst,
-                "advanced_score_breakdown": worst.get("breakdown", {
-                    "ATS_Hacking": 0,
-                    "Black_Level": 0.0,
-                    "Texture/Statistical_Island": 0
-                }),
+                "advanced_score_breakdown": global_max_breakdown,
                 "ats_hacking_details": {
                     "hidden_white_chars": ats_total_hidden,
                     "micro_font_chars": ats_total_tiny

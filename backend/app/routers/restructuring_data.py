@@ -105,7 +105,7 @@ async def generate_document_dashboard(
             "HIGH_METADATA_SOFTWARE_RISK": "Edited with high-risk image manipulation software.",
             "MEDIUM_METADATA_SOFTWARE_RISK": "Processed by consumer-level PDF/Image tool.",
             "TIME_PARADOX_METADATA": "Logical Time Paradox: File created after it was modified.",
-            "STRUCTURE_LOW_DPI_IMAGE": "DPI Forensic: Image resolution is below 150 DPI (possible screenshot/web download).",
+            "STRUCTURE_LOW_DPI_IMAGE": "DPI Forensic: Image resolution is below 150 DPI (Possible screenshot/web download).",
             "STRUCTURE_INCREMENTAL_UPDATES": "Document History: Multiple incremental update states detected.",
             "STRUCTURE_FONT_MULTIPLE_SUBSETS": "Trace: Multiple font subsets detected (Possible localized editing).",
             "XMP_METADATA_MANIPULATION": "XMP Anomaly: Metadata was modified independently of the document content.",
@@ -156,8 +156,8 @@ async def generate_document_dashboard(
             "INCREMENTAL_UPDATES": "Document History: Multiple incremental update states detected.",
             "CORRUPTED_EOF": "CRITICAL: Corrupted or strictly truncated file structure.",
             "HIDDEN_DATA": "CRITICAL: Found {bytes} bytes of hidden data after EOF.",
-            "LOW_DPI_IMAGE": "DPI Forensic: Found {count} low resolution image(s) (<150 DPI).",
-            "FONT_SUBSET_ANOMALY": "Font Trace: Multiple subsets of '{font}' detected.",
+            "LOW_DPI_IMAGE": "DPI Forensic: Found {count} low resolution image(s) (<150 DPI, Possible screenshot/web download).",
+            "FONT_SUBSET_ANOMALY": "Font Trace: Multiple subsets of '{font}' detected. (Possible localized editing)",
             "L1_DATES": "Created at: {c_date} | Modified at: {m_date}",
             "NO_EXIF": "Metadata missing (Context: Web/Screenshot)",
             
@@ -165,8 +165,6 @@ async def generate_document_dashboard(
             "MODE_NATIVE": "Visual Analysis Mode: Native Digital",
             "MODE_NOISY": "Visual Analysis Mode: Scanned / Noisy",
             "Z_SCORE": "Peak ELA Anomaly (Z-Score): {z}",
-            "ATS_WHITE_TEXT": "Evidence: Invisible white-on-white text layers found.",
-            "ATS_MICRO_FONT": "Evidence: Suspicious micro-sized fonts (< 2pt) used.",
             
             # --- Layer 3 Data ---
             "MIXED_FONTS": "Multiple inconsistent font types detected across text layout.",
@@ -331,8 +329,8 @@ async def generate_document_dashboard(
             "INCREMENTAL_UPDATES": "Sejarah Dokumen: Pelbagai kemas kini berperingkat dikesan.",
             "CORRUPTED_EOF": "KRITIKAL: Struktur fail rosak atau terpotong.",
             "HIDDEN_DATA": "KRITIKAL: Terjumpa {bytes} bait data tersembunyi selepas EOF.",
-            "LOW_DPI_IMAGE": "Forensik DPI: Terjumpa {count} imej beresolusi rendah (<150 DPI).",
-            "FONT_SUBSET_ANOMALY": "Jejak Fon: Pelbagai subset '{font}' dikesan.",
+            "LOW_DPI_IMAGE": "Forensik DPI: Terjumpa {count} imej beresolusi rendah (<150 DPI, mungkin tangkapan skrin).",
+            "FONT_SUBSET_ANOMALY": "Jejak Fon: Pelbagai subset '{font}' dikesan (Kemungkinan suntingan setempat).",
             "L1_DATES": "Dicipta: {c_date} | Diubah: {m_date}",
             "NO_EXIF": "Metadata hilang (Konteks: Web/Tangkapan Skrin)",
 
@@ -340,8 +338,6 @@ async def generate_document_dashboard(
             "MODE_NATIVE": "Mod Analisis Visual: Digital Asli",
             "MODE_NOISY": "Mod Analisis Visual: Imbasan / Berhingar",
             "Z_SCORE": "Anomali ELA Puncak (Skor-Z): {z}",
-            "ATS_WHITE_TEXT": "Bukti: Lapisan teks putih-atas-putih tersembunyi ditemui.",
-            "ATS_MICRO_FONT": "Bukti: Fon bersaiz mikro mencurigakan (< 2pt) digunakan.",
 
             # --- Layer 3 Data ---
             "MIXED_FONTS": "Pelbagai jenis fon yang tidak konsisten dikesan.",
@@ -470,6 +466,25 @@ async def generate_document_dashboard(
         l4_status, l4_color = map_status_to_ui(l4.get("status"))
 
         # ================= L1 Processing =================
+        l1_details = l1.get("details", {})
+        
+        # ----- Avoid Redundant Display of Risk Signals that have Details Breakdown -----
+        l1_dynamic_blacklist = set(INTERNAL_SIGNAL_BLACKLIST)
+        
+        if l1_details.get("software_risk"):
+            l1_dynamic_blacklist.update(["HIGH_METADATA_SOFTWARE_RISK", "MEDIUM_METADATA_SOFTWARE_RISK"])
+
+        if l1_details.get("time_paradox"):
+            l1_dynamic_blacklist.add("TIME_PARADOX_METADATA")
+
+        for note in l1_details.get("structure", {}).get("structure_notes", []):
+            code = note.get("code")
+            if code == "HIDDEN_DATA": l1_dynamic_blacklist.add("STRUCTURE_HIDDEN_DATA")
+            elif code == "CORRUPTED_EOF": l1_dynamic_blacklist.add("STRUCTURE_CORRUPTED_EOF")
+            elif code == "LOW_DPI_IMAGE": l1_dynamic_blacklist.add("STRUCTURE_LOW_DPI_IMAGE")
+            elif code == "INCREMENTAL_UPDATES": l1_dynamic_blacklist.add("STRUCTURE_INCREMENTAL_UPDATES")
+            elif code == "FONT_SUBSET_ANOMALY": l1_dynamic_blacklist.add("STRUCTURE_FONT_MULTIPLE_SUBSETS")
+
         l1_proofs = [t(sig) for sig in l1.get("risk_signals", []) if sig not in INTERNAL_SIGNAL_BLACKLIST]
         l1_details = l1.get("details", {})
         
@@ -490,7 +505,6 @@ async def generate_document_dashboard(
 
         xmp_data = l1_details.get("xmp_data", {})
         if xmp_data:
-            l1_proofs.append(t("XMP_TITLE"))
             for k, v in xmp_data.items(): l1_proofs.append(f"XMP {k}: {v}")
 
 
@@ -571,7 +585,7 @@ async def generate_document_dashboard(
                     l4_proofs.append(f"{t('UI_VERIFIED_PREFIX')}[{c_name}] {c_reason}")
 
         # Crop proofs
-        def cleanup(proofs): return list(dict.fromkeys(proofs))[:6]
+        def cleanup(proofs): return list(dict.fromkeys(proofs))[:8]
 
         ats_hacking = l2.get("ATS_Hacking")
         
