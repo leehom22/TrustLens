@@ -63,8 +63,8 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
             errInvalidOtpFallback: "Invalid or expired OTP."
         },
         ms: {
-            title: "Sahkan Dokumen sebagai Spam",
-            desc: "Untuk mengelakkan laporan spam, kami memerlukan pengesahan mudah alih yang pantas.",
+            title: "Sahkan Dokumen sebagai Scam",
+            desc: "Untuk mengelakkan laporan scam, kami memerlukan pengesahan mudah alih yang pantas.",
             stateLabel: "Negeri",
             phoneLabel: "Nombor Telefon",
             phonePlaceholder: "cth. 0123456789",
