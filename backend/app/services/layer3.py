@@ -58,7 +58,7 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
         
         "raw_document_content": "string",
         "recipient": { "name": "string", "address": "string" },
-        "extracted_ic_numbers": ["string"]，
+        "extracted_ic_numbers": ["string"],
         "vendor_info": { "name": "string", "address": "string", "contact": { "email": "string", "phone": "string", "website": "string" } },
         "payment_info": { "bank_name": "string", "account_number": "string", "account_holder_name": "string", "sort_code_or_swift": "string" },
         "invoice_number": "string" or null,
@@ -133,34 +133,35 @@ async def run_layer_3_extraction(file_path: str, mime_type: str, req_id: str = "
             )
 
             raw_text = res.text
-            parsed = clean_and_repair_json(raw_text)
+            parsed_raw = clean_and_repair_json(raw_text)
 
-            if isinstance(parsed, list):
-                parsed = {"items": parsed, "doc_type": "unknown"}
+            final_data = parsed_raw
+            if isinstance(parsed_raw, list) and len(parsed_raw) > 0:
+                final_data = parsed_raw[0]
+            elif isinstance(parsed_raw, dict) and "items" in parsed_raw and len(parsed_raw["items"]) > 0:
+                final_data = parsed_raw["items"][0]
+            elif isinstance(parsed_raw, dict) and "items" in parsed_raw and len(parsed_raw["items"]) == 0:
+                final_data = {}
+
+            if "doc_type" not in final_data: 
+                final_data["doc_type"] = "unknown"
+
+            vis = final_data.get("visual_elements", {})
+            inf = final_data.get("risk_inference", {})
+            
+            final_data["is_screenshot"] = vis.get("has_status_bar") or vis.get("has_browser_chrome") or inf.get("is_screenshot", False)
+            final_data["has_scam_pattern"] = inf.get("has_scam_pattern", False)
+            final_data["has_semantic_paradox"] = inf.get("has_semantic_paradox", False)
             
             # Metadata injection
-            parsed["_meta"] = {
+            final_data["_meta"] = {
                 "model": "gemini-3-flash-preview",
                 "attempt": attempt + 1,
-                "json_repaired": True if raw_text.strip() != str(parsed) else False
+                "json_repaired": True if raw_text.strip() != str(parsed_raw) else False
             }
-            
-            if "doc_type" not in parsed: parsed["doc_type"] = "unknown"
-            
-            target_dict = parsed["items"][0] if "items" in parsed and len(parsed["items"]) > 0 else parsed
-            
-            # [COMPATIBILITY FIX]: Flatten keys for main.py
-            vis = target_dict.get("visual_elements", {})
-            inf = target_dict.get("risk_inference", {})
-            
-            # 1. Screenshot Logic
-            parsed["is_screenshot"] = vis.get("has_status_bar") or vis.get("has_browser_chrome") or inf.get("is_screenshot", False)
-            
-            # 2. Forensic Reasoning Logic
-            parsed["has_scam_pattern"] = inf.get("has_scam_pattern", False)
-            parsed["has_semantic_paradox"] = inf.get("has_semantic_paradox", False)
-            
-            return parsed
+
+            return final_data
+        
         
         except Exception as e:
             error_type = type(e).__name__

@@ -209,29 +209,23 @@ async def analyze_pipeline(
         l3_score = 0
         l3_status = LayerStatus.CLEAN
         l3_risk_signals = []
-        
-        trace = l3_data.get("forensic_reasoning_trace", {})
 
         # --- Check 1: Screenshot Check (Generic) ---
         if l3_data.get("is_screenshot"):
-            l3_risk_signals.append("Document appears to be a screenshot/screen-capture")
+            l3_risk_signals.append("FORMAT_VIOLATION_SCREENSHOT")
 
         # --- Check 2: Scam Pattern Check ---
-        if "SCAM_PATTERN_DETECTED" in l3_risk_signals:
+        if l3_data.get("has_scam_pattern"):
+            l3_risk_signals.append("SCAM_PATTERN_DETECTED")
             l3_score = max(l3_score, 85)
             l3_status = LayerStatus.HIGH_RISK
-            scams = trace.get("scam_pattern_analysis", [])
-            for s in scams:
-                l3_risk_signals.append(f"Scam Analysis: {s}")
 
         # --- Check 3: Semantic Paradox Check ---
-        if "SEMANTIC_PARADOX_DETECTED" in l3_risk_signals:
+        if l3_data.get("has_semantic_paradox"):
+            l3_risk_signals.append("SEMANTIC_PARADOX_DETECTED")
             l3_score = max(l3_score, 65)
             if l3_status == LayerStatus.CLEAN:
                 l3_status = LayerStatus.SUSPICIOUS
-            paradoxes = trace.get("internal_semantic_paradoxes", [])
-            for p in paradoxes:
-                l3_risk_signals.append(f"Logic Anomaly: {p}")
             
         evidence_chain.append(LayerResult(
             layer_name = "L3_Content", 
