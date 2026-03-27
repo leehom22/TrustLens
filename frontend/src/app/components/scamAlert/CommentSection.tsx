@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
+import { useLanguage } from "@/app/components/LanguageProvider"; // Adjust path if necessary
 
 export interface Comment {
     id: string;
@@ -26,6 +27,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
     const [disputeFile, setDisputeFile] = useState<File | null>(null);
     const [isDisputing, setIsDisputing] = useState(false);
 
+    const { language } = useLanguage();
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     let uid = '';
     let user_name = '';
@@ -36,6 +38,58 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
         uid = user.uid;
         user_name = user.displayName || "Anonymous";
     }
+
+    // --- LANGUAGE CONTEXT ---
+    const t = {
+        en: {
+            errFetch: "Could not load community reports.",
+            errLogin: "Please log in to post a comment.",
+            successPost: "Comment shared!",
+            errPost: "Failed to post comment.",
+            errHelpful: "Failed to mark comment as helpful.",
+            errReason: "Please provide a reason for the dispute.",
+            successDispute: "Dispute submitted successfully for review.",
+            errDispute: "Failed to submit dispute. Please try again.",
+            you: "YOU",
+            placeholder: "Write a report...",
+            post: "Post",
+            noReports: "No reports yet.",
+            helpful: "Helpful",
+            commReports: "Community Reports",
+            disputeAlert: "Dispute Alert",
+            disputeThis: "Dispute this Alert",
+            disputeDesc: "If you believe this alert is inaccurate or violates PDPA guidelines, please provide details below.",
+            reasonLabel: "Reason for Dispute *",
+            reasonPlaceholder: "Please explain why this alert should be reviewed...",
+            evidenceLabel: "Evidence File (Optional)",
+            cancel: "Cancel",
+            submitDispute: "Submit Dispute"
+        },
+        ms: {
+            errFetch: "Tidak dapat memuatkan laporan komuniti.",
+            errLogin: "Sila log masuk untuk menghantar komen.",
+            successPost: "Komen dikongsi!",
+            errPost: "Gagal menghantar komen.",
+            errHelpful: "Gagal menanda komen sebagai berguna.",
+            errReason: "Sila berikan sebab untuk pertikaian ini.",
+            successDispute: "Pertikaian berjaya dihantar untuk semakan.",
+            errDispute: "Gagal menghantar pertikaian. Sila cuba lagi.",
+            you: "ANDA",
+            placeholder: "Tulis laporan...",
+            post: "Hantar",
+            noReports: "Tiada laporan lagi.",
+            helpful: "Berguna",
+            commReports: "Laporan Komuniti",
+            disputeAlert: "Pertikai Amaran",
+            disputeThis: "Pertikai Amaran ini",
+            disputeDesc: "Jika anda percaya amaran ini tidak tepat atau melanggar garis panduan PDPA, sila berikan butiran di bawah.",
+            reasonLabel: "Sebab Pertikaian *",
+            reasonPlaceholder: "Sila terangkan mengapa amaran ini perlu disemak...",
+            evidenceLabel: "Fail Bukti (Pilihan)",
+            cancel: "Batal",
+            submitDispute: "Hantar Pertikaian"
+        }
+    }[language];
 
     // --- FETCH COMMENTS ON LOAD ---
     useEffect(() => {
@@ -56,20 +110,20 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                 setLocalComments(mappedComments);
             } catch (error) {
                 console.error("Failed to fetch comments:", error);
-                toast.error("Could not load community reports.");
+                toast.error(t.errFetch);
             } finally {
                 setLoading(false);
             }
         };
 
         if (alertId) fetchComments();
-    }, [alertId, backendUrl]);
+    }, [alertId, backendUrl, t.errFetch]);
 
     // --- POST NEW COMMENT ---
     const handleSubmit = async () => {
         if (!newComment.trim()) return;
         if (!uid) {
-            toast.error("Please log in to post a comment.");
+            toast.error(t.errLogin);
             return;
         }
 
@@ -94,9 +148,9 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
 
             setLocalComments((prev) => [c, ...prev]);
             setNewComment("");
-            toast.success("Comment shared!");
+            toast.success(t.successPost);
         } catch (error) {
-            toast.error("Failed to post comment.");
+            toast.error(t.errPost);
         } finally {
             setIsSubmitting(false);
         }
@@ -117,7 +171,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
             await axios.post(`${backendUrl}/scam-alert/comments/${id}/helpful`);
         } catch (error) {
             // Revert optimistic update on failure
-            toast.error("Failed to mark comment as helpful.");
+            toast.error(t.errHelpful);
             setHelpfulClicked((prev) => {
                 const next = new Set(prev);
                 next.delete(id);
@@ -132,7 +186,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
     // --- HANDLE DISPUTE ---
     const handleDisputeSubmit = async () => {
         if (!disputeReason.trim()) {
-            toast.error("Please provide a reason for the dispute.");
+            toast.error(t.errReason);
             return;
         }
 
@@ -148,13 +202,13 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            toast.success("Dispute submitted successfully for review.");
+            toast.success(t.successDispute);
             setShowDisputeModal(false);
             setDisputeReason("");
             setDisputeFile(null);
         } catch (error) {
             console.error(error);
-            toast.error("Failed to submit dispute. Please try again.");
+            toast.error(t.errDispute);
         } finally {
             setIsDisputing(false);
         }
@@ -166,21 +220,21 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
             {/* Header section with Dispute Button */}
             <div className="flex justify-between items-center mb-4">
                 <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Community Reports ({localComments.length})
+                    {t.commReports} ({localComments.length})
                 </h4>
                 <button
                     onClick={() => setShowDisputeModal(true)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors"
                 >
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    Dispute Alert
+                    {t.disputeAlert}
                 </button>
             </div>
 
             {/* Input Section */}
             <div className="flex gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-                    YOU
+                    {t.you}
                 </div>
                 <div className="flex-1 flex gap-2">
                     <input
@@ -188,7 +242,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && !isSubmitting && handleSubmit()}
-                        placeholder="Write a report..."
+                        placeholder={t.placeholder}
                         className="flex-1 text-sm border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     />
                     <button
@@ -196,7 +250,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                         disabled={isSubmitting || !newComment.trim()}
                         className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all hover:bg-blue-700"
                     >
-                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Post"}
+                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t.post}
                     </button>
                 </div>
             </div>
@@ -209,7 +263,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
             ) : (
                 <div className="space-y-4">
                     {localComments.length === 0 ? (
-                        <p className="text-xs text-gray-400 dark:text-slate-500 italic text-center py-4">No reports yet.</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 italic text-center py-4">{t.noReports}</p>
                     ) : (
                         localComments.map((c) => (
                             <div key={c.id} className="flex gap-3 group">
@@ -233,7 +287,7 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                                                     : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
                                                 }`}
                                         >
-                                            👍 Helpful {c.helpful > 0 ? `(${c.helpful})` : ""}
+                                            👍 {t.helpful} {c.helpful > 0 ? `(${c.helpful})` : ""}
                                         </button>
                                     </div>
                                 </div>
@@ -256,25 +310,25 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
 
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                             <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
-                            Dispute this Alert
+                            {t.disputeThis}
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-                            If you believe this alert is inaccurate or violates PDPA guidelines, please provide details below.
+                            {t.disputeDesc}
                         </p>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Reason for Dispute *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{t.reasonLabel}</label>
                                 <textarea
                                     value={disputeReason}
                                     onChange={(e) => setDisputeReason(e.target.value)}
-                                    placeholder="Please explain why this alert should be reviewed..."
+                                    placeholder={t.reasonPlaceholder}
                                     className="w-full text-sm border border-gray-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 dark:focus:border-red-500 outline-none min-h-[100px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Evidence File (Optional)</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{t.evidenceLabel}</label>
                                 <input
                                     type="file"
                                     onChange={(e) => setDisputeFile(e.target.files?.[0] || null)}
@@ -287,14 +341,14 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                                     onClick={() => setShowDisputeModal(false)}
                                     className="flex-1 py-2.5 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 text-sm font-bold rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                                 >
-                                    Cancel
+                                    {t.cancel}
                                 </button>
                                 <button
                                     onClick={handleDisputeSubmit}
                                     disabled={isDisputing || !disputeReason.trim()}
                                     className="flex-1 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 hover:bg-red-700 transition-colors flex justify-center items-center"
                                 >
-                                    {isDisputing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Dispute"}
+                                    {isDisputing ? <Loader2 className="w-4 h-4 animate-spin" /> : t.submitDispute}
                                 </button>
                             </div>
                         </div>
