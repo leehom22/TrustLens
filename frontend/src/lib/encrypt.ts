@@ -36,12 +36,12 @@ export async function encryptFile(file: Blob) {
 }
 
 // Convert key and IV to base64
-export function bufferToBase64(buffer) {
+export function bufferToBase64(buffer: ArrayBuffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
 // Decrypt function 
-export async function decryptFile(encryptedBlob: Blob, base64Key:string, base64IV:string) {
+export async function decryptFile(encryptedBlob: Blob, base64Key: string, base64IV: string, mimeType: string) {
   const encryptedBuffer = await encryptedBlob.arrayBuffer();
 
   const keyBuffer = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
@@ -64,16 +64,26 @@ export async function decryptFile(encryptedBlob: Blob, base64Key:string, base64I
     encryptedBuffer
   );
 
-  return new Blob([decryptedBuffer]);
+  // 🚀 FIX: Explicitly assign the MIME type to the decrypted blob!
+  return new Blob([decryptedBuffer], { type: mimeType });
 }
 
-export const getAccessibleDocumentUrl = async (fileUrl: string, base64Key:string, base64IV:string) => {
-  if(!fileUrl || !base64Key || !base64IV){
-    return ''
+// Fetches encrypted file from Firebase and decrypts it into a local readable URL
+export async function getAccessibleDocumentUrl(fileUrl: string, base64Key: string, base64IV: string, mimeType: string): Promise<string> {
+  try {
+    if(!fileUrl || !base64Key || !base64IV){
+      return '';
+    }
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`Failed to fetch encrypted file: ${response.statusText}`);
+    const encryptedBlob = await response.blob();
+
+    // 🚀 FIX: Pass the mimeType down to the decrypt function
+    const decryptedBlob = await decryptFile(encryptedBlob, base64Key, base64IV, mimeType);
+
+    return URL.createObjectURL(decryptedBlob);
+  } catch (error) {
+    console.error("Error in getAccessibleDocumentUrl:", error);
+    throw error;
   }
-  const encryptedBlobResponse = await fetch(fileUrl)
-  const encryptedBlob = await encryptedBlobResponse.blob()
-  const decryptedBlob = await decryptFile(encryptedBlob, base64Key, base64IV);
-  const url = URL.createObjectURL(decryptedBlob);
-  return url
 }

@@ -19,6 +19,7 @@ export function DocumentUploader({ onFileUpload, isGuest = false }: DocumentUplo
   const navigate = useNavigate();
   const { language } = useLanguage();
 
+  // --- LANGUAGE CONTEXT ---
   const t = {
     en: {
         login: "Log In",

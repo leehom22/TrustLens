@@ -11,7 +11,7 @@ import LogicalConsistency from "../components/expert/expertDocumentAnalysis/anal
 import AiAssistant from "../components/analysis/AiAssistant";
 import DocumentViewer from "../components/analysis/DocumentViewer";
 import { useNavigate, useParams } from "react-router-dom";
-import {  handleConfirmSpam, handlePdfDownload, setFileAsFlagged } from "@/api/document";
+import { handleConfirmSpam, handlePdfDownload, setFileAsFlagged } from "@/api/document";
 import { Button } from "../components/ui/button";
 import { statusStyles } from "@/lib/utils";
 import { getAccessibleDocumentUrl } from "@/lib/encrypt";
@@ -42,8 +42,66 @@ export function HistoryDocumentAnalysis() {
         comment: '',
         state: null,
         phone: null
-    })
-    const [confirmSpam, setConfirmSpam] = useState<boolean>(false)
+    });
+    const [confirmSpam, setConfirmSpam] = useState<boolean>(false);
+
+    // --- LANGUAGE CONTEXT ---
+    const t = {
+        en: {
+            loading: "Loading document...",
+            corruptedTitle: "Analysis Data Corrupted",
+            corruptedDesc: "This document's analysis format is incompatible.",
+            returnBtn: "Return to History",
+            back: "← Back",
+            document: "Document",
+            riskLevel: "Risk Level",
+            metadata: "Metadata",
+            visuals: "Visuals",
+            semantics: "Semantics",
+            consistency: "Consistency",
+            reviewInProgress: "Review In Progress",
+            review: "Review",
+            spam: "Spam",
+            download: "Download",
+            noMetadata: "No metadata information available.",
+            noVisuals: "No visual analysis available.",
+            noSemantics: "No semantic content data available.",
+            noLogic: "No logic checks available.",
+            aiAssistant: "AI Assistant",
+            reqReviewSuccess: "Successfully requested for review",
+            reqReviewFail: "Failed to request for review. Please try again later",
+            errIncomplete: "Document analysis data is incomplete or uses an outdated format.",
+            errCors: "Firebase CORS error: Cannot download file for decryption.",
+            errDecrypt: "Failed to decrypt the document. It might be corrupted."
+        },
+        ms: {
+            loading: "Memuatkan dokumen...",
+            corruptedTitle: "Data Analisis Rosak",
+            corruptedDesc: "Format analisis dokumen ini tidak serasi.",
+            returnBtn: "Kembali ke Sejarah",
+            back: "← Kembali",
+            document: "Dokumen",
+            riskLevel: "Tahap Risiko",
+            metadata: "Metadata",
+            visuals: "Visual",
+            semantics: "Semantik",
+            consistency: "Konsistensi",
+            reviewInProgress: "Sedang Disemak",
+            review: "Semak",
+            spam: "Spam",
+            download: "Muat Turun",
+            noMetadata: "Tiada maklumat metadata tersedia.",
+            noVisuals: "Tiada analisis visual tersedia.",
+            noSemantics: "Tiada data kandungan semantik tersedia.",
+            noLogic: "Tiada semakan logik tersedia.",
+            aiAssistant: "Pembantu AI",
+            reqReviewSuccess: "Berjaya memohon semakan",
+            reqReviewFail: "Gagal memohon semakan. Sila cuba lagi nanti",
+            errIncomplete: "Data analisis dokumen tidak lengkap atau menggunakan format lapuk.",
+            errCors: "Ralat CORS Firebase: Tidak dapat memuat turun fail untuk penyahsulitan.",
+            errDecrypt: "Gagal menyahsulit dokumen. Ia mungkin rosak."
+        }
+    }[language];
 
     useEffect(() => {
         const fetchAnalysis = async () => {
@@ -52,30 +110,25 @@ export function HistoryDocumentAnalysis() {
                 const formData = new FormData();
                 formData.append("docId", docId!);
                 formData.append("language", language);
-                formData.append("masterDocId",masterDocId!)
+                formData.append("masterDocId", masterDocId!);
                 const res = await axios.post(`${backendUrl}/analysis/get-doc-analysis`, formData);
                 const fileReqRes = await axios.get(`${backendUrl}/files/get_selected_files/${docId}`);
 
                 if (res.status === 200 && fileReqRes.status === 200) {
 
-                    // CRASH FIX: Safely extract content based on the exact DB structure
                     const rawData = res.data?.data || res.data;
                     let content = null;
 
-                    // 1. Newest Format (Bilingual Support via i18n_content)
                     if (rawData?.i18n_content) {
                         content = rawData.i18n_content[language] || rawData.i18n_content['en'];
                     }
-                    // 2. Older Format (Nested in analysis_content)
                     else if (rawData?.analysis_content) {
                         content = rawData.analysis_content;
                     }
-                    // 3. Oldest Format (Root level properties)
                     else {
                         content = rawData;
                     }
 
-                    // If the data was stringified in the DB, parse it back to JSON
                     if (typeof content === 'string') {
                         try {
                             content = JSON.parse(content);
@@ -84,10 +137,9 @@ export function HistoryDocumentAnalysis() {
                         }
                     }
 
-                    // Guard against completely broken documents
                     if (!content || !content.dashboard_header) {
                         setStage("error");
-                        toast.error("Document analysis data is incomplete or uses an outdated format.");
+                        toast.error(t.errIncomplete);
                         return;
                     }
 
@@ -95,19 +147,44 @@ export function HistoryDocumentAnalysis() {
                     setAi_analysis_format(content);
                     setDoc_type(rawData?.doc_type || content?.doc_type || 'Unknown');
                     setRaw_analysis_id(rawData?.id || content?.id || '');
-                    setFileHeader(fileReqRes.data);
+                    
+                    // 🚀 FIX: Correctly extract the inner 'data' object from the backend response!
+                    const documentData = fileReqRes.data.data || fileReqRes.data;
+                    
+                    setFileHeader(documentData);
 
-                    const url = fileReqRes.data.fileUrl;
-                    const encryptedKey = fileReqRes.data.encryptedKey;
-                    const iv = fileReqRes.data.iv;
+                    const url = documentData.fileUrl;
+                    const encryptedKey = documentData.encryptedKey;
+                    const iv = documentData.iv;
+                    const mimeType = documentData.mimeType;
 
                     try {
-                        const accessibleUrl = await getAccessibleDocumentUrl(url, encryptedKey, iv);
-                        setFileUrl(accessibleUrl);
-                        setFileType(fileReqRes.data.mimeType);
-                    } catch (decryptionError) {
-                        toast.error("Failed to decrypt the document. It might be corrupted.");
-                        console.error(decryptionError);
+                        if (!url) {
+                            console.warn("Document URL is missing in the database.");
+                            setFileUrl("missing");
+                            setFileType(mimeType || "");
+                        }
+                        else if (!encryptedKey || !iv) {
+                            console.log("No encryption keys found. Loading as standard document.");
+                            setFileUrl(url);
+                            setFileType(mimeType);
+                        } 
+                        else {
+                            const accessibleUrl = await getAccessibleDocumentUrl(url, encryptedKey, iv, mimeType);
+                            setFileUrl(accessibleUrl || url);
+                            setFileType(mimeType);
+                        }
+                    } catch (decryptionError: any) {
+                        console.error("Decryption/Fetch Error:", decryptionError);
+
+                        if (decryptionError.message === "Failed to fetch" || decryptionError.name === "TypeError") {
+                            toast.error(t.errCors);
+                        } else {
+                            toast.error(t.errDecrypt);
+                        }
+
+                        setFileUrl(url || "missing");
+                        setFileType(mimeType);
                     }
                 } else {
                     setStage("error");
@@ -126,11 +203,11 @@ export function HistoryDocumentAnalysis() {
         try {
             const res = await setFileAsFlagged(docId!, flaggedReason);
             if (res.success) {
-                toast.success("Successfully request for review");
+                toast.success(t.reqReviewSuccess);
                 setRequestReview(false);
                 if (fileHeader) setFileHeader({ ...fileHeader, flagged: true });
             } else {
-                toast.error("Failed to request for review. Please try again later");
+                toast.error(t.reqReviewFail);
             }
         } catch (error) {
             console.log("Error request for a review: ", error);
@@ -149,9 +226,9 @@ export function HistoryDocumentAnalysis() {
             {stage === 'error' && (
                 <div className="flex flex-col h-screen items-center justify-center dark:bg-slate-900 gap-4">
                     <AlertTriangle className="w-12 h-12 text-red-500" />
-                    <h2 className="text-xl font-bold dark:text-white">Analysis Data Corrupted</h2>
-                    <p className="text-slate-500">This document's analysis format is incompatible.</p>
-                    <Button onClick={() => navigate('/history')}>Return to History</Button>
+                    <h2 className="text-xl font-bold dark:text-white">{t.corruptedTitle}</h2>
+                    <p className="text-slate-500">{t.corruptedDesc}</p>
+                    <Button onClick={() => navigate('/history')}>{t.returnBtn}</Button>
                 </div>
             )}
             {stage === 'complete' && ai_analysis_format && (
@@ -160,12 +237,12 @@ export function HistoryDocumentAnalysis() {
                         <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
                             <div className="flex items-center gap-3">
                                 <Button variant="ghost" onClick={() => navigate(-1)} className="text-gray-700 dark:text-gray-200">
-                                    ← Back
+                                    {t.back}
                                 </Button>
                                 <div className="hidden sm:flex items-center gap-2 border-l pl-4 dark:border-slate-700">
                                     <FileText className="w-4 h-4 text-blue-600" />
                                     <span className="font-semibold text-sm max-w-[200px] truncate dark:text-white">
-                                        {fileHeader?.fileName || "Document"}
+                                        {fileHeader?.fileName || t.document}
                                     </span>
                                 </div>
                             </div>
@@ -202,7 +279,7 @@ export function HistoryDocumentAnalysis() {
                                                     : ai_analysis_format?.dashboard_header?.risk_level === "SUSPICIOUS" ? "border-orange-500 text-orange-600 bg-orange-50"
                                                         : ai_analysis_format?.dashboard_header?.risk_level === "CAUTION" ? "border-yellow-500 text-yellow-700 bg-yellow-50"
                                                             : "border-green-600 text-green-600 bg-green-50"}`}>
-                                                Risk Level: {ai_analysis_format?.dashboard_header?.risk_level} ({ai_analysis_format?.dashboard_header?.overall_score})
+                                                {t.riskLevel}: {ai_analysis_format?.dashboard_header?.risk_level} ({ai_analysis_format?.dashboard_header?.overall_score})
                                             </Badge>
                                         </div>
                                         <p className="text-gray-800 dark:text-slate-200">
@@ -214,10 +291,10 @@ export function HistoryDocumentAnalysis() {
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                             <div className="overflow-x-auto pb-1">
                                                 <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700 h-11">
-                                                    <TabsTrigger value="metadata">{language === 'ms' ? 'Metadata' : 'Metadata'}</TabsTrigger>
-                                                    <TabsTrigger value="heatmap">{language === 'ms' ? 'Visual' : 'Visuals'}</TabsTrigger>
-                                                    <TabsTrigger value="content">{language === 'ms' ? 'Semantik' : 'Semantics'}</TabsTrigger>
-                                                    <TabsTrigger value="findings">{language === 'ms' ? 'Konsistensi' : 'Consistency'}</TabsTrigger>
+                                                    <TabsTrigger value="metadata">{t.metadata}</TabsTrigger>
+                                                    <TabsTrigger value="heatmap">{t.visuals}</TabsTrigger>
+                                                    <TabsTrigger value="content">{t.semantics}</TabsTrigger>
+                                                    <TabsTrigger value="findings">{t.consistency}</TabsTrigger>
                                                 </TabsList>
                                             </div>
 
@@ -227,20 +304,20 @@ export function HistoryDocumentAnalysis() {
                                                     onClick={() => setRequestReview(true)}
                                                     disabled={fileHeader?.flagged}
                                                 >
-                                                    {fileHeader?.flagged ? (language === 'ms' ? "Sedang Disemak" : "Review In Progress") : (language === 'ms' ? " Semak" : " Review")}
+                                                    {fileHeader?.flagged ? t.reviewInProgress : t.review}
                                                 </button>
                                                 <button
                                                     className="self-start sm:self-auto flex-shrink-0 py-1.5 px-4 border rounded-lg border-red-500 text-red-500 text-sm cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                                                     onClick={() => setConfirmSpam(true)}
                                                 >
-                                                    Spam
+                                                    {t.spam}
                                                 </button>
                                                 <Button
                                                     variant="outline"
                                                     className="flex items-center gap-2 bg-white dark:bg-slate-800 dark:border-slate-700"
                                                     onClick={() => handlePdfDownload(fileHeader?.fileName!, docId!, raw_analysis_id, "user")}
                                                 >
-                                                    <Download className="w-4 h-4" /> Download
+                                                    <Download className="w-4 h-4" /> {t.download}
                                                 </Button>
                                             </div>
                                         </div>
@@ -249,7 +326,7 @@ export function HistoryDocumentAnalysis() {
                                             {ai_analysis_format?.layer_results?.[0] ? (
                                                 <Metadata layer={ai_analysis_format.layer_results[0]} />
                                             ) : (
-                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">No metadata information available.</div>
+                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">{t.noMetadata}</div>
                                             )}
                                         </TabsContent>
 
@@ -257,7 +334,7 @@ export function HistoryDocumentAnalysis() {
                                             {ai_analysis_format?.layer_results?.[1] ? (
                                                 <VisualManipulation layer={ai_analysis_format.layer_results[1]} />
                                             ) : (
-                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">No visual analysis available.</div>
+                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">{t.noVisuals}</div>
                                             )}
                                         </TabsContent>
 
@@ -265,7 +342,7 @@ export function HistoryDocumentAnalysis() {
                                             {ai_analysis_format?.layer_results?.[2] ? (
                                                 <ContentAnalysis layer={ai_analysis_format.layer_results[2]} />
                                             ) : (
-                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">No semantic content data available.</div>
+                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">{t.noSemantics}</div>
                                             )}
                                         </TabsContent>
 
@@ -277,7 +354,7 @@ export function HistoryDocumentAnalysis() {
                                                     sources={ai_analysis_format?.dashboard_header?.sources}
                                                 />
                                             ) : (
-                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">No logic checks available.</div>
+                                                <div className="p-6 text-center text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed dark:border-slate-700">{t.noLogic}</div>
                                             )}
                                         </TabsContent>
                                     </Tabs>
@@ -285,8 +362,8 @@ export function HistoryDocumentAnalysis() {
 
                                 <Tabs className="lg:col-span-5 order-2 lg:order-1 flex flex-col gap-3" defaultValue="document">
                                     <TabsList className="grid w-full grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1">
-                                        <TabsTrigger value="document">{language === 'ms' ? 'Dokumen' : 'Document'}</TabsTrigger>
-                                        <TabsTrigger value="ai-assistant">{language === 'ms' ? 'Pembantu AI' : 'AI Assistant'}</TabsTrigger>
+                                        <TabsTrigger value="document">{t.document}</TabsTrigger>
+                                        <TabsTrigger value="ai-assistant">{t.aiAssistant}</TabsTrigger>
                                     </TabsList>
                                     <TabsContent value="document">
                                         <DocumentViewer fileType={fileType} fileUrl={fileUrl} />
@@ -307,16 +384,14 @@ export function HistoryDocumentAnalysis() {
                             setflaggedReason={setflaggedReason}
                         />
                     )}
-                    {
-                        confirmSpam && (
-                            <ConfirmSpam
-                                confirmSpamReview={confirmSpamReview}
-                                handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam,docId!)}
-                                setConfirmSpam={setConfirmSpam}
-                                setConfirmSpamReview={setConfirmSpamReview}
-                            />
-                        )
-                    }
+                    {confirmSpam && (
+                        <ConfirmSpam
+                            confirmSpamReview={confirmSpamReview}
+                            handleConfirmSpam={() => handleConfirmSpam(confirmSpamReview, setConfirmSpam, docId!)}
+                            setConfirmSpam={setConfirmSpam}
+                            setConfirmSpamReview={setConfirmSpamReview}
+                        />
+                    )}
                 </div>
             )}
         </>

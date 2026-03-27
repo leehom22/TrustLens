@@ -3,7 +3,8 @@ import AlertCard from "../components/scamAlert/AlertCard";
 import { selectClass } from "@/lib/scamAlert";
 import { toast } from "sonner";
 import axios from "axios";
-import { Loader2, AlertCircle } from "lucide-react"; // Assuming you use lucide-react
+import { Loader2, AlertCircle } from "lucide-react"; 
+import { useLanguage } from "@/app/components/LanguageProvider";
 
 export default function ScamAlertPage() {
   const [search, setSearch] = useState("");
@@ -11,12 +12,94 @@ export default function ScamAlertPage() {
   const [filterType, setFilterType] = useState<string>("All Types");
   const [filterThreat, setFilterThreat] = useState<string>("All Threats");
   const [filterState, setFilterState] = useState<string>("All States");
-  const [alertDoc, setAlertDoc] = useState<[ScamAlert] | []>([]);
-  const [loading, setLoading] = useState(true); // New loading state
+  const [alertDoc, setAlertDoc] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true); 
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
+  const { language } = useLanguage();
+  const t = {
+    en: {
+      loadingTitle: "Loading",
+      loadingDesc: "Fetching latest community reports from TrustLens...",
+      title: "Scam Alert",
+      subtitle: "Community-reported and AI-verified scam documents circulating in Malaysia",
+      criticalAlerts: "Critical Alerts",
+      activeAlerts: "Active Alerts",
+      totalReports: "Total Reports",
+      disclaimer: "All alerts are community-reported and AI-assisted. This is not a legal determination. If you believe an alert is incorrect, use the dispute function. PII has been removed from all previews in compliance with PDPA 2010.",
+      searchPlaceholder: "Search by title, type, or threat...",
+      filterBy: "Filter by:",
+      resetFilters: "Reset Filters",
+      allLevels: "All Levels",
+      critical: "CRITICAL",
+      high: "HIGH",
+      caution: "CAUTION",
+      low: "LOW",
+      allTypes: "All Types",
+      invoice: "Invoice",
+      offerLetter: "Offer Letter",
+      govNotice: "Government Notice",
+      bankStatement: "Bank Statement",
+      contract: "Contract",
+      allThreats: "All Threats",
+      phishing: "Phishing",
+      impersonation: "Impersonation",
+      fakeAuth: "Fake Authority",
+      fraud: "Fraud",
+      identityTheft: "Identity Theft",
+      allStates: "All States",
+      showing: "Showing",
+      of: "of",
+      alerts: "alerts",
+      sortedBy: "Sorted by: Most Recent",
+      noAlerts: "No alerts found",
+      adjustSearch: "Try adjusting your search or filters",
+      clearAll: "Clear all filters",
+      footer: "TrustLens Scam Alert — Malaysia Only · Powered by AI Document Analysis · PDPA 2010 Compliant"
+    },
+    ms: {
+      loadingTitle: "Memuatkan",
+      loadingDesc: "Mengambil laporan komuniti terkini daripada TrustLens...",
+      title: "Amaran Penipuan",
+      subtitle: "Dokumen penipuan dilaporkan komuniti dan disahkan AI yang beredar di Malaysia",
+      criticalAlerts: "Amaran Kritikal",
+      activeAlerts: "Amaran Aktif",
+      totalReports: "Jumlah Laporan",
+      disclaimer: "Semua amaran dilaporkan oleh komuniti dan dibantu oleh AI. Ini bukan penentuan undang-undang. Jika anda percaya amaran tidak betul, gunakan fungsi pertikaian. PII telah dialih keluar daripada semua pratonton selaras dengan PDPA 2010.",
+      searchPlaceholder: "Cari mengikut tajuk, jenis, atau ancaman...",
+      filterBy: "Tapis ikut:",
+      resetFilters: "Tetapkan Semula",
+      allLevels: "Semua Tahap",
+      critical: "KRITIKAL",
+      high: "TINGGI",
+      caution: "AWAS",
+      low: "RENDAH",
+      allTypes: "Semua Jenis",
+      invoice: "Invois",
+      offerLetter: "Surat Tawaran",
+      govNotice: "Notis Kerajaan",
+      bankStatement: "Penyata Bank",
+      contract: "Kontrak",
+      allThreats: "Semua Ancaman",
+      phishing: "Pancingan Data",
+      impersonation: "Penyamaran",
+      fakeAuth: "Pihak Berkuasa Palsu",
+      fraud: "Penipuan",
+      identityTheft: "Kecurian Identiti",
+      allStates: "Semua Negeri",
+      showing: "Memaparkan",
+      of: "daripada",
+      alerts: "amaran",
+      sortedBy: "Disusun mengikut: Terkini",
+      noAlerts: "Tiada amaran ditemui",
+      adjustSearch: "Cuba laraskan carian atau penapis anda",
+      clearAll: "Kosongkan semua penapis",
+      footer: "Amaran Penipuan TrustLens — Malaysia Sahaja · Dikuasakan oleh Analisis Dokumen AI · Mematuhi PDPA 2010"
+    }
+  }[language];
+
   const fetchAlertDoc = async () => {
-    setLoading(true); // Start loading
+    setLoading(true); 
     try {
       const res = await axios.get(`${backendUrl}/scam-alert/alerts`);
 
@@ -24,11 +107,11 @@ export default function ScamAlertPage() {
         console.log("alert doc: ", res.data.data);
         setAlertDoc(res.data.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       toast.error("Error fetching alert document");
       console.log("Error fetching scam alert document: ", error.message);
     } finally {
-      setLoading(false); // Stop loading regardless of outcome
+      setLoading(false); 
     }
   };
 
@@ -69,8 +152,8 @@ export default function ScamAlertPage() {
             <Loader2 className="w-12 h-12 animate-spin absolute top-0 left-0" color="blue"/>
           </div>
           <div className="text-center">
-            <h3 className="text-lg  text-gray-900 dark:text-white">Loading</h3>
-            <p className="text-sm text-gray-500 dark:text-slate-400">Fetching latest community reports from TrustLens...</p>
+            <h3 className="text-lg  text-gray-900 dark:text-white">{t.loadingTitle}</h3>
+            <p className="text-sm text-gray-500 dark:text-slate-400">{t.loadingDesc}</p>
           </div>
         </div>
       </div>
@@ -85,27 +168,27 @@ export default function ScamAlertPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <span className="text-red-500 dark:text-red-400">⚠</span> Scam Alert
+              <span className="text-red-500 dark:text-red-400">⚠</span> {t.title}
             </h1>
             <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">
-              Community-reported and AI-verified scam documents circulating in Malaysia
+              {t.subtitle}
             </p>
           </div>
           {/* Stats */}
           <div className="hidden sm:flex items-center gap-4">
             <div className="text-center">
               <p className="text-lg font-bold text-red-600 dark:text-red-400">{criticalCount}</p>
-              <p className="text-xs text-gray-400 dark:text-slate-500">Critical Alerts</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">{t.criticalAlerts}</p>
             </div>
             <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
             <div className="text-center">
               <p className="text-lg font-bold text-gray-800 dark:text-slate-200">{alertDoc.length}</p>
-              <p className="text-xs text-gray-400 dark:text-slate-500">Active Alerts</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">{t.activeAlerts}</p>
             </div>
             <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
             <div className="text-center">
               <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{totalReports}</p>
-              <p className="text-xs text-gray-400 dark:text-slate-500">Total Reports</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">{t.totalReports}</p>
             </div>
           </div>
         </div>
@@ -114,7 +197,7 @@ export default function ScamAlertPage() {
         <div className="mt-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/50 rounded-lg px-3 py-2 flex items-start gap-2 transition-colors duration-200">
           <span className="text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0">ℹ</span>
           <p className="text-xs text-blue-700 dark:text-blue-300">
-            All alerts are community-reported and AI-assisted. This is not a legal determination. If you believe an alert is incorrect, use the dispute function. PII has been removed from all previews in compliance with PDPA 2010.
+            {t.disclaimer}
           </p>
         </div>
       </div>
@@ -129,53 +212,53 @@ export default function ScamAlertPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by title, type, or threat..."
+              placeholder={t.searchPlaceholder}
               className="w-full text-sm border border-gray-200 dark:border-slate-700 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-400 dark:focus:border-blue-500 bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
             />
           </div>
 
-          {/* Filter dropdowns */}
+          {/* Filter dropdowns - values kept hardcoded in English so state filtering still matches DB */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1">▽ Filter by:</span>
+            <span className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1">▽ {t.filterBy}</span>
             <select value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} className={selectClass}>
-              <option>All Levels</option>
-              <option>CRITICAL</option>
-              <option>HIGH</option>
-              <option>CAUTION</option>
-              <option>LOW</option>
+              <option value="All Levels">{t.allLevels}</option>
+              <option value="CRITICAL">{t.critical}</option>
+              <option value="HIGH">{t.high}</option>
+              <option value="CAUTION">{t.caution}</option>
+              <option value="LOW">{t.low}</option>
             </select>
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={selectClass}>
-              <option>All Types</option>
-              <option>Invoice</option>
-              <option>Offer Letter</option>
-              <option>Government Notice</option>
-              <option>Bank Statement</option>
-              <option>Contract</option>
+              <option value="All Types">{t.allTypes}</option>
+              <option value="Invoice">{t.invoice}</option>
+              <option value="Offer Letter">{t.offerLetter}</option>
+              <option value="Government Notice">{t.govNotice}</option>
+              <option value="Bank Statement">{t.bankStatement}</option>
+              <option value="Contract">{t.contract}</option>
             </select>
             <select value={filterThreat} onChange={(e) => setFilterThreat(e.target.value)} className={selectClass}>
-              <option>All Threats</option>
-              <option>Phishing</option>
-              <option>Impersonation</option>
-              <option>Fake Authority</option>
-              <option>Fraud</option>
-              <option>Identity Theft</option>
+              <option value="All Threats">{t.allThreats}</option>
+              <option value="Phishing">{t.phishing}</option>
+              <option value="Impersonation">{t.impersonation}</option>
+              <option value="Fake Authority">{t.fakeAuth}</option>
+              <option value="Fraud">{t.fraud}</option>
+              <option value="Identity Theft">{t.identityTheft}</option>
             </select>
             <select value={filterState} onChange={(e) => setFilterState(e.target.value)} className={selectClass}>
-              <option>All States</option>
-              <option>Kuala Lumpur</option>
-              <option>Selangor</option>
-              <option>Penang</option>
-              <option>Johor</option>
-              <option>Sabah</option>
-              <option>Sarawak</option>
-              <option>Perak</option>
-              <option>Kedah</option>
+              <option value="All States">{t.allStates}</option>
+              <option value="Kuala Lumpur">Kuala Lumpur</option>
+              <option value="Selangor">Selangor</option>
+              <option value="Penang">Penang</option>
+              <option value="Johor">Johor</option>
+              <option value="Sabah">Sabah</option>
+              <option value="Sarawak">Sarawak</option>
+              <option value="Perak">Perak</option>
+              <option value="Kedah">Kedah</option>
             </select>
             <button
               onClick={resetFilters}
               className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 border border-gray-200 dark:border-slate-700 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
             >
-              ↺ Reset Filters
+              ↺ {t.resetFilters}
             </button>
           </div>
         </div>
@@ -185,18 +268,18 @@ export default function ScamAlertPage() {
       <div className="px-6 py-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">
-            Showing <span className="text-blue-600 dark:text-blue-400 font-bold">{filtered.length}</span> of {alertDoc.length} alerts
+            {t.showing} <span className="text-blue-600 dark:text-blue-400 font-bold">{filtered.length}</span> {t.of} {alertDoc.length} {t.alerts}
           </h2>
-          <span className="text-xs text-gray-400 dark:text-slate-500">Sorted by: Most Recent</span>
+          <span className="text-xs text-gray-400 dark:text-slate-500">{t.sortedBy}</span>
         </div>
 
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">🔍</p>
-            <p className="text-gray-500 dark:text-slate-400 font-medium">No alerts found</p>
-            <p className="text-sm text-gray-400 dark:text-slate-500 mt-1">Try adjusting your search or filters</p>
+            <p className="text-gray-500 dark:text-slate-400 font-medium">{t.noAlerts}</p>
+            <p className="text-sm text-gray-400 dark:text-slate-500 mt-1">{t.adjustSearch}</p>
             <button onClick={resetFilters} className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-              Clear all filters
+              {t.clearAll}
             </button>
           </div>
         ) : (
@@ -211,7 +294,7 @@ export default function ScamAlertPage() {
       {/* ── Footer notice ── */}
       <div className="px-6 pb-8 text-center">
         <p className="text-xs text-gray-400 dark:text-slate-500">
-          TrustLens Scam Alert — Malaysia Only · Powered by AI Document Analysis · PDPA 2010 Compliant
+          {t.footer}
         </p>
       </div>
     </div>

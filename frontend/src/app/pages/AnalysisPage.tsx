@@ -41,6 +41,34 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
 
   const { language } = useLanguage();
 
+  // --- LANGUAGE CONTEXT ---
+  const t = {
+    en: {
+      maxIgnored: `Only ${MAX_FILES} files allowed. Extra files were ignored.`,
+      uploadFirst: "Please upload at least one file before analysing.",
+      encrypting: (count: number) => `Encrypting and uploading ${count} document(s)...`,
+      saving: "Saving document records...",
+      success: "Files uploaded and ready for analysis!",
+      failFallback: "Failed to upload files. Please try again.",
+      processing: "Processing Documents...",
+      selected: "Selected Files",
+      maxReached: "Maximum files reached",
+      startAnalyze: "Start Analyze"
+    },
+    ms: {
+      maxIgnored: `Hanya ${MAX_FILES} fail dibenarkan. Fail tambahan diabaikan.`,
+      uploadFirst: "Sila muat naik sekurang-kurangnya satu fail sebelum menganalisis.",
+      encrypting: (count: number) => `Menyulitkan dan memuat naik ${count} dokumen...`,
+      saving: "Menyimpan rekod dokumen...",
+      success: "Fail dimuat naik dan sedia untuk dianalisis!",
+      failFallback: "Gagal memuat naik fail. Sila cuba lagi.",
+      processing: "Memproses Dokumen...",
+      selected: "Fail Dipilih",
+      maxReached: "Fail maksimum dicapai",
+      startAnalyze: "Mula Analisis"
+    }
+  }[language];
+
   const user = auth.currentUser;
   const currentUserId = user?.uid || "guest";
   const userEmail = user?.email || "";
@@ -69,7 +97,7 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
     setStagedFiles((prev) => {
       const combined = [...prev, ...incomingFiles];
       if (combined.length > MAX_FILES) {
-        toast.warning(`Only ${MAX_FILES} files allowed. Extra files were ignored.`);
+        toast.warning(t.maxIgnored);
         return combined.slice(0, MAX_FILES);
       }
       return combined;
@@ -84,7 +112,7 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
   // ─── Start Analysis — upload to backend then show AnalysisInterface ──────────
   const handleStartAnalysis = async () => {
     if (stagedFiles.length === 0) {
-      toast.error("Please upload at least one file before analysing.");
+      toast.error(t.uploadFirst);
       return;
     }
 
@@ -111,7 +139,7 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
         return;
       }
 
-      toast.info(`Encrypting and uploading ${stagedFiles.length} document(s)...`);
+      toast.info(t.encrypting(stagedFiles.length));
 
       // Step 1: Encrypt and upload all files concurrently to Firebase Storage
       const uploadPromises = await Promise.all(
@@ -138,18 +166,18 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
       });
 
       formData.append("metadata", JSON.stringify(uploadPromises));
-      formData.append("user_id",currentUserId)
+      formData.append("user_id",currentUserId);
       const localUrls = stagedFiles.map((file) => URL.createObjectURL(file));
 
       // Step 2: Save metadata to backend DB
-      toast.info("Saving document records...");
+      toast.info(t.saving);
 
       const res = await axios.post(`${backendUrl}/files/upload_files`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       const documentIds = res.data.id;
-      const masterDocIds = res.data.masterDocId
+      const masterDocIds = res.data.masterDocId;
       // Step 3: Transition to AnalysisInterface
       setAnalysisData({
         fileNames,
@@ -160,10 +188,10 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
         masterDocIds,
       });
 
-      toast.success("Files uploaded and ready for analysis!");
+      toast.success(t.success);
     } catch (error: any) {
       console.error("Upload error:", error);
-      let msg = "Failed to upload files. Please try again.";
+      let msg = t.failFallback;
       if (error?.response?.data)
         msg = `Backend Error: ${JSON.stringify(error.response.data)}`;
       else if (error?.code) msg = `Firebase Storage Error: ${error.message}`;
@@ -192,7 +220,7 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
       <div className="w-full h-full min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
         <h2 className="text-xl font-medium animate-pulse text-slate-900 dark:text-slate-100 mb-2">
-          Processing Documents...
+          {t.processing}
         </h2>
       </div>
     );
@@ -238,11 +266,11 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
           {/* Header row */}
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 tracking-wide uppercase">
-              Selected Files ({stagedFiles.length}/{MAX_FILES})
+              {t.selected} ({stagedFiles.length}/{MAX_FILES})
             </p>
             {remainingSlots === 0 && (
               <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                Maximum files reached
+                {t.maxReached}
               </span>
             )}
           </div>
@@ -292,7 +320,7 @@ export default function AnalysisPage({ isGuest = false }: AnalysisPageProps) {
             className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200"
           >
             <Sparkles className="w-5 h-5" />
-            Start Analyze
+            {t.startAnalyze}
           </button>
         </div>
       )}
