@@ -48,8 +48,8 @@ const ScamManagement = (props: { userId: string, }) => {
   const fetchingDocucmentAnalysis = async (docId: string) => {
     try {
       const formData = new FormData()
-      formData.append('docId', docId)
-      formData.append('adminQId', adminQId!)
+      formData.append('docId', docId) // masterDocId
+      // formData.append('adminQId', adminQId!)
       console.log("Fetching structure analysis data")
       const res = await axios.post(`${backendUrl}/scam-alert/get-doc-analysis`, formData)
       const result = res.data

@@ -193,10 +193,13 @@ export const handleConfirmSpam = async (confirmSpamReview:SpamReviewInterface,se
       if(result.report_id){
         toast.success("Successfully report as spam")
         setConfirmSpam(false)
+        return true 
       } else {
         toast.error("Failed to request for review. Please try again later")
+        return false
       }
     } catch (error) {
       console.log("Error report document as spam: ", error)
+      return false
     }
   }

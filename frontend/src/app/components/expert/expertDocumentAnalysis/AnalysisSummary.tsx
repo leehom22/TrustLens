@@ -22,9 +22,9 @@ const AnalysisSummary = ({ selectedDocument }: { selectedDocument: DocumentAnaly
             <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <AlertCircle
                     className="w-5 h-5"
-                    style={{ color: selectedDocument!.dashboard_header.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header.risk_level_color}}
+                    style={{ color: selectedDocument!.dashboard_header?.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header?.risk_level_color}}
                 />
-                {selectedDocument!.dashboard_header.verdict_title}
+                {selectedDocument!.dashboard_header?.verdict_title}
             </h3>
 
             {/* Risk Level Badge */}
@@ -33,24 +33,24 @@ const AnalysisSummary = ({ selectedDocument }: { selectedDocument: DocumentAnaly
                     className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
                     style={{
                         backgroundColor: `white`,
-                        color: selectedDocument!.dashboard_header.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header.risk_level_color
+                        color: selectedDocument!.dashboard_header?.risk_level_color === 'yellow'? '#D4AC0D': selectedDocument!.dashboard_header?.risk_level_color
                     }}
                 >
-                    {selectedDocument!.dashboard_header.risk_level} - {t.riskScore}: {selectedDocument!.dashboard_header.overall_score}
+                    {selectedDocument!.dashboard_header?.risk_level} - {t.riskScore}: {selectedDocument!.dashboard_header?.overall_score}
                 </span>
             </div>
 
             {/* Executive Summary */}
             <p className="text-gray-700 dark:text-slate-300 mb-4 leading-relaxed">
-                {selectedDocument!.dashboard_header.ai_executive_summary}
+                {selectedDocument!.dashboard_header?.ai_executive_summary}
             </p>
 
             {/* Grounding Search Reference */}
-            {selectedDocument!.dashboard_header.grounding_search_reference && (
+            {selectedDocument!.dashboard_header?.grounding_search_reference && (
                 <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
                     <p className="text-sm text-amber-900 dark:text-amber-200 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>{selectedDocument!.dashboard_header.grounding_search_reference}</span>
+                        <span>{selectedDocument!.dashboard_header?.grounding_search_reference}</span>
                     </p>
                 </div>
             )}
@@ -61,7 +61,7 @@ const AnalysisSummary = ({ selectedDocument }: { selectedDocument: DocumentAnaly
                     {t.recommendedAction}
                 </h4>
                 <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
-                    {selectedDocument!.dashboard_header.next_step_recommendation}
+                    {selectedDocument!.dashboard_header?.next_step_recommendation}
                 </p>
             </div>
         </div>

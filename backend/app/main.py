@@ -33,6 +33,8 @@ from .core.firebase import db
 app = FastAPI(title="TrustLens Backend")
 Config.setup_ai()
 
+# ! Production use 8080
+# ! Development use 8000
 PORT = int(os.getenv("PORT", 8000))
 print(f"The port is {PORT}")
 # An endpoint for frontend to access the saved heatmap

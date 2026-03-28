@@ -13,18 +13,20 @@ interface RequestReviewModalProps {
     setConfirmSpam: React.Dispatch<React.SetStateAction<boolean>>,
     setConfirmSpamReview: React.Dispatch<React.SetStateAction<SpamReviewInterface>>,
     confirmSpamReview: SpamReviewInterface,
-    handleConfirmSpam: () => Promise<Id | undefined>
+    handleConfirmSpam: () => Promise<boolean | Id>
 }
 
 const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, confirmSpamReview }: RequestReviewModalProps) => {
-    // New States for OTP Flow
-    const auth = getAuth()
+    const auth = getAuth();
+    const recaptchaContainerRef = useRef<HTMLDivElement>(null);  // ✅ ref instead of id
+    const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null); // ✅ local ref, not window
+
     const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
     const [step, setStep] = useState<'phone' | 'otp'>('phone');
     const [otp, setOtp] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [isVerified, setIsVerified] = useState(false);
-    const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+    const [loading, setLoading] = useState(false)
 
     // --- LANGUAGE CONTEXT ---
     const { language } = useLanguage();
@@ -98,40 +100,34 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
     }[language];
 
     useEffect(() => {
+        // 1. Logic to initialize
         const initRecaptcha = () => {
-            if (recaptchaVerifierRef.current) return; // Already initialized
+            if (!recaptchaContainerRef.current || recaptchaVerifierRef.current) return;
 
-            recaptchaVerifierRef.current = new RecaptchaVerifier(
-                auth,
-                'recaptcha-container',
-                {
-                    size: 'invisible',
-                    callback: () => {
-                        console.log("reCAPTCHA solved");
-                    },
-                    'expired-callback': () => {
-                        // Reset verifier if reCAPTCHA token expires
-                        recaptchaVerifierRef.current?.clear();
-                        recaptchaVerifierRef.current = null;
-                        toast.warning(t.errRecaptcha);
-                    }
+            // Ensure the container is empty to avoid the "already rendered" error
+            recaptchaContainerRef.current.innerHTML = '<div id="recaptcha-wrapper"></div>';
+
+            recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-wrapper', {
+                size: 'invisible',
+                callback: () => { },
+                'expired-callback': () => {
+                    // Handle expired recaptcha
+                    recaptchaVerifierRef.current?.clear();
+                    recaptchaVerifierRef.current = null;
+                    initRecaptcha(); // Re-init on expiry
                 }
-            );
+            });
         };
 
         initRecaptcha();
 
-        // Proper cleanup when modal unmounts
         return () => {
-            recaptchaVerifierRef.current?.clear();
-            recaptchaVerifierRef.current = null;
-            // Also clean up any lingering global reference
-            if ((window as any).recaptchaVerifier) {
-                (window as any).recaptchaVerifier.clear?.();
-                delete (window as any).recaptchaVerifier;
+            if (recaptchaVerifierRef.current) {
+                recaptchaVerifierRef.current.clear();
+                recaptchaVerifierRef.current = null;
             }
         };
-    }, [auth, t.errRecaptcha]); // Runs once on mount (and translation load)
+    }, [auth]);
 
     const handleSendOTP = async () => {
         const rawPhone = confirmSpamReview.phone;
@@ -140,25 +136,19 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
             return;
         }
 
-        // Format to E.164: 0123456789 → +60123456789
         const formatted = rawPhone.startsWith('+')
             ? rawPhone
             : `+60${rawPhone.startsWith('0') ? rawPhone.substring(1) : rawPhone}`;
-
+        console.log("formatted phone: ", formatted)
         setIsVerifying(true);
         try {
             if (!recaptchaVerifierRef.current) {
-                recaptchaVerifierRef.current = new RecaptchaVerifier(
-                    auth,
-                    'recaptcha-container',
-                    { size: 'invisible' }
-                );
+                throw new Error("reCAPTCHA not initialized");
             }
-
             const result = await signInWithPhoneNumber(
                 auth,
                 formatted,
-                recaptchaVerifierRef.current
+                recaptchaVerifierRef.current!
             );
             setConfirmationResult(result);
             setStep('otp');
@@ -166,17 +156,16 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
         } catch (error: any) {
             console.error("SMS Error:", error);
 
-            recaptchaVerifierRef.current?.clear();
-            recaptchaVerifierRef.current = null;
+            // IMPORTANT: Just reset the widget, don't try to re-render a new one here
+            // Firebase handles invisible reCAPTCHA resets automatically most of the time.
+            // If it's a critical failure, we let the user try again which uses the existing ref.
 
-            // Surface a user-friendly message for common errors
             const messages: Record<string, string> = {
-                'auth/invalid-phone-number': t.errFormat,
-                'auth/too-many-requests': t.errTooMany,
-                'auth/invalid-app-credential': t.errAppCred,
-                'auth/quota-exceeded': t.errQuota,
+                'auth/invalid-phone-number': 'Invalid phone number format.',
+                'auth/too-many-requests': 'Too many attempts. Please wait.',
+                'auth/quota-exceeded': 'SMS quota exceeded.',
             };
-            toast.error(messages[error.code] || error.message || t.errSendFallback);
+            toast.error(messages[error.code] || "Failed to send SMS.");
         } finally {
             setIsVerifying(false);
         }
@@ -211,6 +200,17 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
         setConfirmationResult(null);
     };
 
+    const submitSpamRequest = async () => {
+        try {
+            setLoading(true)
+            await handleConfirmSpam()
+
+        } catch (error) {
+            console.log("Error while submitting scam request")
+        } finally {
+            setLoading(false)
+        }
+    }
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
@@ -218,8 +218,7 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
                 onClick={() => setConfirmSpam(false)}
             />
 
-            {/* ✅ reCAPTCHA container must be in the DOM when verifier initializes */}
-            <div id="recaptcha-container" />
+            <div ref={recaptchaContainerRef} />
 
             <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
 
@@ -326,14 +325,26 @@ const ConfirmSpam = ({ handleConfirmSpam, setConfirmSpamReview, setConfirmSpam, 
                         {t.cancel}
                     </button>
                     <button
-                        disabled={!isVerified}
-                        className={`flex-1 p-2 rounded-lg font-bold transition-all shadow-lg ${isVerified
-                            ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 active:scale-95"
-                            : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed shadow-none"
+                        // Disable if not verified OR if currently loading
+                        disabled={!isVerified || loading}
+                        className={`flex-1 p-2 rounded-lg font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${isVerified && !loading
+                                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 active:scale-95"
+                                : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed shadow-none"
                             }`}
-                        onClick={handleConfirmSpam}
+                        onClick={() => submitSpamRequest()}
                     >
-                        {t.confirmReq}
+                        {loading ? (
+                            <>
+                                {/* Tailwind Spinner */}
+                                <svg className="animate-spin h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Processing...</span>
+                            </>
+                        ) : (
+                            "Confirm Request"
+                        )}
                     </button>
                 </div>
             </div>

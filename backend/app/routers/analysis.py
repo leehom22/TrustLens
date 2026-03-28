@@ -553,7 +553,7 @@ async def analyze_document(
 
 # ============= Get Doc Analysis at Frontend for History Chat Display =============
 @analysis_router.post("/get-doc-analysis")
-async def get_document_analysis(docId: str = Form(...), language: str = Form("en"),masterDocId: str = Form(...)):
+async def get_document_analysis(docId: str = Form(...), language: str = Form("en")):
     try:
         # 1. Correctly define the query
         query = db.collection(structure_analysis_collection).where("documentId", "==", docId)
