@@ -212,7 +212,7 @@ def get_admin_queue():
         filter=FieldFilter("decision", "==", None)
     ).order_by("queued_at").stream():
         q   = snap.to_dict()
-        doc = get_doc(q.get("document_id", ""))
+        doc = get_doc(q.get("document_id", "")) # document_id = masterDocId
         if doc:
             results.append({
                 "queue_id":         snap.id,
@@ -282,6 +282,7 @@ def get_selected_files(doc_id:str):
     try:
         # received docId = masterDocId
         # Need to fetch the latest updated doc
+        print("The docId is: ",doc_id)
         query = (
             db.collection("upload_files")
             .where(filter=FieldFilter("master_doc_id", "==", doc_id)) # Filter by ID
@@ -291,7 +292,7 @@ def get_selected_files(doc_id:str):
         
         # 2. Execute the query
         docs = list(query.stream())
-        
+        # print("docs exist: ",docs)
         # 3. Return the result safely
         if docs:
             latest_doc = docs[0]
