@@ -97,6 +97,8 @@ class PublishedAlert(BaseModel):
     lastSeen:        str
     published_at:     Optional[str]
     riskLevel:str
+    community_advice: str = ""
+    forensic_details: str = ""
  
  
 class AdminDecision(BaseModel):

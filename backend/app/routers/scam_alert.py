@@ -149,11 +149,18 @@ async def report_document(payload: ReportRequest, background_tasks: BackgroundTa
         if fileUrl:
             fresh    = await analyze_with_gemini(fileUrl, doc.get("filename", "doc"),base64_key,base64_iv)
             # print("gemini analyzing scam document: ",fresh)
-            confidence = float(fresh.get("ai_confidence", doc.get("ai_confidence", 0)))
+            community_advice = fresh.get("advice", "")
+            forensic_details = fresh.get("details", "")
+            confidence = float(doc.get("ai_confidence", 0))
         else:
             confidence = float(doc.get("ai_confidence", 0))
-    except Exception:
+            community_advice = ""
+            forensic_details = ""
+    except Exception as e:
+        print(f"Gemini analysis error: {e}")
         confidence = float(doc.get("ai_confidence", 0))
+        community_advice = ""
+        forensic_details = ""
  
     track = determine_track(confidence)
     vel   = report_velocity(masterDocId)
@@ -173,6 +180,8 @@ async def report_document(payload: ReportRequest, background_tasks: BackgroundTa
         "track":         track,
         "ai_confidence": confidence,
         "last_seen":     utcnow(),
+        "community_advice": community_advice,
+        "forensic_details": forensic_details,
     })
     
     report_count = len(get_all_reports(masterDocId))
