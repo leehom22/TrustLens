@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
 import { useLanguage } from "@/app/components/LanguageProvider"; // Adjust path if necessary
+import DisputeModal from './DisputeModal';
 
 export interface Comment {
     id: string;
@@ -20,12 +21,6 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newComment, setNewComment] = useState("");
     const [helpfulClicked, setHelpfulClicked] = useState<Set<string>>(new Set());
-
-    // Dispute State
-    const [showDisputeModal, setShowDisputeModal] = useState(false);
-    const [disputeReason, setDisputeReason] = useState("");
-    const [disputeFile, setDisputeFile] = useState<File | null>(null);
-    const [isDisputing, setIsDisputing] = useState(false);
 
     const { language } = useLanguage();
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
@@ -183,37 +178,6 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
         }
     };
 
-    // --- HANDLE DISPUTE ---
-    const handleDisputeSubmit = async () => {
-        if (!disputeReason.trim()) {
-            toast.error(t.errReason);
-            return;
-        }
-
-        try {
-            setIsDisputing(true);
-            const formData = new FormData();
-            formData.append("reason", disputeReason);
-            if (disputeFile) {
-                formData.append("evidence_file", disputeFile);
-            }
-
-            await axios.post(`${backendUrl}/scam-alert/${alertId}/dispute`, formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-
-            toast.success(t.successDispute);
-            setShowDisputeModal(false);
-            setDisputeReason("");
-            setDisputeFile(null);
-        } catch (error) {
-            console.error(error);
-            toast.error(t.errDispute);
-        } finally {
-            setIsDisputing(false);
-        }
-    };
-
     return (
         <div className="mt-4 border-t border-gray-100 dark:border-slate-800 pt-4 relative">
 
@@ -222,13 +186,6 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                 <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     {t.commReports} ({localComments.length})
                 </h4>
-                <button
-                    onClick={() => setShowDisputeModal(true)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    {t.disputeAlert}
-                </button>
             </div>
 
             {/* Input Section */}
@@ -294,65 +251,6 @@ const CommentSection = ({ alertId }: { alertId: string }) => {
                             </div>
                         ))
                     )}
-                </div>
-            )}
-
-            {/* --- DISPUTE MODAL --- */}
-            {showDisputeModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl relative border border-transparent dark:border-slate-700">
-                        <button
-                            onClick={() => setShowDisputeModal(false)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
-                            {t.disputeThis}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-                            {t.disputeDesc}
-                        </p>
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{t.reasonLabel}</label>
-                                <textarea
-                                    value={disputeReason}
-                                    onChange={(e) => setDisputeReason(e.target.value)}
-                                    placeholder={t.reasonPlaceholder}
-                                    className="w-full text-sm border border-gray-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-400 dark:focus:border-red-500 outline-none min-h-[100px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{t.evidenceLabel}</label>
-                                <input
-                                    type="file"
-                                    onChange={(e) => setDisputeFile(e.target.files?.[0] || null)}
-                                    className="w-full text-sm text-gray-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 dark:file:bg-red-900/20 file:text-red-700 dark:file:text-red-400 hover:file:bg-red-100 dark:hover:file:bg-red-900/30 cursor-pointer"
-                                />
-                            </div>
-
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    onClick={() => setShowDisputeModal(false)}
-                                    className="flex-1 py-2.5 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 text-sm font-bold rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                                >
-                                    {t.cancel}
-                                </button>
-                                <button
-                                    onClick={handleDisputeSubmit}
-                                    disabled={isDisputing || !disputeReason.trim()}
-                                    className="flex-1 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 hover:bg-red-700 transition-colors flex justify-center items-center"
-                                >
-                                    {isDisputing ? <Loader2 className="w-4 h-4 animate-spin" /> : t.submitDispute}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             )}
         </div>

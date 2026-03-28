@@ -54,6 +54,11 @@ export interface LayerResult {
   ats_hacking_details?: ATS_HACKING_DETAILS;
 }
 
+export interface I18N_content {
+  en: DocumentAnalysisResult
+  ms:DocumentAnalysisResult
+}
+
 export interface DocumentAnalysisResult {
   ui_render_mode: string;
   document_id: string;

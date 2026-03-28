@@ -243,7 +243,7 @@ const ScamManagementList = () => {
   const handleViewReport = useCallback((docId: string, adminQId: string) => {
     // docId = masterDocId
     navigate(`/scam-alert/${docId}/${adminQId}`);
-  }, [navigate]);
+  }, [navigate]); 
 
   // ── Sort header cell ───────────────────────────────────────────────────────
 

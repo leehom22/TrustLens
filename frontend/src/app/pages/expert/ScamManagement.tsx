@@ -11,7 +11,7 @@ import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { VisualManipulation } from '@/app/components/analysis/HeatmapVisualization';
 import LogicalConsistency from '../../components/expert/expertDocumentAnalysis/analysisTab/KeyFindings';
-import { DocumentAnalysisResult, FileHeader } from '@/app/types/db-ai-analysis-type';
+import { DocumentAnalysisResult, FileHeader, I18N_content } from '@/app/types/db-ai-analysis-type';
 import DocumentImages from '@/app/components/expert/expertDocumentAnalysis/DocumentImages';
 import AiAssistant from '@/app/components/analysis/AiAssistant';
 import { Annotation, Note } from '@/app/types/document-highlight-type';
@@ -30,7 +30,7 @@ const ScamManagement = (props: { userId: string, }) => {
   const [selectedDocument, setSelectedDocument] = useState<FileHeader | null>(null)
   const [stage, setStage] = useState<AnalysisStage>("complete");
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([{ role: "model", content: `I've received your document . Starting comprehensive forensic analysis...` }]);
-  const [ai_analysis_format, setAiAnalysis] = useState<DocumentAnalysisResult | null>(null)
+  const [ai_analysis_format, setAiAnalysis] = useState<I18N_content | null>(null)
   const [analysisHeader, setAnalysisHeader] = useState({
     analysis_id: '',
     doc_type: '',
@@ -55,8 +55,8 @@ const ScamManagement = (props: { userId: string, }) => {
       const result = res.data
 
       if (result.success === true) {
-        setAiAnalysis(result.data?.analysis_content)
-        // console.log("Data for analysis: ",result.data)
+        setAiAnalysis(result.data?.i18n_content)
+        console.log("ScamManagement Data for analysis: ",result.data)
         setAnalysisHeader({
           analysis_id: result.data?.raw_analysis_id,
           doc_type: result.data?.doc_type,
@@ -92,7 +92,8 @@ const ScamManagement = (props: { userId: string, }) => {
           const accessibleUrl = await getAccessibleDocumentUrl(
             documentData.fileUrl,
             documentData.encryptedKey!,
-            documentData.iv!
+            documentData.iv!,
+            documentData.mimeType
           );
 
           // console.log("Decrypted key:", accessibleUrl);
@@ -226,7 +227,7 @@ const ScamManagement = (props: { userId: string, }) => {
                     />
 
                     {/* AI Analysis Summary */}
-                    <AnalysisSummary selectedDocument={ai_analysis_format} />
+                    <AnalysisSummary selectedDocument={ai_analysis_format?.en!} />
 
                     {/* Findings Tabs */}
                     <Tabs
@@ -258,21 +259,21 @@ const ScamManagement = (props: { userId: string, }) => {
                       </div>
 
                       <TabsContent value="metadata" className="main-card-container">
-                        <Metadata layer={ai_analysis_format!.layer_results[0]} />
+                        <Metadata layer={ai_analysis_format?.en.layer_results[0]!} />
                       </TabsContent>
 
                       <TabsContent value="heatmap">
-                        <VisualManipulation layer={ai_analysis_format!.layer_results[1]} />
+                        <VisualManipulation layer={ai_analysis_format?.en.layer_results[1]!} />
                       </TabsContent>
 
                       <TabsContent value="content" className="main-card-container">
-                        <ContentAnalysis layer={ai_analysis_format!.layer_results[2]} />
+                        <ContentAnalysis layer={ai_analysis_format?.en.layer_results[2]!} />
                       </TabsContent>
 
                       <TabsContent value="findings" className="main-card-container">
                         <LogicalConsistency
-                          layer={ai_analysis_format!.layer_results[3]}
-                          nextStepRecommendation={ai_analysis_format?.dashboard_header?.next_step_recommendation}
+                          layer={ai_analysis_format?.en.layer_results[3]!}
+                          nextStepRecommendation={ai_analysis_format?.en.dashboard_header?.next_step_recommendation!}
                         />
                       </TabsContent>
                     </Tabs>
