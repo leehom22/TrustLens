@@ -71,6 +71,8 @@ const Sidebar = ({ user }: SidebarProps) => {
     { name: t.history, path: "/history", icon: <FileClock />, requiredRole: "user" },
     { name: t.Scam_Alert, path: "/alert", icon: <AlertCircle />, requiredRole: "user" },
     { name: t.review, path: "/review-document-list", icon: <FileClock />, requiredRole: "expert" },
+    { name: "Scam Alert", path: "/scam-alert-list", icon: <TriangleAlert color="red"/>, requiredRole: "expert" },
+
   ];
 
   const filteredItems = navItems.filter(

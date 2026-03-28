@@ -33,7 +33,7 @@ class Config:
  
 # Thresholds
 HIGH_TRACK_INITIAL_SCORE    = 90   # AI score required to enter HIGH track
-HIGH_TRACK_REPORT_THRESHOLD = 10   # reports needed before HIGH-track re-analysis
+HIGH_TRACK_REPORT_THRESHOLD = 5   # reports needed before HIGH-track re-analysis
 HIGH_TRACK_REANALYSIS_SCORE = 90   # fresh Gemini score required at re-analysis
 HIGH_TRACK_AVG_SCORE        = 95   # weighted average across all reports required
  
