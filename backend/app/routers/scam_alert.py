@@ -237,7 +237,7 @@ def get_admin_queue():
     return {"queue": results, "total": len(results),"success":True}
  
 @scam_alert_router.post("/get-doc-analysis")
-async def get_document_analysis(docId: str = Form(...), adminQId: str= Form(...)):
+async def get_document_analysis(docId: str = Form(...)):
     try:
         # Get the ai_analysis_id from the masterDocuments
         doc_ref = DOCS_COL.document(docId)
